@@ -77,6 +77,7 @@ interface AudioContextType {
   crossfadeDuration: number;
   setCrossfadeEnabled: (enabled: boolean) => void;
   setCrossfadeDuration: (seconds: number) => void;
+  clearAllData: () => void;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -831,6 +832,46 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.setItem('@coda_crossfade_duration', seconds.toString());
   };
 
+  const clearAllData = () => {
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
+    if (crossfadeSoundRef.current) {
+      crossfadeSoundRef.current.unloadAsync();
+      crossfadeSoundRef.current = null;
+    }
+    crossfadeActiveRef.current = false;
+    crossfadeStartedRef.current = false;
+    if (crossfadeTimerRef.current) {
+      clearInterval(crossfadeTimerRef.current);
+      crossfadeTimerRef.current = null;
+    }
+    setCurrentTrack(null);
+    setIsPlaying(false);
+    setQueue([]);
+    setLibrary([]);
+    setPlaylists([]);
+    setPlaybackPosition(0);
+    setDuration(0);
+    setShuffleEnabled(false);
+    setRepeatEnabled(false);
+    setAudioPresetState('flat');
+    setPlaybackRateState(1.0);
+    setVolumeState(1.0);
+    setCrossfadeEnabledState(false);
+    setCrossfadeDurationState(0);
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    sourceTracksRef.current = [];
+    queueRef.current = [];
+    repeatEnabledRef.current = false;
+    shuffleEnabledRef.current = false;
+    crossfadeEnabledRef.current = false;
+    crossfadeDurationRef.current = 0;
+    cancelSleepTimer();
+  };
+
   const cancelSleepTimer = () => {
     if (sleepTimerRef.current) {
       clearInterval(sleepTimerRef.current);
@@ -953,6 +994,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     crossfadeDuration,
     setCrossfadeEnabled,
     setCrossfadeDuration,
+    clearAllData,
   };
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

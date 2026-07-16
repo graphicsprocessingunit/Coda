@@ -344,6 +344,7 @@ function PlaylistsStack() {
 
 function SettingsScreen() {
   const { colors } = useTheme();
+  const { clearAllData } = useAudio();
 
   const handleClearData = () => {
     Alert.alert(
@@ -356,6 +357,7 @@ function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await StorageService.clearAll();
+            clearAllData();
             Alert.alert('Success', 'All data has been cleared.');
           },
         },
