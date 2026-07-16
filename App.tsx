@@ -15,6 +15,7 @@ import { PlaylistDetail } from './src/components/PlaylistDetail';
 import { Settings } from './src/components/Settings';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { Queue } from './src/components/Queue';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
@@ -131,15 +132,9 @@ function PlayerScreen() {
         transparent={true}
         onRequestClose={() => setShowQueue(false)}
       >
-        <View style={effectsModalStyles.overlay}>
-          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
-            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Queue</Text>
-              <Pressable onPress={() => setShowQueue(false)} hitSlop={10}>
-                <Ionicons name="close" size={28} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            <Queue />
+        <View style={queueModalStyles.overlay}>
+          <View style={[queueModalStyles.content, { backgroundColor: colors.background }]}>
+            <Queue onClose={() => setShowQueue(false)} />
           </View>
         </View>
       </Modal>
@@ -148,7 +143,7 @@ function PlayerScreen() {
 }
 
 function LibraryScreen() {
-  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, playlists, addTrackToPlaylist, createPlaylist } = useAudio();
+  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue } = useAudio();
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -166,8 +161,28 @@ function LibraryScreen() {
   };
 
   const handleTrackLongPress = (track: TrackMetadata) => {
-    setSelectedTrack(track);
-    setShowPlaylistModal(true);
+    Alert.alert(
+      track.title,
+      track.artist,
+      [
+        {
+          text: 'Play Next',
+          onPress: () => playNextInQueue(track),
+        },
+        {
+          text: 'Add to Queue',
+          onPress: () => addToQueue(track),
+        },
+        {
+          text: 'Add to Playlist',
+          onPress: () => {
+            setSelectedTrack(track);
+            setShowPlaylistModal(true);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -414,14 +429,16 @@ function MainTabs() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AudioProvider>
-        <NavigationContainer>
-          <MainTabs />
-          <StatusBar style="auto" />
-        </NavigationContainer>
-      </AudioProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AudioProvider>
+          <NavigationContainer>
+            <MainTabs />
+            <StatusBar style="auto" />
+          </NavigationContainer>
+        </AudioProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -524,5 +541,18 @@ const effectsModalStyles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '700',
+  },
+});
+
+const queueModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  content: {
+    flex: 1,
+    marginTop: 60,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
 });

@@ -14,10 +14,11 @@ interface SettingsProps {
 
 export function Settings({ onClearData }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
-  const { navidromeConnected } = useAudio();
+  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
+  const [showCrossfade, setShowCrossfade] = useState(false);
   const [showNavidrome, setShowNavidrome] = useState(false);
 
   const themes: { key: Theme; name: string; icon: string }[] = [
@@ -66,6 +67,21 @@ export function Settings({ onClearData }: SettingsProps) {
                 <Text style={[styles.settingText, { color: colors.text }]}>Sleep Timer</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => setShowCrossfade(true)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="swap-horizontal" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Crossfade</Text>
+              </View>
+              <View style={styles.settingRight}>
+                {crossfadeEnabled && (
+                  <Text style={[styles.settingValue, { color: colors.accent }]}>{crossfadeDuration}s</Text>
+                )}
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </View>
             </Pressable>
             <Pressable
               style={styles.settingItem}
@@ -197,6 +213,62 @@ export function Settings({ onClearData }: SettingsProps) {
       </Modal>
 
       <Modal
+        visible={showCrossfade}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCrossfade(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Crossfade</Text>
+              <Pressable onPress={() => setShowCrossfade(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <View style={{ padding: 20 }}>
+              <Pressable
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                onPress={() => setCrossfadeEnabled(!crossfadeEnabled)}
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="swap-horizontal" size={24} color={colors.textSecondary} />
+                  <Text style={[modalStyles.themeName, { color: colors.text }]}>Enable Crossfade</Text>
+                </View>
+                <View style={[styles.toggleTrack, { backgroundColor: crossfadeEnabled ? colors.accent : colors.border }]}>
+                  <View style={[styles.toggleThumb, { transform: [{ translateX: crossfadeEnabled ? 20 : 0 }], backgroundColor: '#FFFFFF' }]} />
+                </View>
+              </Pressable>
+              {crossfadeEnabled && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 12 }}>Duration</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {[2, 4, 6, 8].map((secs) => (
+                      <Pressable
+                        key={secs}
+                        style={[
+                          modalStyles.durationChip,
+                          {
+                            backgroundColor: crossfadeDuration === secs ? colors.accent : colors.card,
+                            borderColor: crossfadeDuration === secs ? colors.accent : colors.border,
+                          },
+                        ]}
+                        onPress={() => setCrossfadeDuration(secs)}
+                      >
+                        <Text style={{ color: crossfadeDuration === secs ? '#FFFFFF' : colors.text, fontWeight: '600' }}>
+                          {secs}s
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={showNavidrome}
         animationType="slide"
         transparent={true}
@@ -286,6 +358,17 @@ const styles = StyleSheet.create({
   bottomPadding: {
     height: 40,
   },
+  toggleTrack: {
+    width: 51,
+    height: 31,
+    borderRadius: 16,
+    padding: 2,
+  },
+  toggleThumb: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+  },
 });
 
 const modalStyles = StyleSheet.create({
@@ -333,5 +416,14 @@ const modalStyles = StyleSheet.create({
   themeName: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  durationChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 56,
   },
 });

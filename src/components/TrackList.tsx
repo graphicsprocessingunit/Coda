@@ -171,9 +171,25 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
 
       {tracks.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="musical-notes" size={64} color={colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No tracks yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Tap + to add music</Text>
+          <Ionicons name="musical-notes" size={80} color={colors.accent} />
+          <Text style={[styles.onboardingTitle, { color: colors.text }]}>Welcome to Coda</Text>
+          <Text style={[styles.onboardingSubtitle, { color: colors.textSecondary }]}>
+            Import music from your device or connect to Navidrome to get started.
+          </Text>
+          <Pressable
+            style={[styles.onboardingButton, { backgroundColor: colors.accent }]}
+            onPress={onAddTracks}
+          >
+            <Ionicons name="cloud-upload" size={20} color="#FFFFFF" />
+            <Text style={styles.onboardingButtonText}>Import Music</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.onboardingButton, styles.onboardingButtonSecondary, { borderColor: colors.textSecondary }]}
+            onPress={() => setShowNavidrome(true)}
+          >
+            <Ionicons name="server-outline" size={20} color={colors.text} />
+            <Text style={[styles.onboardingButtonTextSecondary, { color: colors.text }]}>Connect Navidrome</Text>
+          </Pressable>
         </View>
       ) : filteredTracks.length === 0 ? (
         <View style={styles.emptyState}>
@@ -320,8 +336,45 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   emptySubtext: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  onboardingTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  onboardingSubtitle: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+    paddingHorizontal: 40,
+  },
+  onboardingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+    minWidth: 220,
+  },
+  onboardingButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
-    marginTop: 8,
+    fontWeight: '600',
+  },
+  onboardingButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+  },
+  onboardingButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

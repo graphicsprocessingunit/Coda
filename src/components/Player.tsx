@@ -1,12 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Text, Pressable, Image, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
+import { useAudio } from '../context/AudioContext';
 import { ProgressBar } from './ProgressBar';
+import { LyricsDisplay } from './LyricsDisplay';
+import { fetchLyrics } from '../services/LyricsService';
 
 interface PlayerProps {
-  currentTrack: { title: string; artist: string; uri: string; artwork?: string } | null;
+  currentTrack: { title: string; artist: string; uri: string; artwork?: string; album?: string } | null;
   isPlaying: boolean;
   playbackPosition: number;
   duration: number;
@@ -50,6 +53,25 @@ export function Player({
   const skipNextScale = useRef(new Animated.Value(1)).current;
   const skipPrevScale = useRef(new Animated.Value(1)).current;
 
+  const [lyricsVisible, setLyricsVisible] = useState(false);
+  const [lyricsText, setLyricsText] = useState<string | null>(null);
+
+  const loadLyrics = useCallback(async () => {
+    if (!currentTrack) return;
+    const lyrics = await fetchLyrics(
+      currentTrack.artist,
+      currentTrack.title,
+      currentTrack.album || '',
+      duration
+    );
+    setLyricsText(lyrics);
+  }, [currentTrack?.artist, currentTrack?.title, currentTrack?.album, duration]);
+
+  useEffect(() => {
+    setLyricsText(null);
+    if (lyricsVisible) loadLyrics();
+  }, [currentTrack?.uri, lyricsVisible]);
+
   useEffect(() => {
     Animated.parallel([
       Animated.spring(albumScale, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 100 }),
@@ -86,22 +108,24 @@ export function Player({
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity, backgroundColor: colors.card }]}>
-        {currentTrack?.artwork ? (
-          <Image
-            source={{ uri: currentTrack.artwork }}
-            style={styles.albumArt}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.albumArtPlaceholder}>
-            <Ionicons name="musical-note" size={80} color={colors.textSecondary} />
-          </View>
-        )}
-      </Animated.View>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }, lyricsVisible && { justifyContent: 'flex-start' }]} edges={['top']}>
+      {!lyricsVisible && (
+        <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity, backgroundColor: colors.card }]}>
+          {currentTrack?.artwork ? (
+            <Image
+              source={{ uri: currentTrack.artwork }}
+              style={styles.albumArt}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.albumArtPlaceholder}>
+              <Ionicons name="musical-note" size={80} color={colors.textSecondary} />
+            </View>
+          )}
+        </Animated.View>
+      )}
 
-      <View style={styles.trackInfo}>
+      <View style={[styles.trackInfo, lyricsVisible && styles.trackInfoCompact]}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
           {currentTrack?.title || 'No Track Loaded'}
         </Text>
@@ -140,6 +164,16 @@ export function Player({
             <Ionicons name="options" size={24} color={colors.textSecondary} />
           </Pressable>
         )}
+        <Pressable
+          onPress={() => { setLyricsVisible(!lyricsVisible); if (!lyricsVisible) loadLyrics(); }}
+          style={styles.secondaryButton}
+        >
+          <Ionicons
+            name="document-text"
+            size={24}
+            color={lyricsVisible ? colors.accent : colors.textSecondary}
+          />
+        </Pressable>
         {onQueuePress && (
           <Pressable onPress={onQueuePress} style={styles.secondaryButton}>
             <Ionicons name="list" size={24} color={colors.textSecondary} />
@@ -153,6 +187,24 @@ export function Player({
           <Text style={[styles.timerBadgeText, { color: colors.accent }]}>
             {Math.floor(sleepTimerRemaining / 60)}:{(sleepTimerRemaining % 60).toString().padStart(2, '0')}
           </Text>
+        </View>
+      )}
+
+      {lyricsVisible && (
+        <View style={styles.lyricsContainer}>
+          {lyricsText ? (
+            <LyricsDisplay
+              lyrics={lyricsText}
+              playbackPosition={playbackPosition}
+              accentColor={colors.accent}
+              textColor={colors.text}
+              secondaryColor={colors.textSecondary}
+            />
+          ) : (
+            <View style={styles.lyricsLoading}>
+              <Text style={{ color: colors.textSecondary }}>Loading lyrics...</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -217,8 +269,12 @@ const styles = StyleSheet.create({
   },
   trackInfo: {
     alignItems: 'center',
-    marginBottom: 30,
-    width: '100%',
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  trackInfoCompact: {
+    marginBottom: 8,
+    marginTop: 4,
   },
   title: {
     fontSize: 24,
@@ -284,6 +340,15 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lyricsContainer: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  lyricsLoading: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

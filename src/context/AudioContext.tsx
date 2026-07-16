@@ -39,13 +39,16 @@ interface AudioContextType {
   audioPreset: AudioPreset;
   sleepTimerEnd: number | null;
   sleepTimerRemaining: number;
-  loadTrack: (trackUri: string, metadata: TrackMetadata) => Promise<void>;
+  loadTrack: (trackUri: string, metadata: TrackMetadata, autoPlay?: boolean) => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
   seekTo: (position: number) => Promise<void>;
   skipNext: () => void;
   skipPrevious: () => void;
   removeFromQueue: (index: number) => void;
+  addToQueue: (track: TrackMetadata) => void;
+  playNextInQueue: (track: TrackMetadata) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
   setQueue: (tracks: TrackMetadata[]) => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
@@ -70,6 +73,10 @@ interface AudioContextType {
   connectNavidrome: (url: string, username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectNavidrome: () => Promise<void>;
   getNavidromeCredentials: () => NavidromeCredentials | null;
+  crossfadeEnabled: boolean;
+  crossfadeDuration: number;
+  setCrossfadeEnabled: (enabled: boolean) => void;
+  setCrossfadeDuration: (seconds: number) => void;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -114,6 +121,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [audioPreset, setAudioPresetState] = useState<AudioPreset>('flat');
   const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0);
+  const [crossfadeEnabled, setCrossfadeEnabledState] = useState(false);
+  const [crossfadeDuration, setCrossfadeDurationState] = useState(0);
   const [navidromeConnected, setNavidromeConnected] = useState(false);
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
@@ -130,6 +139,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const positionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPositionRef = useRef(0);
+  const loadGenerationRef = useRef(0);
+  const crossfadeSoundRef = useRef<Audio.Sound | null>(null);
+  const crossfadeActiveRef = useRef(false);
+  const crossfadeStartedRef = useRef(false);
+  const crossfadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const crossfadeEnabledRef = useRef(false);
+  const crossfadeDurationRef = useRef(0);
+  const volumeRef = useRef(1.0);
 
   const debouncedSavePosition = useCallback((position: number) => {
     if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
@@ -165,15 +182,33 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [queue]);
 
   useEffect(() => {
+    crossfadeEnabledRef.current = crossfadeEnabled;
+  }, [crossfadeEnabled]);
+
+  useEffect(() => {
+    crossfadeDurationRef.current = crossfadeDuration;
+  }, [crossfadeDuration]);
+
+  useEffect(() => {
+    volumeRef.current = volume;
+  }, [volume]);
+
+  useEffect(() => {
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
+      }
+      if (crossfadeSoundRef.current) {
+        crossfadeSoundRef.current.unloadAsync();
       }
       if (sleepTimerRef.current) {
         clearInterval(sleepTimerRef.current);
       }
       if (positionSaveTimerRef.current) {
         clearTimeout(positionSaveTimerRef.current);
+      }
+      if (crossfadeTimerRef.current) {
+        clearInterval(crossfadeTimerRef.current);
       }
     };
   }, []);
@@ -254,6 +289,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.removeItem('@coda_sleep_timer_end');
         }
       }
+
+      const savedCrossfadeEnabled = await AsyncStorage.getItem('@coda_crossfade_enabled');
+      const savedCrossfadeDuration = await AsyncStorage.getItem('@coda_crossfade_duration');
+      if (savedCrossfadeEnabled === 'true') {
+        setCrossfadeEnabledState(true);
+        crossfadeEnabledRef.current = true;
+      }
+      if (savedCrossfadeDuration) {
+        const dur = parseInt(savedCrossfadeDuration, 10);
+        setCrossfadeDurationState(dur);
+        crossfadeDurationRef.current = dur;
+      }
     };
 
     loadSavedData();
@@ -283,7 +330,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }, [queue]);
 
-  const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata) => {
+  const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
+    const generation = ++loadGenerationRef.current;
+    crossfadeStartedRef.current = false;
+
+    if (crossfadeActiveRef.current) {
+      crossfadeActiveRef.current = false;
+      if (crossfadeTimerRef.current) {
+        clearInterval(crossfadeTimerRef.current);
+        crossfadeTimerRef.current = null;
+      }
+      if (crossfadeSoundRef.current) {
+        try { await crossfadeSoundRef.current.unloadAsync(); } catch {}
+        crossfadeSoundRef.current = null;
+      }
+    }
+
     if (soundRef.current) {
       const prevStatus = await soundRef.current.getStatusAsync();
       if (prevStatus.isLoaded) {
@@ -307,6 +369,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       onPlaybackStatusUpdate
     );
 
+    if (generation !== loadGenerationRef.current) {
+      await sound.unloadAsync();
+      return;
+    }
+
     soundRef.current = sound;
     setCurrentTrack(metadata);
     setPlaybackPosition(0);
@@ -314,6 +381,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const status = await sound.getStatusAsync();
     if (status.isLoaded) {
       setDuration(status.durationMillis || 0);
+    }
+
+    if (autoPlay) {
+      await sound.playAsync();
+      setIsPlaying(true);
     }
   };
 
@@ -325,9 +397,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setQueue(remainingQueue);
       historyRef.current.push(nextTrack);
       historyIndexRef.current = historyRef.current.length - 1;
-      loadTrackInternal(nextTrack.uri, nextTrack).then(() => {
-        soundRef.current?.playAsync();
-      });
+      loadTrackInternal(nextTrack.uri, nextTrack, true);
     } else if (sourceTracksRef.current.length > 0) {
       const tracks = sourceTracksRef.current;
       const firstTrack = tracks[0];
@@ -335,11 +405,108 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setQueue(remainingTracks);
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
-      loadTrackInternal(firstTrack.uri, firstTrack).then(() => {
-        soundRef.current?.playAsync();
-      });
+      loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
   }, []);
+
+  const getNextTrack = useCallback((): TrackMetadata | null => {
+    const currentQueue = queueRef.current;
+    if (currentQueue.length > 0) return currentQueue[0];
+    if (sourceTracksRef.current.length > 0) return sourceTracksRef.current[0];
+    return null;
+  }, []);
+
+  const startCrossfade = useCallback(async () => {
+    if (crossfadeActiveRef.current || crossfadeStartedRef.current) return;
+    if (!crossfadeEnabledRef.current || crossfadeDurationRef.current <= 0) return;
+    if (repeatEnabledRef.current) return;
+
+    const nextTrack = getNextTrack();
+    if (!nextTrack) return;
+    if (!soundRef.current) return;
+
+    crossfadeActiveRef.current = true;
+    crossfadeStartedRef.current = true;
+
+    const durationMs = crossfadeDurationRef.current * 1000;
+    const currentVol = volumeRef.current;
+    const steps = 20;
+    const stepDuration = durationMs / steps;
+    let step = 0;
+
+    try {
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: nextTrack.uri },
+        { shouldPlay: false, progressUpdateIntervalMillis: 500 },
+        onPlaybackStatusUpdate
+      );
+
+      if (!crossfadeActiveRef.current) {
+        await newSound.unloadAsync();
+        return;
+      }
+
+      await newSound.setVolumeAsync(0);
+      await newSound.playAsync();
+
+      crossfadeTimerRef.current = setInterval(async () => {
+        step++;
+        const oldVol = Math.max(0, currentVol * (1 - step / steps));
+        const newVol = Math.min(currentVol, currentVol * (step / steps));
+
+        try {
+          if (soundRef.current) await soundRef.current.setVolumeAsync(oldVol);
+          await newSound.setVolumeAsync(newVol);
+        } catch {}
+
+        if (step >= steps) {
+          if (crossfadeTimerRef.current) {
+            clearInterval(crossfadeTimerRef.current);
+            crossfadeTimerRef.current = null;
+          }
+
+          try {
+            const oldSound = soundRef.current;
+            if (oldSound) {
+              const oldStatus = await oldSound.getStatusAsync();
+              if (oldStatus.isLoaded) {
+                savePositionImmediate(oldStatus.positionMillis || 0);
+              }
+              await oldSound.unloadAsync();
+            }
+          } catch {}
+
+          soundRef.current = newSound;
+
+          const currentQueue = queueRef.current;
+          if (currentQueue.length > 0) {
+            const nextInQueue = currentQueue[0];
+            setQueue(currentQueue.slice(1));
+            historyRef.current.push(nextInQueue);
+            historyIndexRef.current = historyRef.current.length - 1;
+          } else if (sourceTracksRef.current.length > 0) {
+            const tracks = sourceTracksRef.current;
+            historyRef.current = [tracks[0]];
+            historyIndexRef.current = 0;
+            setQueue(tracks.slice(1));
+          }
+
+          setCurrentTrack(nextTrack);
+          setPlaybackPosition(0);
+
+          const newStatus = await newSound.getStatusAsync();
+          if (newStatus.isLoaded) {
+            setDuration(newStatus.durationMillis || 0);
+          }
+
+          crossfadeActiveRef.current = false;
+        }
+      }, stepDuration);
+    } catch (error) {
+      console.error('Crossfade error:', error);
+      crossfadeActiveRef.current = false;
+    }
+  }, [getNextTrack, savePositionImmediate]);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
     playbackStatusRef.current = status;
@@ -352,6 +519,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setIsPlaying(status.isPlaying);
 
       if (status.didJustFinish) {
+        if (crossfadeActiveRef.current) {
+          return;
+        }
         if (repeatEnabledRef.current) {
           soundRef.current?.setPositionAsync(0).then(() => {
             soundRef.current?.playAsync();
@@ -360,28 +530,34 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           playNextFromQueue();
         }
       }
-    }
-  }, [playNextFromQueue]);
 
-  const loadTrack = async (trackUri: string, metadata: TrackMetadata) => {
+      if (crossfadeEnabledRef.current && crossfadeDurationRef.current > 0 && !repeatEnabledRef.current && !crossfadeActiveRef.current && !crossfadeStartedRef.current) {
+        const remaining = (status.durationMillis || 0) - (status.positionMillis || 0);
+        if (remaining <= crossfadeDurationRef.current * 1000 + 500 && remaining > 0) {
+          startCrossfade();
+        }
+      }
+    }
+  }, [playNextFromQueue, startCrossfade]);
+
+  const loadTrack = async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
     try {
-      await loadTrackInternal(trackUri, metadata);
+      await loadTrackInternal(trackUri, metadata, autoPlay);
     } catch (error) {
       console.error('Error loading track:', error);
     }
   };
 
   const play = async () => {
-    if (soundRef.current) {
-      try {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-        }
-      } catch (error) {
-        console.error('Error playing:', error);
+    if (!soundRef.current) return;
+    try {
+      const status = await soundRef.current.getStatusAsync();
+      if (status.isLoaded) {
+        await soundRef.current.playAsync();
+        setIsPlaying(true);
       }
+    } catch (error) {
+      console.error('Error playing:', error);
     }
   };
 
@@ -421,9 +597,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current += 1;
       const track = historyRef.current[historyIndexRef.current];
-      loadTrackInternal(track.uri, track).then(() => {
-        soundRef.current?.playAsync();
-      });
+      loadTrackInternal(track.uri, track, true);
     } else {
       playNextFromQueue();
     }
@@ -433,9 +607,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (historyIndexRef.current > 0) {
       historyIndexRef.current -= 1;
       const track = historyRef.current[historyIndexRef.current];
-      loadTrackInternal(track.uri, track).then(() => {
-        soundRef.current?.playAsync();
-      });
+      loadTrackInternal(track.uri, track, true);
     } else if (soundRef.current) {
       seekTo(0);
     }
@@ -443,6 +615,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromQueue = (index: number) => {
     setQueue((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addToQueue = (track: TrackMetadata) => {
+    setQueue((prev) => [...prev, track]);
+  };
+
+  const playNextInQueue = (track: TrackMetadata) => {
+    setQueue((prev) => [track, ...prev]);
+  };
+
+  const reorderQueue = (fromIndex: number, toIndex: number) => {
+    setQueue((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
   };
 
   const addToLibrary = (tracks: TrackMetadata[]) => {
@@ -469,8 +658,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     historyIndexRef.current = history.length;
     setQueue(queueTracks);
 
-    await loadTrack(track.uri, track);
-    await play();
+    await loadTrackInternal(track.uri, track, true);
   };
 
   const createPlaylist = (name: string) => {
@@ -538,8 +726,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       historyIndexRef.current = 0;
       setQueue(remainingTracks);
 
-      await loadTrackInternal(firstTrack.uri, firstTrack);
-      await play();
+      await loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
   };
 
@@ -558,8 +745,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     historyIndexRef.current = history.length;
     setQueue(queueTracks);
 
-    await loadTrackInternal(track.uri, track);
-    await play();
+    await loadTrackInternal(track.uri, track, true);
   };
 
   const toggleShuffle = () => {
@@ -631,6 +817,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const setAudioPreset = (preset: AudioPreset) => {
     setAudioPresetState(preset);
     applyPreset(preset);
+  };
+
+  const setCrossfadeEnabled = (enabled: boolean) => {
+    setCrossfadeEnabledState(enabled);
+    crossfadeEnabledRef.current = enabled;
+    AsyncStorage.setItem('@coda_crossfade_enabled', enabled.toString());
+  };
+
+  const setCrossfadeDuration = (seconds: number) => {
+    setCrossfadeDurationState(seconds);
+    crossfadeDurationRef.current = seconds;
+    AsyncStorage.setItem('@coda_crossfade_duration', seconds.toString());
   };
 
   const cancelSleepTimer = () => {
@@ -726,6 +924,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     skipNext,
     skipPrevious,
     removeFromQueue,
+    addToQueue,
+    playNextInQueue,
+    reorderQueue,
     setQueue,
     toggleShuffle,
     toggleRepeat,
@@ -748,6 +949,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     connectNavidrome,
     disconnectNavidrome,
     getNavidromeCredentials,
+    crossfadeEnabled,
+    crossfadeDuration,
+    setCrossfadeEnabled,
+    setCrossfadeDuration,
   };
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

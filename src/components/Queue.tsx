@@ -1,68 +1,214 @@
-import React, { useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, PanResponder, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 
-function QueueTrackItem({ item, index, colors, onPress }: {
-  item: TrackMetadata;
-  index: number;
-  colors: any;
-  onPress: () => void;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(15)).current;
+const ITEM_HEIGHT = 68;
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 250, delay: index * 40, useNativeDriver: true }),
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 40 }),
-    ]).start();
-  }, []);
+function PanResponderView({
+  index,
+  itemCount,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  index: number;
+  itemCount: number;
+  onDragStart: () => void;
+  onDragMove: (overIndex: number) => void;
+  onDragEnd: (fromIndex: number, toIndex: number) => void;
+  onDragCancel: () => void;
+  children: React.ReactNode;
+}) {
+  const indexRef = useRef(index);
+  const itemCountRef = useRef(itemCount);
+  const onDragStartRef = useRef(onDragStart);
+  const onDragMoveRef = useRef(onDragMove);
+  const onDragEndRef = useRef(onDragEnd);
+  const onDragCancelRef = useRef(onDragCancel);
+  const currentOffset = useRef(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragActive = useRef(false);
+  const grantXY = useRef({ x: 0, y: 0 });
+
+  indexRef.current = index;
+  itemCountRef.current = itemCount;
+  onDragStartRef.current = onDragStart;
+  onDragMoveRef.current = onDragMove;
+  onDragEndRef.current = onDragEnd;
+  onDragCancelRef.current = onDragCancel;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => false,
+      onPanResponderTerminationRequest: () => !dragActive.current,
+      onPanResponderGrant: (_, gestureState) => {
+        dragActive.current = false;
+        currentOffset.current = 0;
+        grantXY.current = { x: gestureState.x0, y: gestureState.y0 };
+        longPressTimer.current = setTimeout(() => {
+          dragActive.current = true;
+          onDragStartRef.current();
+        }, 400);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (!dragActive.current) {
+          const dx = Math.abs(gestureState.moveX - grantXY.current.x);
+          const dy = Math.abs(gestureState.moveY - grantXY.current.y);
+          if (dx > 10 || dy > 10) {
+            if (longPressTimer.current) {
+              clearTimeout(longPressTimer.current);
+              longPressTimer.current = null;
+            }
+          }
+          return;
+        }
+        const newOffset = gestureState.dy;
+        currentOffset.current = newOffset;
+        const rawIndex = indexRef.current + Math.round(newOffset / ITEM_HEIGHT);
+        const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, rawIndex));
+        onDragMoveRef.current(clampedIndex);
+      },
+      onPanResponderRelease: () => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+        if (dragActive.current) {
+          const finalIndex = indexRef.current + Math.round(currentOffset.current / ITEM_HEIGHT);
+          const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, finalIndex));
+          onDragEndRef.current(indexRef.current, clampedIndex);
+          dragActive.current = false;
+        }
+      },
+      onPanResponderTerminate: () => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+        dragActive.current = false;
+        onDragCancelRef.current();
+      },
+    })
+  ).current;
 
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      <Pressable
-        style={[styles.trackItem, { backgroundColor: 'transparent' }]}
-        onPress={onPress}
-      >
-        <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
-        {item.artwork ? (
-          <Image source={{ uri: item.artwork }} style={styles.artwork} />
-        ) : (
-          <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
-            <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
-          </View>
-        )}
-        <View style={styles.trackInfo}>
-          <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
-        </View>
-        <Ionicons name="play-circle-outline" size={22} color={colors.textSecondary} />
-      </Pressable>
-    </Animated.View>
+    <View {...panResponder.panHandlers} style={styles.gripHandle}>
+      {children}
+    </View>
   );
 }
 
-export function Queue() {
+interface QueueProps {
+  onClose: () => void;
+}
+
+export function Queue({ onClose }: QueueProps) {
   const { colors } = useTheme();
-  const { currentTrack, queue, removeFromQueue, loadTrack, play } = useAudio();
+  const { currentTrack, queue, removeFromQueue, reorderQueue, addToQueue, loadTrack, library } = useAudio();
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handlePlayTrack = (track: TrackMetadata) => {
-    loadTrack(track.uri, track).then(() => play());
+    loadTrack(track.uri, track, true);
+  };
+
+  const filteredLibrary = library.filter(
+    (track) =>
+      !queue.some((q) => q.uri === track.uri) &&
+      track.uri !== currentTrack?.uri &&
+      (track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       track.artist.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const renderQueueTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
+    const isDragging = draggingIndex === index;
+    const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
+
+    return (
+      <SwipeableRow onDelete={() => removeFromQueue(index)}>
+        <Animated.View
+          style={[
+            styles.trackItemRow,
+            { backgroundColor: colors.background },
+            isDragging && { opacity: 0.5, zIndex: 100 },
+            isOver && { backgroundColor: colors.accent + '15' },
+          ]}
+        >
+          <Pressable
+            style={styles.trackContent}
+            onPress={() => handlePlayTrack(item)}
+          >
+            <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
+            {item.artwork ? (
+              <Image source={{ uri: item.artwork }} style={styles.artwork} />
+            ) : (
+              <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
+                <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
+              </View>
+            )}
+            <View style={styles.trackInfo}>
+              <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
+            </View>
+          </Pressable>
+          <PanResponderView
+            index={index}
+            itemCount={queue.length}
+            onDragStart={() => setDraggingIndex(index)}
+            onDragMove={(overIndex) => setDragOverIndex(overIndex)}
+            onDragEnd={(from, to) => {
+              setDraggingIndex(null);
+              setDragOverIndex(null);
+              if (from !== to) reorderQueue(from, to);
+            }}
+            onDragCancel={() => {
+              setDraggingIndex(null);
+              setDragOverIndex(null);
+            }}
+          >
+            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+          </PanResponderView>
+        </Animated.View>
+      </SwipeableRow>
+    );
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Up Next</Text>
-        {queue.length > 0 && (
-          <Text style={[styles.trackCount, { color: colors.textSecondary }]}>
-            {queue.length} {queue.length === 1 ? 'track' : 'tracks'}
-          </Text>
-        )}
-      </View>
+      <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable onPress={onClose} hitSlop={10} style={styles.headerButton}>
+            <Ionicons name="close" size={28} color={colors.textSecondary} />
+          </Pressable>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Queue</Text>
+            {queue.length > 0 && (
+              <Text style={[styles.trackCount, { color: colors.textSecondary }]}>
+                {queue.length} {queue.length === 1 ? 'track' : 'tracks'}
+              </Text>
+            )}
+          </View>
+          <View style={styles.headerActions}>
+            <Pressable onPress={() => setShowAddModal(true)} hitSlop={10} style={styles.headerButton}>
+              <Ionicons name="add-circle" size={26} color={colors.accent} />
+            </Pressable>
+            {queue.length > 0 && (
+              <Pressable onPress={() => reorderQueue(0, queue.length)} hitSlop={10} style={styles.headerButton}>
+                <Ionicons name="shuffle" size={22} color={colors.textSecondary} />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
 
       {currentTrack && (
         <View style={[styles.section, { borderBottomColor: colors.border }]}>
@@ -72,43 +218,105 @@ export function Queue() {
               <Image source={{ uri: currentTrack.artwork }} style={styles.nowPlayingArt} />
             ) : (
               <View style={[styles.nowPlayingArtPlaceholder, { backgroundColor: colors.border }]}>
-                <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
+                <Ionicons name="musical-note" size={22} color={colors.textSecondary} />
               </View>
             )}
             <View style={styles.nowPlayingInfo}>
               <Text style={[styles.nowPlayingTitle, { color: colors.text }]} numberOfLines={1}>{currentTrack.title}</Text>
               <Text style={[styles.nowPlayingArtist, { color: colors.textSecondary }]} numberOfLines={1}>{currentTrack.artist}</Text>
             </View>
-            <Ionicons name="play" size={20} color={colors.accent} />
+            <Ionicons name="play" size={18} color={colors.accent} />
           </View>
         </View>
       )}
 
       <View style={styles.queueSection}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Up Next</Text>
+        <View style={styles.queueSectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Up Next</Text>
+        </View>
         {queue.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="list" size={48} color={colors.textSecondary} />
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No tracks in queue</Text>
+            <Pressable
+              style={[styles.addButton, { backgroundColor: colors.accent }]}
+              onPress={() => setShowAddModal(true)}
+            >
+              <Ionicons name="add" size={20} color="#fff" />
+              <Text style={styles.addButtonText}>Add Tracks</Text>
+            </Pressable>
           </View>
         ) : (
           <FlatList
             data={queue}
             keyExtractor={(item, index) => `queue-${item.uri}-${index}`}
-            renderItem={({ item, index }) => (
-              <SwipeableRow onDelete={() => removeFromQueue(index)}>
-                <QueueTrackItem
-                  item={item}
-                  index={index}
-                  colors={colors}
-                  onPress={() => handlePlayTrack(item)}
-                />
-              </SwipeableRow>
-            )}
+            renderItem={renderQueueTrack}
             contentContainerStyle={styles.listContent}
           />
         )}
       </View>
+
+      <Modal
+        visible={showAddModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.card }]} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add to Queue</Text>
+              <Pressable onPress={() => setShowAddModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <TextInput
+              style={[styles.searchInput, { backgroundColor: colors.border, color: colors.text }]}
+              placeholder="Search library..."
+              placeholderTextColor={colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <View style={[styles.modalListContainer, { borderTopColor: colors.border }]}>
+              {filteredLibrary.length === 0 ? (
+                <View style={styles.modalEmptyState}>
+                  <Ionicons name="musical-notes" size={48} color={colors.textSecondary} />
+                  <Text style={[styles.modalEmptyText, { color: colors.textSecondary }]}>
+                    {searchQuery ? 'No tracks found' : library.length === 0 ? 'Import tracks in Library first' : 'All tracks in queue'}
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={filteredLibrary}
+                  keyExtractor={(item) => `add-${item.uri}`}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={[styles.libraryTrackItem, { borderBottomColor: colors.border }]}
+                      onPress={() => {
+                        addToQueue(item);
+                        setShowAddModal(false);
+                      }}
+                    >
+                      {item.artwork ? (
+                        <Image source={{ uri: item.artwork }} style={styles.libraryTrackArtwork} />
+                      ) : (
+                        <View style={[styles.libraryTrackArtworkPlaceholder, { backgroundColor: colors.border }]}>
+                          <Ionicons name="musical-note" size={20} color={colors.textSecondary} />
+                        </View>
+                      )}
+                      <View style={styles.libraryTrackInfo}>
+                        <Text style={[styles.libraryTrackTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+                        <Text style={[styles.libraryTrackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
+                      </View>
+                      <Ionicons name="add-circle" size={24} color={colors.accent} />
+                    </Pressable>
+                  )}
+                />
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -119,18 +327,30 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
   },
+  headerButton: {
+    padding: 8,
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
   },
   trackCount: {
-    fontSize: 14,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   section: {
     paddingHorizontal: 20,
@@ -141,23 +361,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     textTransform: 'uppercase',
-    marginBottom: 10,
   },
   nowPlaying: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     borderRadius: 10,
+    marginTop: 10,
   },
   nowPlayingArt: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 8,
     marginRight: 12,
   },
   nowPlayingArtPlaceholder: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -168,30 +388,41 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   nowPlayingTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 2,
   },
   nowPlayingArtist: {
-    fontSize: 14,
+    fontSize: 13,
   },
   queueSection: {
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 12,
   },
+  queueSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   listContent: {
     paddingBottom: 40,
   },
-  trackItem: {
+  trackItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 4,
   },
+  trackContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   trackNumber: {
-    width: 28,
-    fontSize: 14,
+    width: 24,
+    fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',
     marginRight: 8,
@@ -222,11 +453,104 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 13,
   },
+  gripHandle: {
+    padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
   },
   emptyText: {
+    fontSize: 16,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  searchInput: {
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalListContainer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    maxHeight: 400,
+  },
+  libraryTrackItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  libraryTrackArtwork: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  libraryTrackArtworkPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  libraryTrackInfo: {
+    flex: 1,
+  },
+  libraryTrackTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  libraryTrackArtist: {
+    fontSize: 13,
+  },
+  modalEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  modalEmptyText: {
     fontSize: 16,
     marginTop: 12,
   },
