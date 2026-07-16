@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Audio } from 'expo-av';
+import { AppState, AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 
@@ -20,7 +22,7 @@ export interface Playlist {
   createdAt: number;
 }
 
-export type AudioPreset = 'flat' | 'bass-boost' | 'vocal' | 'bright' | 'night';
+export type AudioPreset = 'flat' | 'relaxed' | 'clear' | 'upbeat' | 'quiet';
 
 interface AudioContextType {
   currentTrack: TrackMetadata | null;
@@ -43,6 +45,7 @@ interface AudioContextType {
   seekTo: (position: number) => Promise<void>;
   skipNext: () => void;
   skipPrevious: () => void;
+  removeFromQueue: (index: number) => void;
   setQueue: (tracks: TrackMetadata[]) => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
@@ -55,6 +58,7 @@ interface AudioContextType {
   removeTrackFromPlaylist: (playlistId: string, trackUri: string) => void;
   reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => void;
   deletePlaylist: (playlistId: string) => void;
+  renamePlaylist: (playlistId: string, newName: string) => void;
   playPlaylist: (playlist: Playlist) => Promise<void>;
   setPlaybackRate: (rate: number) => Promise<void>;
   setVolume: (vol: number) => Promise<void>;
@@ -124,6 +128,29 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const seekingRef = useRef(false);
   const sourceTracksRef = useRef<TrackMetadata[]>([]);
   const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const positionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedPositionRef = useRef(0);
+
+  const debouncedSavePosition = useCallback((position: number) => {
+    if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
+    if (positionSaveTimerRef.current) {
+      clearTimeout(positionSaveTimerRef.current);
+    }
+    positionSaveTimerRef.current = setTimeout(() => {
+      StorageService.savePlaybackPosition(position);
+      lastSavedPositionRef.current = position;
+      positionSaveTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  const savePositionImmediate = useCallback((position: number) => {
+    if (positionSaveTimerRef.current) {
+      clearTimeout(positionSaveTimerRef.current);
+      positionSaveTimerRef.current = null;
+    }
+    StorageService.savePlaybackPosition(position);
+    lastSavedPositionRef.current = position;
+  }, []);
 
   useEffect(() => {
     repeatEnabledRef.current = repeatEnabled;
@@ -145,7 +172,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (sleepTimerRef.current) {
         clearInterval(sleepTimerRef.current);
       }
+      if (positionSaveTimerRef.current) {
+        clearTimeout(positionSaveTimerRef.current);
+      }
     };
+  }, []);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        checkSleepTimerExpiryRef.current();
+      }
+    };
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -192,6 +232,28 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setNavidromeConnected(true);
         setNavidromeServerUrl(savedNavidromeCreds.url);
       }
+
+      const savedSleepTimerEnd = await AsyncStorage.getItem('@coda_sleep_timer_end');
+      if (savedSleepTimerEnd) {
+        const endTime = parseInt(savedSleepTimerEnd, 10);
+        const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+        if (remaining > 0) {
+          setSleepTimerEnd(endTime);
+          setSleepTimerRemaining(remaining);
+          sleepTimerRef.current = setInterval(() => {
+            const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+            setSleepTimerRemaining(rem);
+            if (rem <= 0) {
+              cancelSleepTimer();
+              if (soundRef.current) {
+                soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+              }
+            }
+          }, 1000);
+        } else {
+          AsyncStorage.removeItem('@coda_sleep_timer_end');
+        }
+      }
     };
 
     loadSavedData();
@@ -216,10 +278,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [currentTrack]);
 
   useEffect(() => {
-    StorageService.savePlaybackPosition(playbackPosition);
-  }, [playbackPosition]);
-
-  useEffect(() => {
     if (queue.length > 0) {
       StorageService.saveQueue(queue);
     }
@@ -227,6 +285,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata) => {
     if (soundRef.current) {
+      const prevStatus = await soundRef.current.getStatusAsync();
+      if (prevStatus.isLoaded) {
+        savePositionImmediate(prevStatus.positionMillis || 0);
+      }
       await soundRef.current.unloadAsync();
     }
 
@@ -284,6 +346,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (status.isLoaded) {
       if (!seekingRef.current) {
         setPlaybackPosition(status.positionMillis || 0);
+        debouncedSavePosition(status.positionMillis || 0);
       }
       setDuration(status.durationMillis || 0);
       setIsPlaying(status.isPlaying);
@@ -327,6 +390,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       try {
         await soundRef.current.pauseAsync();
         setIsPlaying(false);
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          savePositionImmediate(status.positionMillis || 0);
+        }
       } catch (error) {
         console.error('Error pausing:', error);
       }
@@ -339,6 +406,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         seekingRef.current = true;
         await soundRef.current.setPositionAsync(position);
         setPlaybackPosition(position);
+        savePositionImmediate(position);
         setTimeout(() => {
           seekingRef.current = false;
         }, 600);
@@ -371,6 +439,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     } else if (soundRef.current) {
       seekTo(0);
     }
+  };
+
+  const removeFromQueue = (index: number) => {
+    setQueue((prev) => prev.filter((_, i) => i !== index));
   };
 
   const addToLibrary = (tracks: TrackMetadata[]) => {
@@ -447,6 +519,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setPlaylists((prev) => prev.filter((playlist) => playlist.id !== playlistId));
   };
 
+  const renamePlaylist = (playlistId: string, newName: string) => {
+    setPlaylists((prev) =>
+      prev.map((playlist) =>
+        playlist.id === playlistId ? { ...playlist, name: newName } : playlist
+      )
+    );
+  };
+
   const playPlaylist = async (playlist: Playlist) => {
     if (playlist.tracks.length > 0) {
       const tracks = shuffleEnabledRef.current ? shuffleArray(playlist.tracks) : playlist.tracks;
@@ -504,10 +584,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const applyPreset = async (preset: AudioPreset) => {
     const presets: Record<AudioPreset, { rate: number; vol: number }> = {
       flat: { rate: 1.0, vol: 1.0 },
-      'bass-boost': { rate: 0.9, vol: 1.0 },
-      vocal: { rate: 1.0, vol: 0.85 },
-      bright: { rate: 1.1, vol: 1.0 },
-      night: { rate: 0.95, vol: 0.5 },
+      relaxed: { rate: 0.9, vol: 1.0 },
+      clear: { rate: 1.0, vol: 0.85 },
+      upbeat: { rate: 1.1, vol: 1.0 },
+      quiet: { rate: 0.95, vol: 0.5 },
     };
     const p = presets[preset];
     setPlaybackRateState(p.rate);
@@ -560,6 +640,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
     setSleepTimerEnd(null);
     setSleepTimerRemaining(0);
+    AsyncStorage.removeItem('@coda_sleep_timer_end');
   };
 
   const setSleepTimer = (minutes: number) => {
@@ -567,6 +648,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const endTime = Date.now() + minutes * 60 * 1000;
     setSleepTimerEnd(endTime);
     setSleepTimerRemaining(minutes * 60);
+    AsyncStorage.setItem('@coda_sleep_timer_end', endTime.toString());
 
     sleepTimerRef.current = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
@@ -579,6 +661,21 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
     }, 1000);
   };
+
+  const checkSleepTimerExpiry = useCallback(() => {
+    if (!sleepTimerEnd) return;
+    const remaining = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
+    setSleepTimerRemaining(remaining);
+    if (remaining <= 0) {
+      cancelSleepTimer();
+      if (soundRef.current) {
+        soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+      }
+    }
+  }, [sleepTimerEnd]);
+
+  const checkSleepTimerExpiryRef = useRef(checkSleepTimerExpiry);
+  checkSleepTimerExpiryRef.current = checkSleepTimerExpiry;
 
   const connectNavidrome = async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);
@@ -628,6 +725,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     seekTo,
     skipNext,
     skipPrevious,
+    removeFromQueue,
     setQueue,
     toggleShuffle,
     toggleRepeat,
@@ -640,6 +738,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     removeTrackFromPlaylist,
     reorderPlaylistTracks,
     deletePlaylist,
+    renamePlaylist,
     playPlaylist,
     setPlaybackRate,
     setVolume,

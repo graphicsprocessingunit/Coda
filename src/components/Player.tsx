@@ -20,6 +20,7 @@ interface PlayerProps {
   onToggleShuffle?: () => void;
   onToggleRepeat?: () => void;
   onEffectsPress?: () => void;
+  onQueuePress?: () => void;
   sleepTimerRemaining?: number | null;
 }
 
@@ -38,6 +39,7 @@ export function Player({
   onToggleShuffle,
   onToggleRepeat,
   onEffectsPress,
+  onQueuePress,
   sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
@@ -136,6 +138,11 @@ export function Player({
         {onEffectsPress && (
           <Pressable onPress={onEffectsPress} style={styles.secondaryButton}>
             <Ionicons name="options" size={24} color={colors.textSecondary} />
+          </Pressable>
+        )}
+        {onQueuePress && (
+          <Pressable onPress={onQueuePress} style={styles.secondaryButton}>
+            <Ionicons name="list" size={24} color={colors.textSecondary} />
           </Pressable>
         )}
       </View>

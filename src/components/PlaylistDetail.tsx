@@ -117,6 +117,7 @@ interface PlaylistDetailProps {
   onPlayPlaylist: () => void;
   onBack: () => void;
   onAddTrack?: (track: TrackMetadata) => void;
+  onRename?: (newName: string) => void;
   library?: TrackMetadata[];
 }
 
@@ -217,6 +218,7 @@ export function PlaylistDetail({
   onPlayPlaylist,
   onBack,
   onAddTrack,
+  onRename,
   library = [],
 }: PlaylistDetailProps) {
   const { colors } = useTheme();
@@ -226,6 +228,8 @@ export function PlaylistDetail({
   const [searchQuery, setSearchQuery] = useState('');
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
   const itemHeight = 72;
 
   const playButtonScale = useRef(new Animated.Value(1)).current;
@@ -343,7 +347,33 @@ export function PlaylistDetail({
             <Ionicons name="chevron-back" size={28} color={colors.accent} />
           </Pressable>
           <View style={styles.headerInfo}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>{playlist.name}</Text>
+            {editingName ? (
+              <TextInput
+                style={[styles.headerTitle, { color: colors.text, backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }]}
+                value={editNameValue}
+                onChangeText={setEditNameValue}
+                autoFocus
+                onBlur={() => {
+                  if (editNameValue.trim() && onRename) {
+                    onRename(editNameValue.trim());
+                  }
+                  setEditingName(false);
+                }}
+                onSubmitEditing={() => {
+                  if (editNameValue.trim() && onRename) {
+                    onRename(editNameValue.trim());
+                  }
+                  setEditingName(false);
+                }}
+              />
+            ) : (
+              <Pressable onPress={() => {
+                setEditNameValue(playlist.name);
+                setEditingName(true);
+              }}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{playlist.name}</Text>
+              </Pressable>
+            )}
             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
               {playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}
             </Text>

@@ -14,6 +14,7 @@ import { Playlists } from './src/components/Playlists';
 import { PlaylistDetail } from './src/components/PlaylistDetail';
 import { Settings } from './src/components/Settings';
 import { MiniPlayer } from './src/components/MiniPlayer';
+import { Queue } from './src/components/Queue';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
@@ -61,6 +62,7 @@ function PlayerScreen() {
   } = useAudio();
   const { colors } = useTheme();
   const [showEffects, setShowEffects] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
 
   return (
     <>
@@ -80,6 +82,7 @@ function PlayerScreen() {
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
           onEffectsPress={() => setShowEffects(true)}
+          onQueuePress={() => setShowQueue(true)}
         />
       ) : (
         <Player
@@ -97,6 +100,7 @@ function PlayerScreen() {
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
           onEffectsPress={() => setShowEffects(true)}
+          onQueuePress={() => setShowQueue(true)}
           sleepTimerRemaining={sleepTimerRemaining}
         />
       )}
@@ -118,6 +122,24 @@ function PlayerScreen() {
               <AudioEffectsSection />
               <SleepTimerSection />
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={showQueue}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQueue(false)}
+      >
+        <View style={effectsModalStyles.overlay}>
+          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Queue</Text>
+              <Pressable onPress={() => setShowQueue(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <Queue />
           </View>
         </View>
       </Modal>
@@ -245,7 +267,8 @@ function PlaylistsScreen({ navigation }: any) {
   const { 
     playlists, 
     createPlaylist, 
-    deletePlaylist, 
+    deletePlaylist,
+    renamePlaylist,
     playPlaylist, 
     addTrackToPlaylist 
   } = useAudio();
@@ -259,6 +282,7 @@ function PlaylistsScreen({ navigation }: any) {
       playlists={playlists}
       onCreatePlaylist={createPlaylist}
       onDeletePlaylist={deletePlaylist}
+      onRenamePlaylist={renamePlaylist}
       onPlayPlaylist={playPlaylist}
       onAddTrackToPlaylist={addTrackToPlaylist}
       onPlaylistPress={handlePlaylistPress}
@@ -267,7 +291,7 @@ function PlaylistsScreen({ navigation }: any) {
 }
 
 function PlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, removeTrackFromPlaylist, reorderPlaylistTracks, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist } = useAudio();
+  const { currentTrack, removeTrackFromPlaylist, reorderPlaylistTracks, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist, renamePlaylist } = useAudio();
   const { playlistId } = route.params;
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -285,6 +309,7 @@ function PlaylistDetailScreen({ route, navigation }: any) {
       onPlayPlaylist={() => playPlaylist(playlist)}
       onBack={() => navigation.goBack()}
       onAddTrack={(track) => addTrackToPlaylist(playlist.id, track)}
+      onRename={(newName) => renamePlaylist(playlist.id, newName)}
       library={library}
     />
   );

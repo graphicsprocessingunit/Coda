@@ -9,6 +9,7 @@ interface PlaylistsProps {
   playlists: Playlist[];
   onCreatePlaylist: (name: string) => void;
   onDeletePlaylist: (playlistId: string) => void;
+  onRenamePlaylist?: (playlistId: string, newName: string) => void;
   onPlayPlaylist: (playlist: Playlist) => void;
   onAddTrackToPlaylist: (playlistId: string, track: TrackMetadata) => void;
   onPlaylistPress?: (playlist: Playlist) => void;
@@ -83,6 +84,7 @@ export function Playlists({
   playlists,
   onCreatePlaylist,
   onDeletePlaylist,
+  onRenamePlaylist,
   onPlayPlaylist,
   onAddTrackToPlaylist,
   onPlaylistPress,
@@ -100,19 +102,40 @@ export function Playlists({
     }
   };
 
-  const handleDeletePlaylist = (playlistId: string, playlistName: string) => {
-    Alert.alert(
-      'Delete Playlist',
-      `Are you sure you want to delete "${playlistName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => onDeletePlaylist(playlistId),
+  const handleLongPress = (item: Playlist) => {
+    const options: any[] = [
+      { text: 'Cancel', style: 'cancel' as const },
+      {
+        text: 'Delete',
+        style: 'destructive' as const,
+        onPress: () => onDeletePlaylist(item.id),
+      },
+    ];
+    if (onRenamePlaylist) {
+      options.unshift({
+        text: 'Rename',
+        onPress: () => {
+          Alert.prompt(
+            'Rename Playlist',
+            'Enter new name',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Rename',
+                onPress: (name?: string) => {
+                  if (name && name.trim()) {
+                    onRenamePlaylist(item.id, name.trim());
+                  }
+                },
+              },
+            ],
+            'plain-text',
+            item.name
+          );
         },
-      ]
-    );
+      });
+    }
+    Alert.alert('Playlist', `"${item.name}"`, options);
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -129,7 +152,7 @@ export function Playlists({
         item={item}
         colors={colors}
         onPress={() => onPlaylistPress ? onPlaylistPress(item) : onPlayPlaylist(item)}
-        onLongPress={() => handleDeletePlaylist(item.id, item.name)}
+        onLongPress={() => handleLongPress(item)}
         canAddTrack={!!canAddTrack}
         onAddToPlaylist={() => handleAddToPlaylist(item.id)}
       />

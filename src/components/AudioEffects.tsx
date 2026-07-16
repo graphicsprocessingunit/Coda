@@ -6,10 +6,10 @@ import { useAudio, AudioPreset } from '../context/AudioContext';
 
 const PRESETS: { key: AudioPreset; label: string; icon: string; description: string }[] = [
   { key: 'flat', label: 'Flat', icon: 'remove-outline', description: 'No effects' },
-  { key: 'bass-boost', label: 'Bass Boost', icon: 'volume-low', description: 'Deeper low end' },
-  { key: 'vocal', label: 'Vocal', icon: 'mic', description: 'Clearer voice' },
-  { key: 'bright', label: 'Bright', icon: 'sunny', description: 'Crisper highs' },
-  { key: 'night', label: 'Night Mode', icon: 'moon', description: 'Quiet & smooth' },
+  { key: 'relaxed', label: 'Relaxed', icon: 'leaf', description: '0.9x, slower pace' },
+  { key: 'clear', label: 'Clear', icon: 'mic', description: '85% vol, less loud' },
+  { key: 'upbeat', label: 'Upbeat', icon: 'flash', description: '1.1x, faster pace' },
+  { key: 'quiet', label: 'Quiet', icon: 'moon', description: 'Low vol, softer' },
 ];
 
 const SPEED_OPTIONS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
