@@ -160,7 +160,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
 
-      if (savedCurrentTrack) {
+      if (savedCurrentTrack && savedCurrentTrack.source !== 'navidrome') {
         setCurrentTrack(savedCurrentTrack);
         try {
           await Audio.setAudioModeAsync({

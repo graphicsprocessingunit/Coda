@@ -11,7 +11,11 @@
       "UIBackgroundModes": ["audio"],
       "infoPlist": {
         "UIRequiredDeviceCapabilities": ["armv7"],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        },
+        "NSLocalNetworkUsageDescription": "Coda needs local network access to stream music from your Navidrome server."
       },
       "bundleIdentifier": "com.codaplayer.app"
     },
