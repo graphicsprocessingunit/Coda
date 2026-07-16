@@ -106,7 +106,7 @@ function LibraryScreen() {
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
     if (files.length > 0) {
-      const tracks = FilePickerService.filesToTracks(files);
+      const tracks = await FilePickerService.filesToTracks(files);
       addToLibrary(tracks);
     }
   };
