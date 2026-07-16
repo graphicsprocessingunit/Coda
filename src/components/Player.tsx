@@ -19,6 +19,8 @@ interface PlayerProps {
   repeatEnabled?: boolean;
   onToggleShuffle?: () => void;
   onToggleRepeat?: () => void;
+  onEffectsPress?: () => void;
+  sleepTimerRemaining?: number | null;
 }
 
 export function Player({
@@ -35,6 +37,8 @@ export function Player({
   repeatEnabled = false,
   onToggleShuffle,
   onToggleRepeat,
+  onEffectsPress,
+  sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
 
@@ -129,7 +133,21 @@ export function Player({
             />
           </Pressable>
         )}
+        {onEffectsPress && (
+          <Pressable onPress={onEffectsPress} style={styles.secondaryButton}>
+            <Ionicons name="options" size={24} color={colors.textSecondary} />
+          </Pressable>
+        )}
       </View>
+
+      {sleepTimerRemaining != null && sleepTimerRemaining > 0 && (
+        <View style={[styles.timerBadge, { backgroundColor: colors.accent + '20' }]}>
+          <Ionicons name="moon" size={14} color={colors.accent} />
+          <Text style={[styles.timerBadgeText, { color: colors.accent }]}>
+            {Math.floor(sleepTimerRemaining / 60)}:{(sleepTimerRemaining % 60).toString().padStart(2, '0')}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.controls}>
         <Animated.View style={{ transform: [{ scale: skipPrevScale }] }}>
@@ -221,6 +239,21 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     padding: 12,
+  },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 16,
+    alignSelf: 'center',
+  },
+  timerBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   controlButton: {
     width: 60,

@@ -1,8 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, Text, Pressable, Switch } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Text, Pressable, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
+import { useAudio } from '../context/AudioContext';
+import { SleepTimerSection } from './SleepTimer';
+import { AudioEffectsSection } from './AudioEffects';
+import { NavidromeSettingsSection } from './NavidromeSettings';
 
 interface SettingsProps {
   onClearData: () => void;
@@ -10,6 +14,11 @@ interface SettingsProps {
 
 export function Settings({ onClearData }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
+  const { navidromeConnected } = useAudio();
+  const [showAppearance, setShowAppearance] = useState(false);
+  const [showAudioEffects, setShowAudioEffects] = useState(false);
+  const [showSleepTimer, setShowSleepTimer] = useState(false);
+  const [showNavidrome, setShowNavidrome] = useState(false);
 
   const themes: { key: Theme; name: string; icon: string }[] = [
     { key: 'dark', name: 'Dark', icon: 'moon' },
@@ -24,61 +33,189 @@ export function Settings({ onClearData }: SettingsProps) {
         <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Appearance</Text>
-        <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
-          {themes.map((t) => (
+      <ScrollView style={styles.scrollContent} contentContainerStyle={styles.scrollContentContainer}>
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Preferences</Text>
+          <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
             <Pressable
-              key={t.key}
               style={[styles.settingItem, { borderBottomColor: colors.border }]}
-              onPress={() => setTheme(t.key)}
+              onPress={() => setShowAppearance(true)}
             >
               <View style={styles.settingLeft}>
-                <Ionicons name={t.icon as any} size={24} color={colors.textSecondary} />
-                <Text style={[styles.settingText, { color: colors.text }]}>{t.name}</Text>
+                <Ionicons name="color-palette" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Appearance</Text>
               </View>
-              {theme === t.key && (
-                <Ionicons name="checkmark-circle" size={24} color={colors.accent} />
-              )}
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
             </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data</Text>
-        <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
-          <Pressable
-            style={styles.settingItem}
-            onPress={onClearData}
-          >
-            <View style={styles.settingLeft}>
-              <Ionicons name="trash" size={24} color="#FF3B30" />
-              <Text style={[styles.settingText, { color: '#FF3B30' }]}>Clear All Data</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
-          </Pressable>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
-        <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
-          <View style={[styles.settingItem, { borderBottomColor: colors.border }]}>
-            <View style={styles.settingLeft}>
-              <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
-              <Text style={[styles.settingText, { color: colors.text }]}>Version</Text>
-            </View>
-            <Text style={[styles.settingValue, { color: colors.textSecondary }]}>1.0.0</Text>
+            <Pressable
+              style={[styles.settingItem, { borderBottomColor: colors.border }]}
+              onPress={() => setShowAudioEffects(true)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="options" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Audio Effects</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={[styles.settingItem, { borderBottomColor: colors.border }]}
+              onPress={() => setShowSleepTimer(true)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="moon" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Sleep Timer</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => setShowNavidrome(true)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="server-outline" size={24} color={navidromeConnected ? '#34C759' : colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Navidrome</Text>
+              </View>
+              <View style={styles.settingRight}>
+                {navidromeConnected && (
+                  <View style={[styles.statusDot, { backgroundColor: '#34C759' }]} />
+                )}
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </View>
+            </Pressable>
           </View>
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Ionicons name="musical-notes" size={24} color={colors.textSecondary} />
-              <Text style={[styles.settingText, { color: colors.text }]}>Coda Music Player</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data</Text>
+          <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
+            <Pressable
+              style={styles.settingItem}
+              onPress={onClearData}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="trash" size={24} color="#FF3B30" />
+                <Text style={[styles.settingText, { color: '#FF3B30' }]}>Clear All Data</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
+          <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
+            <View style={[styles.settingItem, { borderBottomColor: colors.border }]}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Version</Text>
+              </View>
+              <Text style={[styles.settingValue, { color: colors.textSecondary }]}>1.0.0</Text>
+            </View>
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Ionicons name="musical-notes" size={24} color={colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Coda Music Player</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
+
+        <View style={styles.bottomPadding} />
+      </ScrollView>
+
+      <Modal
+        visible={showAppearance}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAppearance(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Appearance</Text>
+              <Pressable onPress={() => setShowAppearance(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <View style={modalStyles.body}>
+              {themes.map((t) => (
+                <Pressable
+                  key={t.key}
+                  style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                  onPress={() => setTheme(t.key)}
+                >
+                  <View style={modalStyles.themeLeft}>
+                    <Ionicons name={t.icon as any} size={24} color={colors.textSecondary} />
+                    <Text style={[modalStyles.themeName, { color: colors.text }]}>{t.name}</Text>
+                  </View>
+                  {theme === t.key && (
+                    <Ionicons name="checkmark-circle" size={24} color={colors.accent} />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAudioEffects}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAudioEffects(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Audio Effects</Text>
+              <Pressable onPress={() => setShowAudioEffects(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <AudioEffectsSection />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSleepTimer}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowSleepTimer(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Sleep Timer</Text>
+              <Pressable onPress={() => setShowSleepTimer(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <SleepTimerSection />
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showNavidrome}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNavidrome(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Navidrome</Text>
+              <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+              <NavidromeSettingsSection />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -95,6 +232,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: 20,
   },
   section: {
     marginTop: 24,
@@ -129,6 +272,66 @@ const styles = StyleSheet.create({
   },
   settingValue: {
     fontSize: 16,
-    color: '#8E8E93',
+  },
+  settingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  bottomPadding: {
+    height: 40,
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  content: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '92%',
+    paddingBottom: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  body: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 12,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  themeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  themeName: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

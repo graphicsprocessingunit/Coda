@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated } from 'react-native';
+import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, SAMPLE_TRACK, Playlist, TrackMetadata } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -14,6 +14,8 @@ import { Playlists } from './src/components/Playlists';
 import { PlaylistDetail } from './src/components/PlaylistDetail';
 import { Settings } from './src/components/Settings';
 import { MiniPlayer } from './src/components/MiniPlayer';
+import { AudioEffectsSection } from './src/components/AudioEffects';
+import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
 import { StorageService } from './src/services/StorageService';
 
@@ -55,8 +57,10 @@ function PlayerScreen() {
     repeatEnabled,
     toggleShuffle,
     toggleRepeat,
+    sleepTimerRemaining,
   } = useAudio();
   const { colors } = useTheme();
+  const [showEffects, setShowEffects] = useState(false);
 
   return (
     <>
@@ -75,6 +79,7 @@ function PlayerScreen() {
           repeatEnabled={repeatEnabled}
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
+          onEffectsPress={() => setShowEffects(true)}
         />
       ) : (
         <Player
@@ -91,8 +96,31 @@ function PlayerScreen() {
           repeatEnabled={repeatEnabled}
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
+          onEffectsPress={() => setShowEffects(true)}
+          sleepTimerRemaining={sleepTimerRemaining}
         />
       )}
+      <Modal
+        visible={showEffects}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEffects(false)}
+      >
+        <View style={effectsModalStyles.overlay}>
+          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Audio Settings</Text>
+              <Pressable onPress={() => setShowEffects(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+              <AudioEffectsSection />
+              <SleepTimerSection />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -446,5 +474,30 @@ const modalStyles = StyleSheet.create({
   newPlaylistText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+});
+
+const effectsModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  content: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
   },
 });

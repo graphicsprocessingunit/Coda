@@ -3,8 +3,9 @@ import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, A
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { TrackMetadata, Playlist } from '../context/AudioContext';
+import { useAudio, TrackMetadata, Playlist } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
+import { NavidromeBrowser } from './NavidromeBrowser';
 
 function PanResponderView({
   index,
@@ -219,7 +220,9 @@ export function PlaylistDetail({
   library = [],
 }: PlaylistDetailProps) {
   const { colors } = useTheme();
+  const { navidromeConnected, addTrackToPlaylist } = useAudio();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showNavidromeModal, setShowNavidromeModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -355,6 +358,11 @@ export function PlaylistDetail({
               <Ionicons name="add-circle" size={32} color={colors.accent} />
             </Pressable>
           )}
+          {onAddTrack && navidromeConnected && (
+            <Pressable style={styles.addButton} onPress={() => setShowNavidromeModal(true)}>
+              <Ionicons name="server-outline" size={28} color="#34C759" />
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
 
@@ -454,6 +462,30 @@ export function PlaylistDetail({
             </View>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showNavidromeModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNavidromeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Add from Navidrome</Text>
+              <Pressable onPress={() => setShowNavidromeModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <NavidromeBrowser mode="addToPlaylist" onAddTracks={(tracks) => {
+              tracks.forEach((track) => {
+                addTrackToPlaylist(playlist.id, track);
+              });
+              setShowNavidromeModal(false);
+            }} />
+          </View>
+        </View>
       </Modal>
     </View>
   );

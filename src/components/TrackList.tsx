@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { TrackMetadata } from '../context/AudioContext';
+import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
+import { NavidromeBrowser } from './NavidromeBrowser';
 
 interface TrackListProps {
   tracks: TrackMetadata[];
@@ -52,13 +53,17 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
         onPressOut={handlePressOut}
       >
         <View style={styles.trackNumber}>
-          <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
-            {isCurrentTrack ? (
-              <Ionicons name="musical-notes" size={16} color={colors.accent} />
-            ) : (
-              index + 1
-            )}
-          </Text>
+          {item.source === 'navidrome' ? (
+            <Ionicons name="cloud-outline" size={16} color={colors.textSecondary} />
+          ) : (
+            <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
+              {isCurrentTrack ? (
+                <Ionicons name="musical-notes" size={16} color={colors.accent} />
+              ) : (
+                index + 1
+              )}
+            </Text>
+          )}
         </View>
 
         {item.artwork ? (
@@ -91,7 +96,9 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
 
 export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack }: TrackListProps) {
   const { colors } = useTheme();
+  const { navidromeConnected, addToLibrary } = useAudio();
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNavidrome, setShowNavidrome] = useState(false);
 
   const filteredTracks = useMemo(() => {
     if (!searchQuery.trim()) return tracks;
@@ -129,9 +136,18 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Library</Text>
-        <Pressable style={styles.addButton} onPress={onAddTracks}>
-          <Ionicons name="add-circle" size={24} color={colors.accent} />
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable style={styles.navidromeButton} onPress={() => setShowNavidrome(true)}>
+            <Ionicons
+              name="server-outline"
+              size={24}
+              color={navidromeConnected ? '#34C759' : colors.textSecondary}
+            />
+          </Pressable>
+          <Pressable style={styles.addButton} onPress={onAddTracks}>
+            <Ionicons name="add-circle" size={24} color={colors.accent} />
+          </Pressable>
+        </View>
       </View>
 
       {tracks.length > 0 && (
@@ -174,6 +190,28 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           contentContainerStyle={styles.listContent}
         />
       )}
+
+      <Modal
+        visible={showNavidrome}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNavidrome(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Navidrome</Text>
+              <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <NavidromeBrowser mode="addToLibrary" onAddTracks={(newTracks) => {
+              addToLibrary(newTracks);
+              setShowNavidrome(false);
+            }} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -193,6 +231,14 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  navidromeButton: {
+    padding: 8,
   },
   addButton: {
     padding: 8,
@@ -276,5 +322,28 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 16,
     marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+  },
+  modalContent: {
+    borderRadius: 20,
+    marginHorizontal: 20,
+    maxHeight: '80%',
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
   },
 });

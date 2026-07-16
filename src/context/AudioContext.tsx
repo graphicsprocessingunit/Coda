@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Audio } from 'expo-av';
 import { StorageService } from '../services/StorageService';
+import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 
 export interface TrackMetadata {
   title: string;
@@ -8,6 +9,8 @@ export interface TrackMetadata {
   uri: string;
   duration?: number;
   artwork?: string;
+  source?: 'local' | 'navidrome';
+  navidromeId?: string;
 }
 
 export interface Playlist {
@@ -16,6 +19,8 @@ export interface Playlist {
   tracks: TrackMetadata[];
   createdAt: number;
 }
+
+export type AudioPreset = 'flat' | 'bass-boost' | 'vocal' | 'bright' | 'night';
 
 interface AudioContextType {
   currentTrack: TrackMetadata | null;
@@ -27,6 +32,11 @@ interface AudioContextType {
   duration: number;
   shuffleEnabled: boolean;
   repeatEnabled: boolean;
+  playbackRate: number;
+  volume: number;
+  audioPreset: AudioPreset;
+  sleepTimerEnd: number | null;
+  sleepTimerRemaining: number;
   loadTrack: (trackUri: string, metadata: TrackMetadata) => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
@@ -46,6 +56,16 @@ interface AudioContextType {
   reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => void;
   deletePlaylist: (playlistId: string) => void;
   playPlaylist: (playlist: Playlist) => Promise<void>;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  setVolume: (vol: number) => Promise<void>;
+  setAudioPreset: (preset: AudioPreset) => void;
+  setSleepTimer: (minutes: number) => void;
+  cancelSleepTimer: () => void;
+  navidromeConnected: boolean;
+  navidromeServerUrl: string;
+  connectNavidrome: (url: string, username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  disconnectNavidrome: () => Promise<void>;
+  getNavidromeCredentials: () => NavidromeCredentials | null;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -66,6 +86,15 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+function generateSalt(): string {
+  const chars = 'abcdef0123456789';
+  let salt = '';
+  for (let i = 0; i < 16; i++) {
+    salt += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return salt;
+}
+
 export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<TrackMetadata | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -76,6 +105,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [playbackRate, setPlaybackRateState] = useState(1.0);
+  const [volume, setVolumeState] = useState(1.0);
+  const [audioPreset, setAudioPresetState] = useState<AudioPreset>('flat');
+  const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0);
+  const [navidromeConnected, setNavidromeConnected] = useState(false);
+  const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
+  const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const playbackStatusRef = useRef<any>(null);
@@ -86,6 +123,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const historyIndexRef = useRef(-1);
   const seekingRef = useRef(false);
   const sourceTracksRef = useRef<TrackMetadata[]>([]);
+  const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     repeatEnabledRef.current = repeatEnabled;
@@ -103,6 +141,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (soundRef.current) {
         soundRef.current.unloadAsync();
+      }
+      if (sleepTimerRef.current) {
+        clearInterval(sleepTimerRef.current);
       }
     };
   }, []);
@@ -143,6 +184,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           console.error('Error restoring track:', error);
         }
+      }
+
+      const savedNavidromeCreds = await NavidromeService.loadCredentials();
+      if (savedNavidromeCreds) {
+        navidromeCredentialsRef.current = savedNavidromeCreds;
+        setNavidromeConnected(true);
+        setNavidromeServerUrl(savedNavidromeCreds.url);
       }
     };
 
@@ -453,6 +501,110 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const applyPreset = async (preset: AudioPreset) => {
+    const presets: Record<AudioPreset, { rate: number; vol: number }> = {
+      flat: { rate: 1.0, vol: 1.0 },
+      'bass-boost': { rate: 0.9, vol: 1.0 },
+      vocal: { rate: 1.0, vol: 0.85 },
+      bright: { rate: 1.1, vol: 1.0 },
+      night: { rate: 0.95, vol: 0.5 },
+    };
+    const p = presets[preset];
+    setPlaybackRateState(p.rate);
+    setVolumeState(p.vol);
+    if (soundRef.current) {
+      try {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.setRateAsync(p.rate, true);
+          await soundRef.current.setVolumeAsync(p.vol);
+        }
+      } catch {}
+    }
+  };
+
+  const setPlaybackRate = async (rate: number) => {
+    setPlaybackRateState(rate);
+    setAudioPresetState('flat');
+    if (soundRef.current) {
+      try {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.setRateAsync(rate, true);
+        }
+      } catch {}
+    }
+  };
+
+  const setVolume = async (vol: number) => {
+    setVolumeState(vol);
+    if (soundRef.current) {
+      try {
+        const status = await soundRef.current.getStatusAsync();
+        if (status.isLoaded) {
+          await soundRef.current.setVolumeAsync(vol);
+        }
+      } catch {}
+    }
+  };
+
+  const setAudioPreset = (preset: AudioPreset) => {
+    setAudioPresetState(preset);
+    applyPreset(preset);
+  };
+
+  const cancelSleepTimer = () => {
+    if (sleepTimerRef.current) {
+      clearInterval(sleepTimerRef.current);
+      sleepTimerRef.current = null;
+    }
+    setSleepTimerEnd(null);
+    setSleepTimerRemaining(0);
+  };
+
+  const setSleepTimer = (minutes: number) => {
+    cancelSleepTimer();
+    const endTime = Date.now() + minutes * 60 * 1000;
+    setSleepTimerEnd(endTime);
+    setSleepTimerRemaining(minutes * 60);
+
+    sleepTimerRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      setSleepTimerRemaining(remaining);
+      if (remaining <= 0) {
+        cancelSleepTimer();
+        if (soundRef.current) {
+          soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+        }
+      }
+    }, 1000);
+  };
+
+  const connectNavidrome = async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+    const result = await NavidromeService.ping(url, username, password);
+    if (result.ok) {
+      const salt = generateSalt();
+      const token = NavidromeService.createToken(password, salt);
+      const creds: NavidromeCredentials = { url, username, token, salt };
+      await NavidromeService.saveCredentials(creds);
+      navidromeCredentialsRef.current = creds;
+      setNavidromeConnected(true);
+      setNavidromeServerUrl(url);
+    }
+    return result;
+  };
+
+  const disconnectNavidrome = async () => {
+    await NavidromeService.clearCredentials();
+    navidromeCredentialsRef.current = null;
+    setNavidromeConnected(false);
+    setNavidromeServerUrl('');
+  };
+
+  const getNavidromeCredentials = (): NavidromeCredentials | null => {
+    return navidromeCredentialsRef.current;
+  };
+
   const value: AudioContextType = {
     currentTrack,
     isPlaying,
@@ -463,6 +615,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     duration,
     shuffleEnabled,
     repeatEnabled,
+    playbackRate,
+    volume,
+    audioPreset,
+    sleepTimerEnd,
+    sleepTimerRemaining,
+    navidromeConnected,
+    navidromeServerUrl,
     loadTrack,
     play,
     pause,
@@ -482,6 +641,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     reorderPlaylistTracks,
     deletePlaylist,
     playPlaylist,
+    setPlaybackRate,
+    setVolume,
+    setAudioPreset,
+    setSleepTimer,
+    cancelSleepTimer,
+    connectNavidrome,
+    disconnectNavidrome,
+    getNavidromeCredentials,
   };
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
