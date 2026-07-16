@@ -1,14 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, LayoutAnimation, UIManager, Platform } from 'react-native';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface TrackListProps {
   tracks: TrackMetadata[];
@@ -95,6 +91,15 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
 
 export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack }: TrackListProps) {
   const { colors } = useTheme();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredTracks = useMemo(() => {
+    if (!searchQuery.trim()) return tracks;
+    const q = searchQuery.toLowerCase();
+    return tracks.filter(
+      (t) => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q)
+    );
+  }, [tracks, searchQuery]);
 
   const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
@@ -129,15 +134,40 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         </Pressable>
       </View>
 
+      {tracks.length > 0 && (
+        <View style={[styles.searchContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search tracks..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {tracks.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="musical-notes" size={64} color={colors.textSecondary} />
           <Text style={[styles.emptyText, { color: colors.text }]}>No tracks yet</Text>
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Tap + to add music</Text>
         </View>
+      ) : filteredTracks.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="search" size={64} color={colors.textSecondary} />
+          <Text style={[styles.emptyText, { color: colors.text }]}>No matches</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try a different search</Text>
+        </View>
       ) : (
         <FlatList
-          data={tracks}
+          data={filteredTracks}
           renderItem={renderTrack}
           keyExtractor={(item) => item.uri}
           style={styles.list}
@@ -166,6 +196,24 @@ const styles = StyleSheet.create({
   },
   addButton: {
     padding: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(128,128,128,0.12)',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 16,
   },
   list: {
     flex: 1,

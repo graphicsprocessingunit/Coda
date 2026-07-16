@@ -1,16 +1,73 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing, PanResponder } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { TrackMetadata, Playlist } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 
+function PanResponderView({
+  index,
+  itemCount,
+  itemHeight,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
+  children,
+}: {
+  index: number;
+  itemCount: number;
+  itemHeight: number;
+  onDragStart: () => void;
+  onDragMove: (overIndex: number) => void;
+  onDragEnd: (fromIndex: number, toIndex: number) => void;
+  onDragCancel: () => void;
+  children: React.ReactNode;
+}) {
+  const startY = useRef(0);
+  const currentOffset = useRef(0);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
+      onPanResponderGrant: () => {
+        startY.current = 0;
+        currentOffset.current = 0;
+        onDragStart();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const newOffset = gestureState.dy;
+        currentOffset.current = newOffset;
+        const rawIndex = index + Math.round(newOffset / itemHeight);
+        const clampedIndex = Math.max(0, Math.min(itemCount - 1, rawIndex));
+        onDragMove(clampedIndex);
+      },
+      onPanResponderRelease: () => {
+        const finalIndex = index + Math.round(currentOffset.current / itemHeight);
+        const clampedIndex = Math.max(0, Math.min(itemCount - 1, finalIndex));
+        onDragEnd(index, clampedIndex);
+      },
+      onPanResponderTerminate: () => {
+        onDragCancel();
+      },
+    })
+  ).current;
+
+  return (
+    <View {...panResponder.panHandlers} style={styles.gripHandle}>
+      {children}
+    </View>
+  );
+}
+
 interface PlaylistDetailProps {
   playlist: Playlist;
   currentTrack: TrackMetadata | null;
   onTrackPress: (track: TrackMetadata) => void;
   onRemoveTrack: (trackUri: string) => void;
+  onReorderTrack?: (fromIndex: number, toIndex: number) => void;
   onPlayPlaylist: () => void;
   onBack: () => void;
   onAddTrack?: (track: TrackMetadata) => void;
@@ -110,6 +167,7 @@ export function PlaylistDetail({
   currentTrack,
   onTrackPress,
   onRemoveTrack,
+  onReorderTrack,
   onPlayPlaylist,
   onBack,
   onAddTrack,
@@ -118,6 +176,9 @@ export function PlaylistDetail({
   const { colors } = useTheme();
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const itemHeight = 72;
 
   const playButtonScale = useRef(new Animated.Value(1)).current;
 
@@ -146,16 +207,71 @@ export function PlaylistDetail({
 
   const renderPlaylistTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
+    const isDragging = draggingIndex === index;
+    const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
 
     return (
       <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
-        <AnimatedTrackItem
-          item={item}
-          index={index}
-          isCurrentTrack={isCurrentTrack}
-          colors={colors}
-          onPress={() => onTrackPress(item)}
-        />
+        <Animated.View
+          style={[
+            styles.trackItemRow,
+            { backgroundColor: colors.background },
+            isCurrentTrack && { backgroundColor: colors.card },
+            isDragging && { opacity: 0.5, zIndex: 100 },
+            isOver && { backgroundColor: colors.accent + '15' },
+          ]}
+        >
+          <View style={styles.trackNumber}>
+            <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
+              {isCurrentTrack ? (
+                <Ionicons name="musical-notes" size={16} color={colors.accent} />
+              ) : (
+                index + 1
+              )}
+            </Text>
+          </View>
+
+          {item.artwork ? (
+            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+          ) : (
+            <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
+              <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
+            </View>
+          )}
+
+          <View style={styles.trackInfo}>
+            <Text
+              style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+            <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.artist}
+            </Text>
+          </View>
+
+          {onReorderTrack && (
+            <PanResponderView
+              index={index}
+              itemCount={playlist.tracks.length}
+              itemHeight={itemHeight}
+              onDragStart={() => setDraggingIndex(index)}
+              onDragMove={(overIndex) => setDragOverIndex(overIndex)}
+              onDragEnd={(from, to) => {
+                setDraggingIndex(null);
+                setDragOverIndex(null);
+                if (from !== to) onReorderTrack(from, to);
+              }}
+              onDragCancel={() => {
+                setDraggingIndex(null);
+                setDragOverIndex(null);
+              }}
+            >
+              <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+            </PanResponderView>
+          )}
+        </Animated.View>
       </SwipeableRow>
     );
   };
@@ -353,6 +469,12 @@ const styles = StyleSheet.create({
   listContent: {
     paddingVertical: 8,
   },
+  trackItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
   trackItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -393,6 +515,18 @@ const styles = StyleSheet.create({
   },
   trackArtist: {
     fontSize: 14,
+  },
+  trackActions: {
+    position: 'absolute',
+    right: 8,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 40,
+  },
+  gripHandle: {
+    padding: 8,
   },
   emptyState: {
     flex: 1,

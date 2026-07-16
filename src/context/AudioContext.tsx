@@ -43,6 +43,7 @@ interface AudioContextType {
   createPlaylist: (name: string) => void;
   addTrackToPlaylist: (playlistId: string, track: TrackMetadata) => void;
   removeTrackFromPlaylist: (playlistId: string, trackUri: string) => void;
+  reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => void;
   deletePlaylist: (playlistId: string) => void;
   playPlaylist: (playlist: Playlist) => Promise<void>;
 }
@@ -382,6 +383,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const reorderPlaylistTracks = (playlistId: string, fromIndex: number, toIndex: number) => {
+    setPlaylists((prev) =>
+      prev.map((playlist) => {
+        if (playlist.id !== playlistId) return playlist;
+        const tracks = [...playlist.tracks];
+        const [moved] = tracks.splice(fromIndex, 1);
+        tracks.splice(toIndex, 0, moved);
+        return { ...playlist, tracks };
+      })
+    );
+  };
+
   const deletePlaylist = (playlistId: string) => {
     setPlaylists((prev) => prev.filter((playlist) => playlist.id !== playlistId));
   };
@@ -466,6 +479,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     createPlaylist,
     addTrackToPlaylist,
     removeTrackFromPlaylist,
+    reorderPlaylistTracks,
     deletePlaylist,
     playPlaylist,
   };

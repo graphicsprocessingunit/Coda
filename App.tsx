@@ -13,6 +13,7 @@ import { TrackList } from './src/components/TrackList';
 import { Playlists } from './src/components/Playlists';
 import { PlaylistDetail } from './src/components/PlaylistDetail';
 import { Settings } from './src/components/Settings';
+import { MiniPlayer } from './src/components/MiniPlayer';
 import { FilePickerService } from './src/services/FilePickerService';
 import { StorageService } from './src/services/StorageService';
 
@@ -148,7 +149,7 @@ function LibraryScreen() {
   };
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <TrackList
         tracks={library}
         currentTrack={currentTrack}
@@ -157,6 +158,7 @@ function LibraryScreen() {
         onTrackLongPress={handleTrackLongPress}
         onRemoveTrack={removeFromLibrary}
       />
+      <MiniPlayer />
       <Modal
         visible={showPlaylistModal}
         animationType="slide"
@@ -207,7 +209,7 @@ function LibraryScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
 
@@ -237,7 +239,7 @@ function PlaylistsScreen({ navigation }: any) {
 }
 
 function PlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, removeTrackFromPlaylist, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist } = useAudio();
+  const { currentTrack, removeTrackFromPlaylist, reorderPlaylistTracks, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist } = useAudio();
   const { playlistId } = route.params;
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -251,6 +253,7 @@ function PlaylistDetailScreen({ route, navigation }: any) {
       currentTrack={currentTrack}
       onTrackPress={(track: TrackMetadata) => playFromPlaylist(playlist, track)}
       onRemoveTrack={(trackUri) => removeTrackFromPlaylist(playlist.id, trackUri)}
+      onReorderTrack={(fromIndex: number, toIndex: number) => reorderPlaylistTracks(playlist.id, fromIndex, toIndex)}
       onPlayPlaylist={() => playPlaylist(playlist)}
       onBack={() => navigation.goBack()}
       onAddTrack={(track) => addTrackToPlaylist(playlist.id, track)}
@@ -261,10 +264,13 @@ function PlaylistDetailScreen({ route, navigation }: any) {
 
 function PlaylistsStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="PlaylistsList" component={PlaylistsScreen} />
-      <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
-    </Stack.Navigator>
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="PlaylistsList" component={PlaylistsScreen} />
+        <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
+      </Stack.Navigator>
+      <MiniPlayer />
+    </View>
   );
 }
 
@@ -289,7 +295,12 @@ function SettingsScreen() {
     );
   };
 
-  return <Settings onClearData={handleClearData} />;
+  return (
+    <View style={{ flex: 1 }}>
+      <Settings onClearData={handleClearData} />
+      <MiniPlayer />
+    </View>
+  );
 }
 
 function MainTabs() {
