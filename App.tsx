@@ -3,8 +3,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, SAMPLE_TRACK, Playlist, TrackMetadata } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -18,6 +18,25 @@ import { StorageService } from './src/services/StorageService';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+
+function AnimatedTabIcon({ name, color, size, focused }: { name: string; color: string; size: number; focused: boolean }) {
+  const scale = useRef(new Animated.Value(focused ? 1.15 : 0.9)).current;
+
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: focused ? 1.15 : 0.9,
+      useNativeDriver: true,
+      damping: 10,
+      stiffness: 200,
+    }).start();
+  }, [focused]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Ionicons name={name as any} size={size} color={color} />
+    </Animated.View>
+  );
+}
 
 function PlayerScreen() {
   const {
@@ -293,8 +312,8 @@ function MainTabs() {
         name="Player"
         component={PlayerScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedTabIcon name="play-circle" color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -302,8 +321,8 @@ function MainTabs() {
         name="Library"
         component={LibraryScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="musical-notes" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedTabIcon name="musical-notes" color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -311,8 +330,8 @@ function MainTabs() {
         name="Playlists"
         component={PlaylistsStack}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedTabIcon name="list" color={color} size={size} focused={focused} />
           ),
         }}
       />
@@ -320,8 +339,8 @@ function MainTabs() {
         name="Settings"
         component={SettingsScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedTabIcon name="settings" color={color} size={size} focused={focused} />
           ),
         }}
       />

@@ -10,6 +10,9 @@ interface SwipeableRowProps {
 
 export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30' }: SwipeableRowProps) {
   const translateX = useRef(new Animated.Value(0)).current;
+  const iconOpacity = useRef(new Animated.Value(0)).current;
+  const iconScale = useRef(new Animated.Value(0.5)).current;
+  const bgOpacity = useRef(new Animated.Value(0)).current;
   const isOpenRef = useRef(false);
   const lastOffset = useRef(0);
   const [rowHeight, setRowHeight] = useState(0);
@@ -22,6 +25,11 @@ export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30' }: Sw
       onPanResponderMove: (_, gestureState) => {
         const newValue = Math.min(0, Math.max(-100, lastOffset.current + gestureState.dx));
         translateX.setValue(newValue);
+
+        const progress = Math.min(1, Math.abs(newValue) / 80);
+        iconOpacity.setValue(progress);
+        iconScale.setValue(0.5 + progress * 0.5);
+        bgOpacity.setValue(progress);
       },
       onPanResponderRelease: (_, gestureState) => {
         const newValue = lastOffset.current + gestureState.dx;
@@ -29,17 +37,21 @@ export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30' }: Sw
           return;
         }
         if (newValue < -60) {
-          Animated.spring(translateX, {
-            toValue: -80,
-            useNativeDriver: false,
-          }).start();
+          Animated.parallel([
+            Animated.spring(translateX, { toValue: -80, useNativeDriver: false }),
+            Animated.spring(iconOpacity, { toValue: 1, useNativeDriver: false }),
+            Animated.spring(iconScale, { toValue: 1, useNativeDriver: false }),
+            Animated.spring(bgOpacity, { toValue: 1, useNativeDriver: false }),
+          ]).start();
           lastOffset.current = -80;
           isOpenRef.current = true;
         } else {
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: false,
-          }).start();
+          Animated.parallel([
+            Animated.spring(translateX, { toValue: 0, useNativeDriver: false }),
+            Animated.timing(iconOpacity, { toValue: 0, duration: 150, useNativeDriver: false }),
+            Animated.spring(iconScale, { toValue: 0.5, useNativeDriver: false }),
+            Animated.timing(bgOpacity, { toValue: 0, duration: 150, useNativeDriver: false }),
+          ]).start();
           lastOffset.current = 0;
           isOpenRef.current = false;
         }
@@ -57,11 +69,15 @@ export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30' }: Sw
 
   return (
     <View style={styles.outerContainer}>
-      <View style={[styles.deleteBackground, { backgroundColor: deleteColor, height: rowHeight || undefined }]}>
+      <Animated.View
+        style={[styles.deleteBackground, { backgroundColor: deleteColor, height: rowHeight || undefined, opacity: bgOpacity }]}
+      >
         <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <Ionicons name="trash" size={20} color="#fff" />
+          <Animated.View style={{ opacity: iconOpacity, transform: [{ scale: iconScale }] }}>
+            <Ionicons name="trash" size={20} color="#fff" />
+          </Animated.View>
         </Pressable>
-      </View>
+      </Animated.View>
       <Animated.View
         style={[styles.row, { transform: [{ translateX }] }]}
         {...panResponder.panHandlers}

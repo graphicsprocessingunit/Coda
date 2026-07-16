@@ -1,10 +1,14 @@
-import React from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, LayoutAnimation, UIManager, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface TrackListProps {
   tracks: TrackMetadata[];
@@ -15,17 +19,41 @@ interface TrackListProps {
   onRemoveTrack?: (trackUri: string) => void;
 }
 
-export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack }: TrackListProps) {
-  const { colors } = useTheme();
+function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress }: {
+  item: TrackMetadata;
+  index: number;
+  isCurrentTrack: boolean;
+  colors: any;
+  onPress: () => void;
+  onLongPress?: () => void;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
 
-  const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
-    const isCurrentTrack = currentTrack?.uri === item.uri;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 50 }),
+    ]).start();
+  }, []);
 
-    const trackContent = (
+  const handlePressIn = () => {
+    Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 200 }).start();
+  };
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
       <Pressable
         style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
-        onPress={() => onTrackPress(item)}
-        onLongPress={() => onTrackLongPress?.(item)}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
       >
         <View style={styles.trackNumber}>
           <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
@@ -61,6 +89,25 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           <Ionicons name="play" size={20} color={colors.accent} />
         )}
       </Pressable>
+    </Animated.View>
+  );
+}
+
+export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack }: TrackListProps) {
+  const { colors } = useTheme();
+
+  const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
+    const isCurrentTrack = currentTrack?.uri === item.uri;
+
+    const trackContent = (
+      <AnimatedTrackItem
+        item={item}
+        index={index}
+        isCurrentTrack={isCurrentTrack}
+        colors={colors}
+        onPress={() => onTrackPress(item)}
+        onLongPress={() => onTrackLongPress?.(item)}
+      />
     );
 
     if (onRemoveTrack) {

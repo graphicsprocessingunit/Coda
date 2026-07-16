@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -17,6 +17,94 @@ interface PlaylistDetailProps {
   library?: TrackMetadata[];
 }
 
+function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
+  item: TrackMetadata;
+  index: number;
+  isCurrentTrack: boolean;
+  colors: any;
+  onPress: () => void;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 50 }),
+    ]).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 200 }).start();
+  };
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
+      <Pressable
+        style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View style={styles.trackNumber}>
+          <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
+            {isCurrentTrack ? (
+              <Ionicons name="musical-notes" size={16} color={colors.accent} />
+            ) : (
+              index + 1
+            )}
+          </Text>
+        </View>
+
+        {item.artwork ? (
+          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+        ) : (
+          <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
+            <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
+          </View>
+        )}
+
+        <View style={styles.trackInfo}>
+          <Text
+            style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
+            numberOfLines={1}
+          >
+            {item.title}
+          </Text>
+          <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+            {item.artist}
+          </Text>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | undefined; index: number; colors: any }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(opacity, { toValue: 1, duration: 400, delay: index * 100, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, []);
+
+  return (
+    <Animated.View style={[styles.collageItem, { width: '50%', height: '50%', opacity }]}>
+      {artwork ? (
+        <Image source={{ uri: artwork }} style={styles.collageImage} />
+      ) : (
+        <View style={[styles.collagePlaceholder, { backgroundColor: colors.border }]}>
+          <Ionicons name="musical-note" size={32} color={colors.textSecondary} />
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
 export function PlaylistDetail({
   playlist,
   currentTrack,
@@ -30,6 +118,16 @@ export function PlaylistDetail({
   const { colors } = useTheme();
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const playButtonScale = useRef(new Animated.Value(1)).current;
+
+  const handlePlayPress = () => {
+    Animated.sequence([
+      Animated.spring(playButtonScale, { toValue: 0.85, useNativeDriver: true, damping: 10, stiffness: 300 }),
+      Animated.spring(playButtonScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
+    ]).start();
+    onPlayPlaylist();
+  };
 
   const playlistTrackUris = new Set(playlist.tracks.map((t) => t.uri));
 
@@ -51,40 +149,13 @@ export function PlaylistDetail({
 
     return (
       <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
-        <Pressable
-          style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
+        <AnimatedTrackItem
+          item={item}
+          index={index}
+          isCurrentTrack={isCurrentTrack}
+          colors={colors}
           onPress={() => onTrackPress(item)}
-        >
-          <View style={styles.trackNumber}>
-            <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
-              {isCurrentTrack ? (
-                <Ionicons name="musical-notes" size={16} color={colors.accent} />
-              ) : (
-                index + 1
-              )}
-            </Text>
-          </View>
-
-          {item.artwork ? (
-            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
-          ) : (
-            <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
-              <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
-            </View>
-          )}
-
-          <View style={styles.trackInfo}>
-            <Text
-              style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-            <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.artist}
-            </Text>
-          </View>
-        </Pressable>
+        />
       </SwipeableRow>
     );
   };
@@ -106,9 +177,11 @@ export function PlaylistDetail({
               {playlist.tracks.length} {playlist.tracks.length === 1 ? 'track' : 'tracks'}
             </Text>
           </View>
-          <Pressable style={styles.playButton} onPress={onPlayPlaylist}>
-            <Ionicons name="play-circle" size={32} color={colors.accent} />
-          </Pressable>
+          <Animated.View style={{ transform: [{ scale: playButtonScale }] }}>
+            <Pressable style={styles.playButton} onPress={handlePlayPress}>
+              <Ionicons name="play-circle" size={32} color={colors.accent} />
+            </Pressable>
+          </Animated.View>
           {onAddTrack && (
             <Pressable style={styles.addButton} onPress={() => setShowAddModal(true)}>
               <Ionicons name="add-circle" size={32} color={colors.accent} />
@@ -120,15 +193,7 @@ export function PlaylistDetail({
       {playlist.tracks.length > 0 ? (
         <View style={styles.collageContainer}>
           {getCollageImages().map((artwork, index) => (
-            <View key={index} style={[styles.collageItem, { width: '50%', height: '50%' }]}>
-              {artwork ? (
-                <Image source={{ uri: artwork }} style={styles.collageImage} />
-              ) : (
-                <View style={[styles.collagePlaceholder, { backgroundColor: colors.border }]}>
-                  <Ionicons name="musical-note" size={32} color={colors.textSecondary} />
-                </View>
-              )}
-            </View>
+            <AnimatedCollageImage key={index} artwork={artwork} index={index} colors={colors} />
           ))}
         </View>
       ) : (

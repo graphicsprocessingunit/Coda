@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, StyleSheet, Text, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
 interface ProgressBarProps {
@@ -12,14 +12,24 @@ export function ProgressBar({ progress, duration, onSeek }: ProgressBarProps) {
   const { colors } = useTheme();
   const sliderWidthRef = useRef(0);
 
+  const thumbPosition = useRef(new Animated.Value(0)).current;
+  const thumbScale = useRef(new Animated.Value(1)).current;
+  const fillWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const percent = duration > 0 ? Math.min((progress / duration) * 100, 100) : 0;
+    Animated.parallel([
+      Animated.timing(fillWidth, { toValue: percent, duration: 300, easing: Easing.linear, useNativeDriver: false }),
+      Animated.timing(thumbPosition, { toValue: percent, duration: 300, easing: Easing.linear, useNativeDriver: false }),
+    ]).start();
+  }, [progress, duration]);
+
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-
-  const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
   const handleSeek = (event: any) => {
     const { locationX } = event.nativeEvent;
@@ -30,9 +40,27 @@ export function ProgressBar({ progress, duration, onSeek }: ProgressBarProps) {
     }
   };
 
+  const handlePressIn = () => {
+    Animated.spring(thumbScale, { toValue: 1.5, useNativeDriver: true, damping: 10, stiffness: 300 }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(thumbScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }).start();
+  };
+
   const handleLayout = (event: any) => {
     sliderWidthRef.current = event.nativeEvent.layout.width;
   };
+
+  const fillWidthStyle = fillWidth.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
+
+  const thumbPositionStyle = thumbPosition.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
     <View style={styles.container}>
@@ -44,10 +72,18 @@ export function ProgressBar({ progress, duration, onSeek }: ProgressBarProps) {
         style={styles.sliderContainer}
         onLayout={handleLayout}
         onPress={handleSeek}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
       >
         <View style={[styles.track, { backgroundColor: colors.border }]}>
-          <View style={[styles.fill, { width: `${progressPercent}%`, backgroundColor: colors.accent }]} />
-          <View style={[styles.thumb, { left: `${progressPercent}%`, backgroundColor: colors.accent }]} />
+          <Animated.View style={[styles.fill, { width: fillWidthStyle, backgroundColor: colors.accent }]} />
+          <Animated.View
+            style={[
+              styles.thumb,
+              { left: thumbPositionStyle, backgroundColor: colors.accent },
+              { transform: [{ scale: thumbScale }] },
+            ]}
+          />
         </View>
       </Pressable>
     </View>

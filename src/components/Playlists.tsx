@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, TextInput, Modal, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable, TextInput, Modal, Alert, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
@@ -13,6 +13,70 @@ interface PlaylistsProps {
   onAddTrackToPlaylist: (playlistId: string, track: TrackMetadata) => void;
   onPlaylistPress?: (playlist: Playlist) => void;
   trackToAdd?: TrackMetadata | null;
+}
+
+function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack, onAddToPlaylist }: {
+  item: Playlist;
+  colors: any;
+  onPress: () => void;
+  onLongPress: () => void;
+  canAddTrack: boolean;
+  onAddToPlaylist: () => void;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: 100, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: 100 }),
+    ]).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 200 }).start();
+  };
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
+      <Pressable
+        style={[styles.playlistItem, { backgroundColor: colors.background }]}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View style={[styles.playlistIcon, { backgroundColor: colors.card }]}>
+          <Ionicons name="list" size={32} color={colors.accent} />
+        </View>
+
+        <View style={styles.playlistInfo}>
+          <Text style={[styles.playlistName, { color: colors.text }]} numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text style={[styles.playlistCount, { color: colors.textSecondary }]}>
+            {item.tracks.length} {item.tracks.length === 1 ? 'track' : 'tracks'}
+          </Text>
+        </View>
+
+        {canAddTrack && (
+          <Pressable
+            style={styles.addToButton}
+            onPress={onAddToPlaylist}
+          >
+            <Ionicons name="add-circle" size={24} color={colors.accent} />
+          </Pressable>
+        )}
+
+        <Ionicons name="play-circle" size={24} color={colors.textSecondary} />
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export function Playlists({
@@ -61,35 +125,14 @@ export function Playlists({
     const canAddTrack = trackToAdd && !item.tracks.some((t) => t.uri === trackToAdd.uri);
 
     return (
-      <Pressable
-        style={[styles.playlistItem, { backgroundColor: colors.background }]}
+      <AnimatedPlaylistItem
+        item={item}
+        colors={colors}
         onPress={() => onPlaylistPress ? onPlaylistPress(item) : onPlayPlaylist(item)}
         onLongPress={() => handleDeletePlaylist(item.id, item.name)}
-      >
-        <View style={[styles.playlistIcon, { backgroundColor: colors.card }]}>
-          <Ionicons name="list" size={32} color={colors.accent} />
-        </View>
-
-        <View style={styles.playlistInfo}>
-          <Text style={[styles.playlistName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={[styles.playlistCount, { color: colors.textSecondary }]}>
-            {item.tracks.length} {item.tracks.length === 1 ? 'track' : 'tracks'}
-          </Text>
-        </View>
-
-        {canAddTrack && (
-          <Pressable
-            style={styles.addToButton}
-            onPress={() => handleAddToPlaylist(item.id)}
-          >
-            <Ionicons name="add-circle" size={24} color={colors.accent} />
-          </Pressable>
-        )}
-
-        <Ionicons name="play-circle" size={24} color={colors.textSecondary} />
-      </Pressable>
+        canAddTrack={!!canAddTrack}
+        onAddToPlaylist={() => handleAddToPlaylist(item.id)}
+      />
     );
   };
 

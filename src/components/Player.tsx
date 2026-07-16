@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Text, Pressable, Image } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, Pressable, Image, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -38,9 +38,50 @@ export function Player({
 }: PlayerProps) {
   const { colors } = useTheme();
 
+  const albumScale = useRef(new Animated.Value(0.9)).current;
+  const albumOpacity = useRef(new Animated.Value(0)).current;
+  const playButtonScale = useRef(new Animated.Value(1)).current;
+  const skipNextScale = useRef(new Animated.Value(1)).current;
+  const skipPrevScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(albumScale, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 100 }),
+      Animated.timing(albumOpacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [currentTrack?.uri]);
+
+  const handlePlayPause = () => {
+    Animated.sequence([
+      Animated.spring(playButtonScale, { toValue: 0.85, useNativeDriver: true, damping: 10, stiffness: 300 }),
+      Animated.spring(playButtonScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
+    ]).start();
+    if (isPlaying) {
+      onPause();
+    } else {
+      onPlay();
+    }
+  };
+
+  const handleSkipNext = () => {
+    Animated.sequence([
+      Animated.spring(skipNextScale, { toValue: 0.8, useNativeDriver: true, damping: 10, stiffness: 300 }),
+      Animated.spring(skipNextScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
+    ]).start();
+    onSkipNext();
+  };
+
+  const handleSkipPrevious = () => {
+    Animated.sequence([
+      Animated.spring(skipPrevScale, { toValue: 0.8, useNativeDriver: true, damping: 10, stiffness: 300 }),
+      Animated.spring(skipPrevScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
+    ]).start();
+    onSkipPrevious();
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <View style={styles.albumArtContainer}>
+      <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity }]}>
         <Image
           source={{
             uri: currentTrack?.artwork || 'https://via.placeholder.com/400x400/1a1a1a/ffffff?text=No+Album+Art',
@@ -48,7 +89,7 @@ export function Player({
           style={styles.albumArt}
           resizeMode="cover"
         />
-      </View>
+      </Animated.View>
 
       <View style={styles.trackInfo}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
@@ -87,24 +128,30 @@ export function Player({
       </View>
 
       <View style={styles.controls}>
-        <Pressable onPress={onSkipPrevious} style={styles.controlButton}>
-          <Ionicons name="play-skip-back" size={32} color={colors.text} />
-        </Pressable>
+        <Animated.View style={{ transform: [{ scale: skipPrevScale }] }}>
+          <Pressable onPress={handleSkipPrevious} style={styles.controlButton}>
+            <Ionicons name="play-skip-back" size={32} color={colors.text} />
+          </Pressable>
+        </Animated.View>
 
-        <Pressable
-          onPress={isPlaying ? onPause : onPlay}
-          style={[styles.playButton, { backgroundColor: colors.accent }, isPlaying && { backgroundColor: colors.text }]}
-        >
-          <Ionicons
-            name={isPlaying ? "pause" : "play"}
-            size={36}
-            color={isPlaying ? colors.background : colors.background}
-          />
-        </Pressable>
+        <Animated.View style={[{ backgroundColor: colors.accent }, isPlaying && { backgroundColor: colors.text }, { transform: [{ scale: playButtonScale }] }, styles.playButton]}>
+          <Pressable
+            onPress={handlePlayPause}
+            style={styles.playButtonInner}
+          >
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={36}
+              color={colors.background}
+            />
+          </Pressable>
+        </Animated.View>
 
-        <Pressable onPress={onSkipNext} style={styles.controlButton}>
-          <Ionicons name="play-skip-forward" size={32} color={colors.text} />
-        </Pressable>
+        <Animated.View style={{ transform: [{ scale: skipNextScale }] }}>
+          <Pressable onPress={handleSkipNext} style={styles.controlButton}>
+            <Ionicons name="play-skip-forward" size={32} color={colors.text} />
+          </Pressable>
+        </Animated.View>
       </View>
     </SafeAreaView>
   );
@@ -182,5 +229,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 4,
+  },
+  playButtonInner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
