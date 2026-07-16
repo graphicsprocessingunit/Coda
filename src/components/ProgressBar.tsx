@@ -41,11 +41,11 @@ export function ProgressBar({ progress, duration, onSeek }: ProgressBarProps) {
   };
 
   const handlePressIn = () => {
-    Animated.spring(thumbScale, { toValue: 1.5, useNativeDriver: true, damping: 10, stiffness: 300 }).start();
+    Animated.spring(thumbScale, { toValue: 1.5, useNativeDriver: false, damping: 10, stiffness: 300 }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(thumbScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }).start();
+    Animated.spring(thumbScale, { toValue: 1, useNativeDriver: false, damping: 10, stiffness: 200 }).start();
   };
 
   const handleLayout = (event: any) => {

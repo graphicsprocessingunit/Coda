@@ -25,32 +25,77 @@ function PanResponderView({
   onDragCancel: () => void;
   children: React.ReactNode;
 }) {
-  const startY = useRef(0);
+  const indexRef = useRef(index);
+  const itemCountRef = useRef(itemCount);
+  const itemHeightRef = useRef(itemHeight);
+  const onDragStartRef = useRef(onDragStart);
+  const onDragMoveRef = useRef(onDragMove);
+  const onDragEndRef = useRef(onDragEnd);
+  const onDragCancelRef = useRef(onDragCancel);
   const currentOffset = useRef(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragActive = useRef(false);
+  const grantXY = useRef({ x: 0, y: 0 });
+
+  indexRef.current = index;
+  itemCountRef.current = itemCount;
+  itemHeightRef.current = itemHeight;
+  onDragStartRef.current = onDragStart;
+  onDragMoveRef.current = onDragMove;
+  onDragEndRef.current = onDragEnd;
+  onDragCancelRef.current = onDragCancel;
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > 10,
-      onPanResponderGrant: () => {
-        startY.current = 0;
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => false,
+      onPanResponderTerminationRequest: () => !dragActive.current,
+      onPanResponderGrant: (_, gestureState) => {
+        dragActive.current = false;
         currentOffset.current = 0;
-        onDragStart();
+        grantXY.current = { x: gestureState.x0, y: gestureState.y0 };
+        longPressTimer.current = setTimeout(() => {
+          dragActive.current = true;
+          onDragStartRef.current();
+        }, 400);
       },
       onPanResponderMove: (_, gestureState) => {
+        if (!dragActive.current) {
+          const dx = Math.abs(gestureState.moveX - grantXY.current.x);
+          const dy = Math.abs(gestureState.moveY - grantXY.current.y);
+          if (dx > 10 || dy > 10) {
+            if (longPressTimer.current) {
+              clearTimeout(longPressTimer.current);
+              longPressTimer.current = null;
+            }
+          }
+          return;
+        }
         const newOffset = gestureState.dy;
         currentOffset.current = newOffset;
-        const rawIndex = index + Math.round(newOffset / itemHeight);
-        const clampedIndex = Math.max(0, Math.min(itemCount - 1, rawIndex));
-        onDragMove(clampedIndex);
+        const rawIndex = indexRef.current + Math.round(newOffset / itemHeightRef.current);
+        const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, rawIndex));
+        onDragMoveRef.current(clampedIndex);
       },
       onPanResponderRelease: () => {
-        const finalIndex = index + Math.round(currentOffset.current / itemHeight);
-        const clampedIndex = Math.max(0, Math.min(itemCount - 1, finalIndex));
-        onDragEnd(index, clampedIndex);
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+        if (dragActive.current) {
+          const finalIndex = indexRef.current + Math.round(currentOffset.current / itemHeightRef.current);
+          const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, finalIndex));
+          onDragEndRef.current(indexRef.current, clampedIndex);
+          dragActive.current = false;
+        }
       },
       onPanResponderTerminate: () => {
-        onDragCancel();
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+        dragActive.current = false;
+        onDragCancelRef.current();
       },
     })
   ).current;
@@ -150,7 +195,7 @@ function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | un
   }, []);
 
   return (
-    <Animated.View style={[styles.collageItem, { width: '50%', height: '50%', opacity }]}>
+    <Animated.View style={[styles.collageItem, { opacity }]}>
       {artwork ? (
         <Image source={{ uri: artwork }} style={styles.collageImage} />
       ) : (
@@ -221,35 +266,40 @@ export function PlaylistDetail({
             isOver && { backgroundColor: colors.accent + '15' },
           ]}
         >
-          <View style={styles.trackNumber}>
-            <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
-              {isCurrentTrack ? (
-                <Ionicons name="musical-notes" size={16} color={colors.accent} />
-              ) : (
-                index + 1
-              )}
-            </Text>
-          </View>
-
-          {item.artwork ? (
-            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
-          ) : (
-            <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
-              <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
+          <Pressable
+            style={styles.trackContent}
+            onPress={() => onTrackPress(item)}
+          >
+            <View style={styles.trackNumber}>
+              <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
+                {isCurrentTrack ? (
+                  <Ionicons name="musical-notes" size={16} color={colors.accent} />
+                ) : (
+                  index + 1
+                )}
+              </Text>
             </View>
-          )}
 
-          <View style={styles.trackInfo}>
-            <Text
-              style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-            <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-              {item.artist}
-            </Text>
-          </View>
+            {item.artwork ? (
+              <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+            ) : (
+              <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
+                <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
+              </View>
+            )}
+
+            <View style={styles.trackInfo}>
+              <Text
+                style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
+                numberOfLines={1}
+              >
+                {item.title}
+              </Text>
+              <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+                {item.artist}
+              </Text>
+            </View>
+          </Pressable>
 
           {onReorderTrack && (
             <PanResponderView
@@ -277,7 +327,9 @@ export function PlaylistDetail({
   };
 
   const getCollageImages = () => {
-    return playlist.tracks.slice(0, 4).map((track) => track.artwork);
+    const images = playlist.tracks.slice(0, 4).map((track) => track.artwork);
+    while (images.length < 4) images.push(undefined);
+    return images;
   };
 
   return (
@@ -308,9 +360,14 @@ export function PlaylistDetail({
 
       {playlist.tracks.length > 0 ? (
         <View style={styles.collageContainer}>
-          {getCollageImages().map((artwork, index) => (
-            <AnimatedCollageImage key={index} artwork={artwork} index={index} colors={colors} />
-          ))}
+          <View style={styles.collageRow}>
+            <AnimatedCollageImage artwork={getCollageImages()[0]} index={0} colors={colors} />
+            <AnimatedCollageImage artwork={getCollageImages()[1]} index={1} colors={colors} />
+          </View>
+          <View style={styles.collageRow}>
+            <AnimatedCollageImage artwork={getCollageImages()[2]} index={2} colors={colors} />
+            <AnimatedCollageImage artwork={getCollageImages()[3]} index={3} colors={colors} />
+          </View>
         </View>
       ) : (
         <View style={[styles.emptyCollage, { backgroundColor: colors.card }]}>
@@ -434,16 +491,21 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   collageContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    width: '100%',
+    alignSelf: 'center',
+    width: '80%',
     aspectRatio: 1,
-    margin: 20,
+    marginVertical: 20,
     borderRadius: 12,
     overflow: 'hidden',
+    gap: 1,
+  },
+  collageRow: {
+    flexDirection: 'row',
+    flex: 1,
+    gap: 1,
   },
   collageItem: {
-    borderWidth: 0.5,
+    flex: 1,
   },
   collageImage: {
     width: '100%',
@@ -474,6 +536,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
+  },
+  trackContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   trackItem: {
     flexDirection: 'row',
@@ -527,6 +594,10 @@ const styles = StyleSheet.create({
   },
   gripHandle: {
     padding: 8,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     flex: 1,

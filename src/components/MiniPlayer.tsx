@@ -6,7 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAudio } from '../context/AudioContext';
 
 export function MiniPlayer() {
-  const { currentTrack, isPlaying, play, pause, skipNext } = useAudio();
+  const { currentTrack, isPlaying, play, pause, skipNext, skipPrevious } = useAudio();
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
 
@@ -51,6 +51,9 @@ export function MiniPlayer() {
           <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{currentTrack.title}</Text>
           <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>{currentTrack.artist}</Text>
         </View>
+        <Pressable style={styles.skipButton} onPress={skipPrevious} hitSlop={12}>
+          <Ionicons name="play-skip-back" size={22} color={colors.textSecondary} />
+        </Pressable>
         <Pressable style={styles.playButton} onPress={handleTogglePlay} hitSlop={12}>
           <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={colors.accent} />
         </Pressable>

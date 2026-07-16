@@ -81,14 +81,18 @@ export function Player({
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity }]}>
-        <Image
-          source={{
-            uri: currentTrack?.artwork || 'https://via.placeholder.com/400x400/1a1a1a/ffffff?text=No+Album+Art',
-          }}
-          style={styles.albumArt}
-          resizeMode="cover"
-        />
+      <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity, backgroundColor: colors.card }]}>
+        {currentTrack?.artwork ? (
+          <Image
+            source={{ uri: currentTrack.artwork }}
+            style={styles.albumArt}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.albumArtPlaceholder}>
+            <Ionicons name="musical-note" size={80} color={colors.textSecondary} />
+          </View>
+        )}
       </Animated.View>
 
       <View style={styles.trackInfo}>
@@ -179,6 +183,12 @@ const styles = StyleSheet.create({
   albumArt: {
     width: '100%',
     height: '100%',
+  },
+  albumArtPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   trackInfo: {
     alignItems: 'center',
