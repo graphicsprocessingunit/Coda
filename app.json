@@ -1,13 +1,19 @@
 {
   "expo": {
-    "name": "coda-app",
+    "name": "Coda",
     "slug": "coda-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "UIBackgroundModes": ["audio"],
+      "infoPlist": {
+        "UIRequiredDeviceCapabilities": ["armv7"],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.codaplayer.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e1cfe987-ef12-4e14-bae9-453f64f2d48b"
+      }
     }
   }
 }

@@ -1,3 +1,31 @@
-# Expo HAS CHANGED
+# Expo SDK 54
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+This project uses Expo SDK **54** (installed: 54.0.35). Read the exact versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any Expo-related code.
+
+## Commands
+
+- `npm start` — Expo dev server (use `npx expo start` if npm script fails)
+- `npm run ios` / `npm run android` — platform-specific launch
+- No lint, typecheck, or test scripts are configured. Run `npx tsc --noEmit` for type checking.
+
+## Architecture
+
+- **Entry**: `index.ts` → `App.tsx` (registers root component via `registerRootComponent`)
+- **Navigation**: Bottom tabs (Player, Library, Playlists, Settings). Playlists tab has its own Stack navigator.
+- **State**: Two React Contexts — `AudioContext` (audio engine, library, playlists, queue) and `ThemeContext` (4 themes: dark/light/midnight/ocean). All state lives in context, no Redux/Zustand.
+- **Persistence**: `AsyncStorage` via `StorageService` — library, playlists, current track, playback position, queue. Theme stored separately in `ThemeContext`.
+- **Audio**: `expo-av` with background playback enabled (`UIBackgroundModes: ["audio"]` on iOS). Lock screen metadata via `Audio.Sound.createAsync`.
+- **File import**: `expo-document-picker` → `FilePickerService` converts picked files to `TrackMetadata`.
+
+## Key types (defined in `src/context/AudioContext.tsx`)
+
+- `TrackMetadata`: `{ title, artist, uri, duration?, artwork? }`
+- `Playlist`: `{ id, name, tracks: TrackMetadata[], createdAt }`
+
+## Conventions
+
+- Components in `src/components/`, contexts in `src/context/`, services in `src/services/`. `src/screens/` exists but is empty — screens are defined inline in `App.tsx`.
+- Theming: access via `useTheme()` hook, never hardcode colors.
+- Audio state: access via `useAudio()` hook.
+- TypeScript strict mode enabled (`tsconfig.json`).
+- Icons use `@expo/vector-icons` (Ionicons).
