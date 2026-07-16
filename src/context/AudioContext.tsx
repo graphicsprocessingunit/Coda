@@ -39,6 +39,7 @@ interface AudioContextType {
   addToLibrary: (tracks: TrackMetadata[]) => void;
   removeFromLibrary: (trackUri: string) => void;
   playFromLibrary: (track: TrackMetadata) => Promise<void>;
+  playFromPlaylist: (playlist: Playlist, track: TrackMetadata) => Promise<void>;
   createPlaylist: (name: string) => void;
   addTrackToPlaylist: (playlistId: string, track: TrackMetadata) => void;
   removeTrackFromPlaylist: (playlistId: string, trackUri: string) => void;
@@ -81,6 +82,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const repeatEnabledRef = useRef(false);
   const shuffleEnabledRef = useRef(false);
   const queueRef = useRef<TrackMetadata[]>([]);
+  const historyRef = useRef<TrackMetadata[]>([]);
+  const historyIndexRef = useRef(-1);
 
   useEffect(() => {
     repeatEnabledRef.current = repeatEnabled;
@@ -115,9 +118,33 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
       if (savedLibrary.length > 0) setLibrary(savedLibrary);
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
-      if (savedCurrentTrack) setCurrentTrack(savedCurrentTrack);
-      if (savedPlaybackPosition > 0) setPlaybackPosition(savedPlaybackPosition);
       if (savedQueue.length > 0) setQueue(savedQueue);
+
+      if (savedCurrentTrack) {
+        setCurrentTrack(savedCurrentTrack);
+        try {
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: true,
+            shouldDuckAndroid: true,
+          });
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: savedCurrentTrack.uri },
+            { shouldPlay: false, progressUpdateIntervalMillis: 500 },
+            onPlaybackStatusUpdate
+          );
+          soundRef.current = sound;
+          if (savedPlaybackPosition > 0) {
+            await sound.setPositionAsync(savedPlaybackPosition);
+          }
+          const status = await sound.getStatusAsync();
+          if (status.isLoaded) {
+            setDuration(status.durationMillis || 0);
+          }
+        } catch (error) {
+          console.error('Error restoring track:', error);
+        }
+      }
     };
 
     loadSavedData();
@@ -176,30 +203,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isPlaying]);
 
-  const onPlaybackStatusUpdate = useCallback((status: any) => {
-    playbackStatusRef.current = status;
-    if (status.isLoaded) {
-      setPlaybackPosition(status.positionMillis || 0);
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
-
-      if (status.didJustFinish) {
-        if (repeatEnabledRef.current) {
-          soundRef.current?.setPositionAsync(0).then(() => {
-            soundRef.current?.playAsync();
-          });
-        } else if (queueRef.current.length > 0) {
-          const nextTrack = queueRef.current[0];
-          const remainingQueue = queueRef.current.slice(1);
-          setQueue(remainingQueue);
-          loadTrackInternal(nextTrack.uri, nextTrack).then(() => {
-            soundRef.current?.playAsync();
-          });
-        }
-      }
-    }
-  }, []);
-
   const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata) => {
     if (soundRef.current) {
       await soundRef.current.unloadAsync();
@@ -229,6 +232,39 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setDuration(status.durationMillis || 0);
     }
   };
+
+  const playNextFromQueue = useCallback(() => {
+    const currentQueue = queueRef.current;
+    if (currentQueue.length > 0) {
+      const nextTrack = currentQueue[0];
+      const remainingQueue = currentQueue.slice(1);
+      setQueue(remainingQueue);
+      historyRef.current.push(nextTrack);
+      historyIndexRef.current = historyRef.current.length - 1;
+      loadTrackInternal(nextTrack.uri, nextTrack).then(() => {
+        soundRef.current?.playAsync();
+      });
+    }
+  }, []);
+
+  const onPlaybackStatusUpdate = useCallback((status: any) => {
+    playbackStatusRef.current = status;
+    if (status.isLoaded) {
+      setPlaybackPosition(status.positionMillis || 0);
+      setDuration(status.durationMillis || 0);
+      setIsPlaying(status.isPlaying);
+
+      if (status.didJustFinish) {
+        if (repeatEnabledRef.current) {
+          soundRef.current?.setPositionAsync(0).then(() => {
+            soundRef.current?.playAsync();
+          });
+        } else {
+          playNextFromQueue();
+        }
+      }
+    }
+  }, [playNextFromQueue]);
 
   const loadTrack = async (trackUri: string, metadata: TrackMetadata) => {
     try {
@@ -275,18 +311,25 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   };
 
   const skipNext = () => {
-    if (queueRef.current.length > 0) {
-      const nextTrack = queueRef.current[0];
-      const remainingQueue = queueRef.current.slice(1);
-      setQueue(remainingQueue);
-      loadTrackInternal(nextTrack.uri, nextTrack).then(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyIndexRef.current += 1;
+      const track = historyRef.current[historyIndexRef.current];
+      loadTrackInternal(track.uri, track).then(() => {
         soundRef.current?.playAsync();
       });
+    } else {
+      playNextFromQueue();
     }
   };
 
   const skipPrevious = () => {
-    if (soundRef.current && currentTrack) {
+    if (historyIndexRef.current > 0) {
+      historyIndexRef.current -= 1;
+      const track = historyRef.current[historyIndexRef.current];
+      loadTrackInternal(track.uri, track).then(() => {
+        soundRef.current?.playAsync();
+      });
+    } else if (soundRef.current) {
       seekTo(0);
     }
   };
@@ -297,9 +340,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromLibrary = (trackUri: string) => {
     setLibrary((prev) => prev.filter((track) => track.uri !== trackUri));
+    setPlaylists((prev) =>
+      prev.map((playlist) => ({
+        ...playlist,
+        tracks: playlist.tracks.filter((t) => t.uri !== trackUri),
+      }))
+    );
   };
 
   const playFromLibrary = async (track: TrackMetadata) => {
+    const trackIndex = library.findIndex((t) => t.uri === track.uri);
+    const history = trackIndex >= 0 ? library.slice(0, trackIndex) : [];
+    const queueTracks = trackIndex >= 0 ? library.slice(trackIndex + 1) : [];
+
+    historyRef.current = [...history, track];
+    historyIndexRef.current = history.length;
+    setQueue(queueTracks);
+
     await loadTrack(track.uri, track);
     await play();
   };
@@ -340,16 +397,35 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const playPlaylist = async (playlist: Playlist) => {
     if (playlist.tracks.length > 0) {
-      if (shuffleEnabledRef.current) {
-        const shuffled = shuffleArray(playlist.tracks);
-        setQueue(shuffled.slice(1));
-        await loadTrackInternal(shuffled[0].uri, shuffled[0]);
-      } else {
-        setQueue(playlist.tracks.slice(1));
-        await loadTrackInternal(playlist.tracks[0].uri, playlist.tracks[0]);
-      }
+      const tracks = shuffleEnabledRef.current ? shuffleArray(playlist.tracks) : playlist.tracks;
+      const firstTrack = tracks[0];
+      const remainingTracks = tracks.slice(1);
+
+      historyRef.current = [firstTrack];
+      historyIndexRef.current = 0;
+      setQueue(remainingTracks);
+
+      await loadTrackInternal(firstTrack.uri, firstTrack);
       await play();
     }
+  };
+
+  const playFromPlaylist = async (playlist: Playlist, track: TrackMetadata) => {
+    if (playlist.tracks.length === 0) return;
+
+    const tracks = shuffleEnabledRef.current ? shuffleArray(playlist.tracks) : playlist.tracks;
+    const trackIndex = tracks.findIndex((t) => t.uri === track.uri);
+    if (trackIndex === -1) return;
+
+    const history = tracks.slice(0, trackIndex);
+    const queueTracks = tracks.slice(trackIndex + 1);
+
+    historyRef.current = [...history, track];
+    historyIndexRef.current = history.length;
+    setQueue(queueTracks);
+
+    await loadTrackInternal(track.uri, track);
+    await play();
   };
 
   const toggleShuffle = () => {
@@ -393,6 +469,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     addToLibrary,
     removeFromLibrary,
     playFromLibrary,
+    playFromPlaylist,
     createPlaylist,
     addTrackToPlaylist,
     removeTrackFromPlaylist,

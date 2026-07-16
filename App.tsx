@@ -218,7 +218,7 @@ function PlaylistsScreen({ navigation }: any) {
 }
 
 function PlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, playFromLibrary, removeTrackFromPlaylist, addTrackToPlaylist, library, playlists } = useAudio();
+  const { currentTrack, removeTrackFromPlaylist, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist } = useAudio();
   const { playlistId } = route.params;
   const playlist = playlists.find((p) => p.id === playlistId);
 
@@ -230,9 +230,9 @@ function PlaylistDetailScreen({ route, navigation }: any) {
     <PlaylistDetail
       playlist={playlist}
       currentTrack={currentTrack}
-      onTrackPress={playFromLibrary}
+      onTrackPress={(track: TrackMetadata) => playFromPlaylist(playlist, track)}
       onRemoveTrack={(trackUri) => removeTrackFromPlaylist(playlist.id, trackUri)}
-      onPlayPlaylist={() => {}}
+      onPlayPlaylist={() => playPlaylist(playlist)}
       onBack={() => navigation.goBack()}
       onAddTrack={(track) => addTrackToPlaylist(playlist.id, track)}
       library={library}
