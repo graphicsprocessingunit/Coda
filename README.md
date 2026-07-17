@@ -38,7 +38,16 @@ A beautifully crafted music player for iOS with local library management, Navidr
 
 ## Screenshots
 
-> Screenshots coming soon. The app features four main tabs: **Player**, **Library**, **Playlists**, and **Settings**.
+<p align="center">
+  <img src="assets/screenshots/Player.png" width="24%" alt="Player" />
+  <img src="assets/screenshots/Library.png" width="24%" alt="Library" />
+  <img src="assets/screenshots/Lyrics.png" width="24%" alt="Lyrics" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/Playlist.png" width="24%" alt="Playlists" />
+  <img src="assets/screenshots/Queue.png" width="24%" alt="Queue" />
+  <img src="assets/screenshots/Settings.png" width="24%" alt="Settings" />
+</p>
 
 ## Tech Stack
 
