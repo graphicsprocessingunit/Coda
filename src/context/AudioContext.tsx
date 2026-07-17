@@ -366,15 +366,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (library.length > 0) {
-      StorageService.saveLibrary(library);
-    }
+    StorageService.saveLibrary(library);
   }, [library]);
 
   useEffect(() => {
-    if (playlists.length > 0) {
-      StorageService.savePlaylists(playlists);
-    }
+    StorageService.savePlaylists(playlists);
   }, [playlists]);
 
   useEffect(() => {
@@ -384,9 +380,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [currentTrack]);
 
   useEffect(() => {
-    if (queue.length > 0) {
-      StorageService.saveQueue(queue);
-    }
+    StorageService.saveQueue(queue);
   }, [queue]);
 
   const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
@@ -986,7 +980,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const clearAllData = () => {
+  const clearAllData = async () => {
+    await StorageService.clearAll();
     destroyPlayer(soundRef.current);
     soundRef.current = null;
     destroyPlayer(crossfadeSoundRef.current);

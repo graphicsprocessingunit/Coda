@@ -4,9 +4,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView } from 'react-native';
+import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AudioProvider, useAudio, SAMPLE_TRACK, Playlist, TrackMetadata } from './src/context/AudioContext';
+import { AudioProvider, useAudio, Playlist, TrackMetadata } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Player } from './src/components/Player';
 import { TrackList } from './src/components/TrackList';
@@ -20,7 +20,6 @@ import { TrackInfo } from './src/components/TrackInfo';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
-import { StorageService } from './src/services/StorageService';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -214,6 +213,8 @@ function LibraryScreen() {
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [showCreateFromLibraryModal, setShowCreateFromLibraryModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
 
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
@@ -265,23 +266,18 @@ function LibraryScreen() {
   };
 
   const handleCreateNewPlaylist = () => {
-    Alert.prompt(
-      'Create Playlist',
-      'Enter playlist name',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: (name?: string) => {
-            if (name && selectedTrack) {
-              createPlaylist(name);
-              setShowPlaylistModal(false);
-              setSelectedTrack(null);
-            }
-          },
-        },
-      ]
-    );
+    setNewPlaylistName('');
+    setShowCreateFromLibraryModal(true);
+  };
+
+  const handleConfirmCreatePlaylist = () => {
+    if (newPlaylistName.trim() && selectedTrack) {
+      createPlaylist(newPlaylistName.trim());
+      setShowPlaylistModal(false);
+      setShowCreateFromLibraryModal(false);
+      setSelectedTrack(null);
+      setNewPlaylistName('');
+    }
   };
 
   return (
@@ -345,6 +341,50 @@ function LibraryScreen() {
             )}
           </SafeAreaView>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showCreateFromLibraryModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowCreateFromLibraryModal(false);
+          setNewPlaylistName('');
+        }}
+      >
+        <Pressable style={modalStyles.modalOverlay} onPress={() => {
+          setShowCreateFromLibraryModal(false);
+          setNewPlaylistName('');
+        }}>
+          <Pressable style={[modalStyles.modalContent, { backgroundColor: colors.card }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[modalStyles.modalTitle, { color: colors.text }]}>Create Playlist</Text>
+            <TextInput
+              style={[modalStyles.input, { backgroundColor: colors.border, color: colors.text }]}
+              placeholder="Playlist name"
+              placeholderTextColor={colors.textSecondary}
+              value={newPlaylistName}
+              onChangeText={setNewPlaylistName}
+              autoFocus
+            />
+            <View style={modalStyles.modalButtons}>
+              <Pressable
+                style={[modalStyles.modalButton, { backgroundColor: 'transparent' }]}
+                onPress={() => {
+                  setShowCreateFromLibraryModal(false);
+                  setNewPlaylistName('');
+                }}
+              >
+                <Text style={[modalStyles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[modalStyles.modalButton, { backgroundColor: colors.accent }]}
+                onPress={handleConfirmCreatePlaylist}
+              >
+                <Text style={[modalStyles.modalButtonText, { color: colors.text }]}>Create</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -428,8 +468,7 @@ function SettingsScreen() {
           text: 'Clear',
           style: 'destructive',
           onPress: async () => {
-            await StorageService.clearAll();
-            clearAllData();
+            await clearAllData();
             Alert.alert('Success', 'All data has been cleared.');
           },
         },
@@ -588,6 +627,26 @@ const modalStyles = StyleSheet.create({
     gap: 8,
   },
   newPlaylistText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  input: {
+    borderRadius: 8,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },

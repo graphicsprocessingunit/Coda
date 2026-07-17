@@ -94,12 +94,24 @@ export function Playlists({
   const { colors } = useTheme();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<Playlist | null>(null);
+  const [renameName, setRenameName] = useState('');
 
   const handleCreatePlaylist = () => {
     if (playlistName.trim()) {
       onCreatePlaylist(playlistName.trim());
       setPlaylistName('');
       setShowCreateModal(false);
+    }
+  };
+
+  const handleRename = () => {
+    if (renameName.trim() && renameTarget && onRenamePlaylist) {
+      onRenamePlaylist(renameTarget.id, renameName.trim());
+      setRenameTarget(null);
+      setRenameName('');
+      setShowRenameModal(false);
     }
   };
 
@@ -116,23 +128,9 @@ export function Playlists({
       options.unshift({
         text: 'Rename',
         onPress: () => {
-          Alert.prompt(
-            'Rename Playlist',
-            'Enter new name',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Rename',
-                onPress: (name?: string) => {
-                  if (name && name.trim()) {
-                    onRenamePlaylist(item.id, name.trim());
-                  }
-                },
-              },
-            ],
-            'plain-text',
-            item.name
-          );
+          setRenameTarget(item);
+          setRenameName(item.name);
+          setShowRenameModal(true);
         },
       });
     }
@@ -225,6 +223,53 @@ export function Playlists({
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showRenameModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          setShowRenameModal(false);
+          setRenameTarget(null);
+          setRenameName('');
+        }}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => {
+          setShowRenameModal(false);
+          setRenameTarget(null);
+          setRenameName('');
+        }}>
+          <Pressable style={[styles.modalContent, { backgroundColor: colors.card }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Rename Playlist</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.border, color: colors.text }]}
+              placeholder="Playlist name"
+              placeholderTextColor={colors.textSecondary}
+              value={renameName}
+              onChangeText={setRenameName}
+              autoFocus
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowRenameModal(false);
+                  setRenameTarget(null);
+                  setRenameName('');
+                }}
+              >
+                <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, { backgroundColor: colors.accent }]}
+                onPress={handleRename}
+              >
+                <Text style={[styles.createButtonText, { color: colors.text }]}>Rename</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );

@@ -111,14 +111,20 @@ export class NavidromeService {
 
   static async apiCall<T>(creds: NavidromeCredentials, endpoint: string, params?: Record<string, string>): Promise<T> {
     const url = NavidromeService.buildUrl(creds, endpoint, params);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const json = await response.json();
-    const subsonicResponse = json['subsonic-response'];
-    if (subsonicResponse?.status === 'failed') {
-      throw new Error(subsonicResponse.error?.message || 'Subsonic API error');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json = await response.json();
+      const subsonicResponse = json['subsonic-response'];
+      if (subsonicResponse?.status === 'failed') {
+        throw new Error(subsonicResponse.error?.message || 'Subsonic API error');
+      }
+      return subsonicResponse as T;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return subsonicResponse as T;
   }
 
   static async ping(url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> {
