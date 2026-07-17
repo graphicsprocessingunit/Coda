@@ -14,7 +14,7 @@ interface SettingsProps {
 
 export function Settings({ onClearData }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
-  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration } = useAudio();
+  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
@@ -77,9 +77,11 @@ export function Settings({ onClearData }: SettingsProps) {
                 <Text style={[styles.settingText, { color: colors.text }]}>Crossfade</Text>
               </View>
               <View style={styles.settingRight}>
-                {crossfadeEnabled && (
+                {seamlessEnabled ? (
+                  <Text style={[styles.settingValue, { color: colors.accent }]}>Seamless</Text>
+                ) : crossfadeEnabled ? (
                   <Text style={[styles.settingValue, { color: colors.accent }]}>{crossfadeDuration}s</Text>
-                )}
+                ) : null}
                 <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
               </View>
             </Pressable>
@@ -239,7 +241,22 @@ export function Settings({ onClearData }: SettingsProps) {
                   <View style={[styles.toggleThumb, { transform: [{ translateX: crossfadeEnabled ? 20 : 0 }], backgroundColor: '#FFFFFF' }]} />
                 </View>
               </Pressable>
-              {crossfadeEnabled && (
+              <Pressable
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                onPress={() => setSeamlessEnabled(!seamlessEnabled)}
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="flash" size={24} color={colors.textSecondary} />
+                  <View>
+                    <Text style={[modalStyles.themeName, { color: colors.text }]}>Seamless</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>No gaps between tracks</Text>
+                  </View>
+                </View>
+                <View style={[styles.toggleTrack, { backgroundColor: seamlessEnabled ? colors.accent : colors.border }]}>
+                  <View style={[styles.toggleThumb, { transform: [{ translateX: seamlessEnabled ? 20 : 0 }], backgroundColor: '#FFFFFF' }]} />
+                </View>
+              </Pressable>
+              {crossfadeEnabled && !seamlessEnabled && (
                 <View style={{ marginTop: 16 }}>
                   <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 12 }}>Duration</Text>
                   <View style={{ flexDirection: 'row', gap: 8 }}>

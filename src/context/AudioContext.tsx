@@ -81,6 +81,8 @@ interface AudioContextType {
   crossfadeDuration: number;
   setCrossfadeEnabled: (enabled: boolean) => void;
   setCrossfadeDuration: (seconds: number) => void;
+  seamlessEnabled: boolean;
+  setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
   toggleFavorite: (uri: string) => void;
 }
@@ -149,6 +151,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0);
   const [crossfadeEnabled, setCrossfadeEnabledState] = useState(false);
   const [crossfadeDuration, setCrossfadeDurationState] = useState(0);
+  const [seamlessEnabled, setSeamlessEnabledState] = useState(false);
   const [navidromeConnected, setNavidromeConnected] = useState(false);
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
@@ -175,8 +178,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const crossfadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const crossfadeEnabledRef = useRef(false);
   const crossfadeDurationRef = useRef(0);
+  const seamlessEnabledRef = useRef(false);
   const volumeRef = useRef(1.0);
   const libraryRef = useRef<TrackMetadata[]>([]);
+  const preloadRef = useRef<AudioPlayer | null>(null);
+  const preloadedUriRef = useRef<string | null>(null);
 
   const debouncedSavePosition = useCallback((position: number) => {
     if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
@@ -220,6 +226,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [crossfadeDuration]);
 
   useEffect(() => {
+    seamlessEnabledRef.current = seamlessEnabled;
+  }, [seamlessEnabled]);
+
+  useEffect(() => {
     volumeRef.current = volume;
   }, [volume]);
 
@@ -231,6 +241,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return () => {
       destroyPlayer(soundRef.current);
       destroyPlayer(crossfadeSoundRef.current);
+      if (preloadRef.current) {
+        try {
+          preloadRef.current.clearLockScreenControls();
+          preloadRef.current.remove();
+        } catch {}
+      }
       if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
       if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
       if (positionSaveTimerRef.current) clearTimeout(positionSaveTimerRef.current);
@@ -330,6 +346,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setCrossfadeDurationState(dur);
         crossfadeDurationRef.current = dur;
       }
+
+      const savedSeamlessEnabled = await AsyncStorage.getItem('@coda_seamless_enabled');
+      if (savedSeamlessEnabled === 'true') {
+        setSeamlessEnabledState(true);
+        seamlessEnabledRef.current = true;
+        if (!crossfadeEnabledRef.current) {
+          setCrossfadeEnabledState(true);
+          crossfadeEnabledRef.current = true;
+        }
+        if (!crossfadeDurationRef.current) {
+          setCrossfadeDurationState(2);
+          crossfadeDurationRef.current = 2;
+        }
+      }
     };
 
     loadSavedData();
@@ -386,6 +416,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       soundRef.current = null;
     }
 
+    if (preloadRef.current && preloadedUriRef.current !== trackUri) {
+      try {
+        preloadRef.current.clearLockScreenControls();
+        preloadRef.current.remove();
+      } catch {}
+      preloadRef.current = null;
+      preloadedUriRef.current = null;
+    }
+
     const player = createAudioPlayer(
       { uri: trackUri },
       { updateInterval: 500 }
@@ -412,6 +451,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setIsPlaying(autoPlay);
 
     updateLockScreen(player, metadata);
+
+    if (autoPlay) {
+      setTimeout(() => preloadNextTrack(), 100);
+    }
   };
 
   const playNextFromQueue = useCallback(() => {
@@ -443,6 +486,36 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
+  const preloadNextTrack = useCallback(() => {
+    if (!seamlessEnabledRef.current) return;
+    if (repeatEnabledRef.current) return;
+
+    const nextTrack = getNextTrack();
+    if (!nextTrack) return;
+    if (preloadedUriRef.current === nextTrack.uri) return;
+
+    if (preloadRef.current) {
+      try {
+        preloadRef.current.clearLockScreenControls();
+        preloadRef.current.remove();
+      } catch {}
+      preloadRef.current = null;
+    }
+
+    try {
+      const preloadPlayer = createAudioPlayer(
+        { uri: nextTrack.uri },
+        { updateInterval: 1000 }
+      );
+      preloadRef.current = preloadPlayer;
+      preloadedUriRef.current = nextTrack.uri;
+    } catch (error) {
+      console.error('Preload error:', error);
+      preloadRef.current = null;
+      preloadedUriRef.current = null;
+    }
+  }, [getNextTrack]);
+
   const startCrossfade = useCallback(async () => {
     if (crossfadeActiveRef.current || crossfadeStartedRef.current) return;
     if (!crossfadeEnabledRef.current || crossfadeDurationRef.current <= 0) return;
@@ -462,10 +535,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     let step = 0;
 
     try {
-      const newPlayer = createAudioPlayer(
-        { uri: nextTrack.uri },
-        { updateInterval: 500 }
-      );
+      let newPlayer: AudioPlayer;
+
+      if (preloadRef.current && preloadedUriRef.current === nextTrack.uri) {
+        newPlayer = preloadRef.current;
+        preloadRef.current = null;
+        preloadedUriRef.current = null;
+      } else {
+        newPlayer = createAudioPlayer(
+          { uri: nextTrack.uri },
+          { updateInterval: 500 }
+        );
+      }
 
       if (!crossfadeActiveRef.current) {
         destroyPlayer(newPlayer);
@@ -529,6 +610,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
           updateLockScreen(newPlayer, nextTrack);
           crossfadeActiveRef.current = false;
+
+          if (seamlessEnabledRef.current) {
+            setTimeout(() => preloadNextTrack(), 100);
+          }
         }
       }, stepDuration);
     } catch (error) {
@@ -867,12 +952,38 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCrossfadeEnabledState(enabled);
     crossfadeEnabledRef.current = enabled;
     AsyncStorage.setItem('@coda_crossfade_enabled', enabled.toString());
+    if (!enabled && seamlessEnabledRef.current) {
+      setSeamlessEnabledState(false);
+      seamlessEnabledRef.current = false;
+      AsyncStorage.removeItem('@coda_seamless_enabled');
+    }
   };
 
   const setCrossfadeDuration = (seconds: number) => {
     setCrossfadeDurationState(seconds);
     crossfadeDurationRef.current = seconds;
     AsyncStorage.setItem('@coda_crossfade_duration', seconds.toString());
+    if (seconds !== 2 && seamlessEnabledRef.current) {
+      setSeamlessEnabledState(false);
+      seamlessEnabledRef.current = false;
+      AsyncStorage.removeItem('@coda_seamless_enabled');
+    }
+  };
+
+  const setSeamlessEnabled = (enabled: boolean) => {
+    setSeamlessEnabledState(enabled);
+    seamlessEnabledRef.current = enabled;
+    AsyncStorage.setItem('@coda_seamless_enabled', enabled.toString());
+    if (enabled) {
+      setCrossfadeEnabledState(true);
+      crossfadeEnabledRef.current = true;
+      AsyncStorage.setItem('@coda_crossfade_enabled', 'true');
+      if (!crossfadeDurationRef.current) {
+        setCrossfadeDurationState(2);
+        crossfadeDurationRef.current = 2;
+        AsyncStorage.setItem('@coda_crossfade_duration', '2');
+      }
+    }
   };
 
   const clearAllData = () => {
@@ -880,6 +991,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     soundRef.current = null;
     destroyPlayer(crossfadeSoundRef.current);
     crossfadeSoundRef.current = null;
+    if (preloadRef.current) {
+      try {
+        preloadRef.current.clearLockScreenControls();
+        preloadRef.current.remove();
+      } catch {}
+      preloadRef.current = null;
+    }
+    preloadedUriRef.current = null;
     crossfadeActiveRef.current = false;
     crossfadeStartedRef.current = false;
     if (crossfadeTimerRef.current) {
@@ -900,6 +1019,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setVolumeState(1.0);
     setCrossfadeEnabledState(false);
     setCrossfadeDurationState(0);
+    setSeamlessEnabledState(false);
     historyRef.current = [];
     historyIndexRef.current = -1;
     sourceTracksRef.current = [];
@@ -908,6 +1028,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     shuffleEnabledRef.current = false;
     crossfadeEnabledRef.current = false;
     crossfadeDurationRef.current = 0;
+    seamlessEnabledRef.current = false;
     cancelSleepTimer();
   };
 
@@ -1085,6 +1206,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     crossfadeDuration,
     setCrossfadeEnabled,
     setCrossfadeDuration,
+    seamlessEnabled,
+    setSeamlessEnabled,
     clearAllData,
     toggleFavorite,
   };
