@@ -55,6 +55,7 @@ export function Player({
   const playButtonScale = useRef(new Animated.Value(1)).current;
   const skipNextScale = useRef(new Animated.Value(1)).current;
   const skipPrevScale = useRef(new Animated.Value(1)).current;
+  const heartScale = useRef(new Animated.Value(1)).current;
 
   const [lyricsVisible, setLyricsVisible] = useState(false);
   const [lyricsText, setLyricsText] = useState<string | null>(null);
@@ -108,6 +109,14 @@ export function Player({
       Animated.spring(skipPrevScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
     ]).start();
     onSkipPrevious();
+  };
+
+  const handleToggleFavorite = () => {
+    Animated.sequence([
+      Animated.timing(heartScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+      Animated.timing(heartScale, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+    onToggleFavorite?.();
   };
 
   return (
@@ -173,12 +182,14 @@ export function Player({
           />
         </Pressable>
         {onToggleFavorite && (
-          <Pressable onPress={onToggleFavorite} style={styles.secondaryButton}>
-            <Ionicons
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={24}
-              color={isFavorite ? '#FF2D55' : colors.textSecondary}
-            />
+          <Pressable onPress={handleToggleFavorite} style={styles.secondaryButton}>
+            <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+              <Ionicons
+                name="heart"
+                size={30}
+                color={isFavorite ? '#FF2D55' : colors.textSecondary}
+              />
+            </Animated.View>
           </Pressable>
         )}
         {onMorePress && (

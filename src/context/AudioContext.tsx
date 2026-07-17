@@ -659,6 +659,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         track.uri === uri ? { ...track, isFavorite: !track.isFavorite } : track
       )
     );
+    setCurrentTrack((prev) =>
+      prev?.uri === uri ? { ...prev, isFavorite: !prev.isFavorite } : prev
+    );
   };
 
   const incrementPlayCount = (uri: string) => {

@@ -97,8 +97,8 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
         {onToggleFavorite && (
           <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(); }} hitSlop={8} style={styles.heartButton}>
             <Ionicons
-              name={item.isFavorite ? 'heart' : 'heart-outline'}
-              size={18}
+              name="heart"
+              size={20}
               color={item.isFavorite ? '#FF2D55' : colors.textSecondary}
             />
           </Pressable>
