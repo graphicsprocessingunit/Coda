@@ -9,10 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "UIBackgroundModes": [
-        "audio"
-      ],
       "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "UIRequiredDeviceCapabilities": [
           "armv7"
         ],

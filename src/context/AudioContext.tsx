@@ -176,6 +176,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const crossfadeEnabledRef = useRef(false);
   const crossfadeDurationRef = useRef(0);
   const volumeRef = useRef(1.0);
+  const libraryRef = useRef<TrackMetadata[]>([]);
 
   const debouncedSavePosition = useCallback((position: number) => {
     if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
@@ -223,6 +224,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [volume]);
 
   useEffect(() => {
+    libraryRef.current = library;
+  }, [library]);
+
+  useEffect(() => {
     return () => {
       destroyPlayer(soundRef.current);
       destroyPlayer(crossfadeSoundRef.current);
@@ -262,7 +267,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (savedCurrentTrack && savedCurrentTrack.source !== 'navidrome') {
-        setCurrentTrack(savedCurrentTrack);
+        const libMatch = libraryRef.current.find(t => t.uri === savedCurrentTrack.uri);
+        setCurrentTrack({ ...savedCurrentTrack, isFavorite: libMatch?.isFavorite ?? savedCurrentTrack.isFavorite ?? false });
         try {
           const player = createAudioPlayer(
             { uri: savedCurrentTrack.uri },
@@ -395,7 +401,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     if (autoPlay) player.play();
 
-    setCurrentTrack(metadata);
+    const libMatch = libraryRef.current.find(t => t.uri === metadata.uri);
+    setCurrentTrack({ ...metadata, isFavorite: libMatch?.isFavorite ?? metadata.isFavorite ?? false });
     setPlaybackPosition(0);
 
     const status = player.currentStatus;
@@ -511,7 +518,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             setQueue(tracks.slice(1));
           }
 
-          setCurrentTrack(nextTrack);
+          const libMatch = libraryRef.current.find(t => t.uri === nextTrack.uri);
+          setCurrentTrack({ ...nextTrack, isFavorite: libMatch?.isFavorite ?? nextTrack.isFavorite ?? false });
           setPlaybackPosition(0);
 
           const newStatus = newPlayer.currentStatus;
