@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageService } from '../services/StorageService';
@@ -84,7 +85,7 @@ interface AudioContextType {
   toggleFavorite: (uri: string) => void;
 }
 
-const AudioContext = createContext<AudioContextType | undefined>(undefined);
+const AudioCtx = createContext<AudioContextType | undefined>(undefined);
 
 const SAMPLE_TRACK: TrackMetadata = {
   title: 'Test Track',
@@ -111,6 +112,26 @@ function generateSalt(): string {
   return salt;
 }
 
+function updateLockScreen(player: AudioPlayer, track: TrackMetadata) {
+  player.setActiveForLockScreen(true, {
+    title: track.title,
+    artist: track.artist,
+    albumTitle: track.album,
+    artworkUrl: track.artwork,
+  }, {
+    showSeekForward: true,
+    showSeekBackward: true,
+  });
+}
+
+function destroyPlayer(player: AudioPlayer | null) {
+  if (!player) return;
+  try {
+    player.clearLockScreenControls();
+    player.remove();
+  } catch {}
+}
+
 export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<TrackMetadata | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -132,7 +153,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<AudioPlayer | null>(null);
   const playbackStatusRef = useRef<any>(null);
   const repeatEnabledRef = useRef(false);
   const shuffleEnabledRef = useRef(false);
@@ -148,7 +169,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const positionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPositionRef = useRef(0);
   const loadGenerationRef = useRef(0);
-  const crossfadeSoundRef = useRef<Audio.Sound | null>(null);
+  const crossfadeSoundRef = useRef<AudioPlayer | null>(null);
   const crossfadeActiveRef = useRef(false);
   const crossfadeStartedRef = useRef(false);
   const crossfadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -203,24 +224,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-      if (crossfadeSoundRef.current) {
-        crossfadeSoundRef.current.unloadAsync();
-      }
-      if (sleepTimerRef.current) {
-        clearInterval(sleepTimerRef.current);
-      }
-      if (fadeIntervalRef.current) {
-        clearInterval(fadeIntervalRef.current);
-      }
-      if (positionSaveTimerRef.current) {
-        clearTimeout(positionSaveTimerRef.current);
-      }
-      if (crossfadeTimerRef.current) {
-        clearInterval(crossfadeTimerRef.current);
-      }
+      destroyPlayer(soundRef.current);
+      destroyPlayer(crossfadeSoundRef.current);
+      if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+      if (positionSaveTimerRef.current) clearTimeout(positionSaveTimerRef.current);
+      if (crossfadeTimerRef.current) clearInterval(crossfadeTimerRef.current);
     };
   }, []);
 
@@ -246,28 +255,29 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
 
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
       });
 
       if (savedCurrentTrack && savedCurrentTrack.source !== 'navidrome') {
         setCurrentTrack(savedCurrentTrack);
         try {
-          const { sound } = await Audio.Sound.createAsync(
+          const player = createAudioPlayer(
             { uri: savedCurrentTrack.uri },
-            { shouldPlay: false, progressUpdateIntervalMillis: 500 },
-            onPlaybackStatusUpdate
+            { updateInterval: 500 }
           );
-          soundRef.current = sound;
+          player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+          soundRef.current = player;
           if (savedPlaybackPosition > 0) {
-            await sound.setPositionAsync(savedPlaybackPosition);
+            await player.seekTo(savedPlaybackPosition / 1000);
           }
-          const status = await sound.getStatusAsync();
+          const status = player.currentStatus;
           if (status.isLoaded) {
-            setDuration(status.durationMillis || 0);
+            setDuration((status.duration || 0) * 1000);
           }
+          updateLockScreen(player, savedCurrentTrack);
         } catch (error) {
           console.error('Error restoring track:', error);
         }
@@ -293,7 +303,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             if (rem <= 0) {
               cancelSleepTimer();
               if (soundRef.current) {
-                soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+                soundRef.current.pause();
+                setIsPlaying(false);
               }
             }
           }, 1000);
@@ -353,43 +364,47 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         crossfadeTimerRef.current = null;
       }
       if (crossfadeSoundRef.current) {
-        const cfSound = crossfadeSoundRef.current;
+        const cfPlayer = crossfadeSoundRef.current;
         crossfadeSoundRef.current = null;
-        cfSound.unloadAsync().catch(() => {});
+        destroyPlayer(cfPlayer);
       }
     }
 
     if (soundRef.current) {
-      const prevSound = soundRef.current;
+      const prevPlayer = soundRef.current;
       const prevStatus = playbackStatusRef.current;
       if (prevStatus?.isLoaded) {
-        savePositionImmediate(prevStatus.positionMillis || 0);
+        savePositionImmediate((prevStatus.currentTime || 0) * 1000);
       }
-      prevSound.unloadAsync().catch(() => {});
+      destroyPlayer(prevPlayer);
       soundRef.current = null;
     }
 
-    const { sound, status: initialStatus } = await Audio.Sound.createAsync(
+    const player = createAudioPlayer(
       { uri: trackUri },
-      {
-        shouldPlay: autoPlay,
-        progressUpdateIntervalMillis: 500,
-      },
-      onPlaybackStatusUpdate
+      { updateInterval: 500 }
     );
 
     if (generation !== loadGenerationRef.current) {
-      sound.unloadAsync().catch(() => {});
+      destroyPlayer(player);
       return;
     }
 
-    soundRef.current = sound;
+    player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+    soundRef.current = player;
+
+    if (autoPlay) player.play();
+
     setCurrentTrack(metadata);
     setPlaybackPosition(0);
-    if (initialStatus?.isLoaded) {
-      setDuration(initialStatus.durationMillis || 0);
+
+    const status = player.currentStatus;
+    if (status.isLoaded) {
+      setDuration((status.duration || 0) * 1000);
     }
     setIsPlaying(autoPlay);
+
+    updateLockScreen(player, metadata);
   };
 
   const playNextFromQueue = useCallback(() => {
@@ -440,28 +455,28 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     let step = 0;
 
     try {
-      const { sound: newSound } = await Audio.Sound.createAsync(
+      const newPlayer = createAudioPlayer(
         { uri: nextTrack.uri },
-        { shouldPlay: false, progressUpdateIntervalMillis: 500 },
-        onPlaybackStatusUpdate
+        { updateInterval: 500 }
       );
 
       if (!crossfadeActiveRef.current) {
-        await newSound.unloadAsync();
+        destroyPlayer(newPlayer);
         return;
       }
 
-      await newSound.setVolumeAsync(0);
-      await newSound.playAsync();
+      newPlayer.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+      newPlayer.volume = 0;
+      newPlayer.play();
 
-      crossfadeTimerRef.current = setInterval(async () => {
+      crossfadeTimerRef.current = setInterval(() => {
         step++;
         const oldVol = Math.max(0, currentVol * (1 - step / steps));
         const newVol = Math.min(currentVol, currentVol * (step / steps));
 
         try {
-          if (soundRef.current) await soundRef.current.setVolumeAsync(oldVol);
-          await newSound.setVolumeAsync(newVol);
+          if (soundRef.current) soundRef.current.volume = oldVol;
+          newPlayer.volume = newVol;
         } catch {}
 
         if (step >= steps) {
@@ -471,17 +486,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           }
 
           try {
-            const oldSound = soundRef.current;
-            if (oldSound) {
-              const oldStatus = await oldSound.getStatusAsync();
+            const oldPlayer = soundRef.current;
+            if (oldPlayer) {
+              const oldStatus = oldPlayer.currentStatus;
               if (oldStatus.isLoaded) {
-                savePositionImmediate(oldStatus.positionMillis || 0);
+                savePositionImmediate((oldStatus.currentTime || 0) * 1000);
               }
-              await oldSound.unloadAsync();
+              destroyPlayer(oldPlayer);
             }
           } catch {}
 
-          soundRef.current = newSound;
+          soundRef.current = newPlayer;
 
           const currentQueue = queueRef.current;
           if (currentQueue.length > 0) {
@@ -499,11 +514,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           setCurrentTrack(nextTrack);
           setPlaybackPosition(0);
 
-          const newStatus = await newSound.getStatusAsync();
+          const newStatus = newPlayer.currentStatus;
           if (newStatus.isLoaded) {
-            setDuration(newStatus.durationMillis || 0);
+            setDuration((newStatus.duration || 0) * 1000);
           }
 
+          updateLockScreen(newPlayer, nextTrack);
           crossfadeActiveRef.current = false;
         }
       }, stepDuration);
@@ -516,28 +532,30 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const onPlaybackStatusUpdate = useCallback((status: any) => {
     playbackStatusRef.current = status;
     if (status.isLoaded) {
+      const positionMs = (status.currentTime || 0) * 1000;
+      const durationMs = (status.duration || 0) * 1000;
+
       if (!seekingRef.current) {
-        setPlaybackPosition(status.positionMillis || 0);
-        debouncedSavePosition(status.positionMillis || 0);
+        setPlaybackPosition(positionMs);
+        debouncedSavePosition(positionMs);
       }
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
+      setDuration(durationMs);
+      setIsPlaying(status.playing);
 
       if (status.didJustFinish) {
         if (crossfadeActiveRef.current) {
           return;
         }
         if (repeatEnabledRef.current) {
-          soundRef.current?.setPositionAsync(0).then(() => {
-            soundRef.current?.playAsync();
-          });
+          soundRef.current?.seekTo(0);
+          soundRef.current?.play();
         } else {
           playNextFromQueue();
         }
       }
 
       if (crossfadeEnabledRef.current && crossfadeDurationRef.current > 0 && !repeatEnabledRef.current && !crossfadeActiveRef.current && !crossfadeStartedRef.current) {
-        const remaining = (status.durationMillis || 0) - (status.positionMillis || 0);
+        const remaining = durationMs - positionMs;
         if (remaining <= crossfadeDurationRef.current * 1000 + 500 && remaining > 0) {
           startCrossfade();
         }
@@ -556,9 +574,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const play = async () => {
     if (!soundRef.current) return;
     try {
-      const status = await soundRef.current.getStatusAsync();
+      const status = soundRef.current.currentStatus;
       if (status.isLoaded) {
-        await soundRef.current.playAsync();
+        soundRef.current.play();
         setIsPlaying(true);
       }
     } catch (error) {
@@ -569,11 +587,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const pause = async () => {
     if (soundRef.current) {
       try {
-        await soundRef.current.pauseAsync();
+        soundRef.current.pause();
         setIsPlaying(false);
-        const status = await soundRef.current.getStatusAsync();
+        const status = soundRef.current.currentStatus;
         if (status.isLoaded) {
-          savePositionImmediate(status.positionMillis || 0);
+          savePositionImmediate((status.currentTime || 0) * 1000);
         }
       } catch (error) {
         console.error('Error pausing:', error);
@@ -585,7 +603,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (soundRef.current) {
       try {
         seekingRef.current = true;
-        await soundRef.current.setPositionAsync(position);
+        await soundRef.current.seekTo(position / 1000);
         setPlaybackPosition(position);
         savePositionImmediate(position);
         setTimeout(() => {
@@ -794,7 +812,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const applyPreset = async (preset: AudioPreset) => {
+  const applyPreset = (preset: AudioPreset) => {
     const presets: Record<AudioPreset, { rate: number; vol: number }> = {
       flat: { rate: 1.0, vol: 1.0 },
       relaxed: { rate: 0.9, vol: 1.0 },
@@ -807,11 +825,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setVolumeState(p.vol);
     if (soundRef.current) {
       try {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          await soundRef.current.setRateAsync(p.rate, true);
-          await soundRef.current.setVolumeAsync(p.vol);
-        }
+        soundRef.current.setPlaybackRate(p.rate, 'high');
+        soundRef.current.volume = p.vol;
       } catch {}
     }
   };
@@ -821,10 +836,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setAudioPresetState('flat');
     if (soundRef.current) {
       try {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          await soundRef.current.setRateAsync(rate, true);
-        }
+        soundRef.current.setPlaybackRate(rate, 'high');
       } catch {}
     }
   };
@@ -833,10 +845,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setVolumeState(vol);
     if (soundRef.current) {
       try {
-        const status = await soundRef.current.getStatusAsync();
-        if (status.isLoaded) {
-          await soundRef.current.setVolumeAsync(vol);
-        }
+        soundRef.current.volume = vol;
       } catch {}
     }
   };
@@ -859,14 +868,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   };
 
   const clearAllData = () => {
-    if (soundRef.current) {
-      soundRef.current.unloadAsync();
-      soundRef.current = null;
-    }
-    if (crossfadeSoundRef.current) {
-      crossfadeSoundRef.current.unloadAsync();
-      crossfadeSoundRef.current = null;
-    }
+    destroyPlayer(soundRef.current);
+    soundRef.current = null;
+    destroyPlayer(crossfadeSoundRef.current);
+    crossfadeSoundRef.current = null;
     crossfadeActiveRef.current = false;
     crossfadeStartedRef.current = false;
     if (crossfadeTimerRef.current) {
@@ -912,7 +917,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (isFadingRef.current) {
       isFadingRef.current = false;
       if (soundRef.current) {
-        soundRef.current.setVolumeAsync(preFadeVolumeRef.current).catch(() => {});
+        soundRef.current.volume = preFadeVolumeRef.current;
       }
     }
     setSleepTimerEnd(null);
@@ -945,14 +950,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           }
           const fraction = rem / FADE_DURATION;
           const newVol = preFadeVolumeRef.current * fraction;
-          soundRef.current?.setVolumeAsync(Math.max(0, newVol)).catch(() => {});
+          if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
         }, 100);
       }
 
       if (remaining <= 0) {
         cancelSleepTimer();
         if (soundRef.current) {
-          soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+          soundRef.current.pause();
+          setIsPlaying(false);
         }
       }
     }, 1000);
@@ -977,14 +983,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
         const fraction = rem / FADE_DURATION;
         const newVol = preFadeVolumeRef.current * fraction;
-        soundRef.current?.setVolumeAsync(Math.max(0, newVol)).catch(() => {});
+        if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
       }, 100);
     }
 
     if (remaining <= 0) {
       cancelSleepTimer();
       if (soundRef.current) {
-        soundRef.current.pauseAsync().then(() => setIsPlaying(false));
+        soundRef.current.pause();
+        setIsPlaying(false);
       }
     }
   }, [sleepTimerEnd]);
@@ -1074,11 +1081,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     toggleFavorite,
   };
 
-  return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
+  return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
 }
 
 export function useAudio() {
-  const context = useContext(AudioContext);
+  const context = useContext(AudioCtx);
   if (context === undefined) {
     throw new Error('useAudio must be used within an AudioProvider');
   }

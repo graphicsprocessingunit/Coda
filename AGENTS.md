@@ -14,7 +14,7 @@ This project uses Expo SDK **54** (installed: 54.0.35). Read the exact versioned
 - **Navigation**: Bottom tabs (Player, Library, Playlists, Settings). Playlists tab has its own Stack navigator.
 - **State**: Two React Contexts — `AudioContext` (audio engine, library, playlists, queue) and `ThemeContext` (4 themes: dark/light/midnight/ocean). All state lives in context, no Redux/Zustand.
 - **Persistence**: `AsyncStorage` via `StorageService` — library, playlists, current track, playback position, queue. Theme stored separately in `ThemeContext`.
-- **Audio**: `expo-av` with background playback enabled (`UIBackgroundModes: ["audio"]` on iOS). Lock screen metadata via `Audio.Sound.createAsync`.
+- **Audio**: `expo-audio` with background playback enabled (`UIBackgroundModes: ["audio"]` on iOS). Lock screen / Control Center metadata via `player.setActiveForLockScreen()`. Use `createAudioPlayer` (imperative API) inside AudioContext, not `useAudioPlayer` (hook API). Audio session uses `interruptionMode: 'doNotMix'` for lock screen controls.
 - **File import**: `expo-document-picker` → `FilePickerService` converts picked files to `TrackMetadata`.
 
 ## Key types (defined in `src/context/AudioContext.tsx`)

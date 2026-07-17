@@ -3,14 +3,19 @@
     "name": "Coda",
     "slug": "coda-app",
     "version": "1.0.0",
+    "scheme": "coda",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "UIBackgroundModes": ["audio"],
+      "UIBackgroundModes": [
+        "audio"
+      ],
       "infoPlist": {
-        "UIRequiredDeviceCapabilities": ["armv7"],
+        "UIRequiredDeviceCapabilities": [
+          "armv7"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -26,7 +31,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.codaplayer.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,6 +41,10 @@
       "eas": {
         "projectId": "e1cfe987-ef12-4e14-bae9-453f64f2d48b"
       }
-    }
+    },
+    "plugins": [
+      "expo-audio",
+      "expo-asset"
+    ]
   }
 }
