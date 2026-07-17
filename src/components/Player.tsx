@@ -22,9 +22,8 @@ interface PlayerProps {
   repeatEnabled?: boolean;
   onToggleShuffle?: () => void;
   onToggleRepeat?: () => void;
-  onEffectsPress?: () => void;
   onQueuePress?: () => void;
-  onInfoPress?: () => void;
+  onMorePress?: () => void;
   sleepTimerRemaining?: number | null;
 }
 
@@ -42,9 +41,7 @@ export function Player({
   repeatEnabled = false,
   onToggleShuffle,
   onToggleRepeat,
-  onEffectsPress,
-  onQueuePress,
-  onInfoPress,
+  onMorePress,
   sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
@@ -161,11 +158,6 @@ export function Player({
             />
           </Pressable>
         )}
-        {onEffectsPress && (
-          <Pressable onPress={onEffectsPress} style={styles.secondaryButton}>
-            <Ionicons name="options" size={24} color={colors.textSecondary} />
-          </Pressable>
-        )}
         <Pressable
           onPress={() => setLyricsVisible(!lyricsVisible)}
           style={styles.secondaryButton}
@@ -176,14 +168,9 @@ export function Player({
             color={lyricsVisible ? colors.accent : colors.textSecondary}
           />
         </Pressable>
-        {onInfoPress && (
-          <Pressable onPress={onInfoPress} style={styles.secondaryButton}>
-            <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
-          </Pressable>
-        )}
-        {onQueuePress && (
-          <Pressable onPress={onQueuePress} style={styles.secondaryButton}>
-            <Ionicons name="list" size={24} color={colors.textSecondary} />
+        {onMorePress && (
+          <Pressable onPress={onMorePress} style={styles.secondaryButton}>
+            <Ionicons name="ellipsis-horizontal" size={24} color={colors.textSecondary} />
           </Pressable>
         )}
       </View>

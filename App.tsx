@@ -66,6 +66,7 @@ function PlayerScreen() {
   const [showEffects, setShowEffects] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [showTrackInfo, setShowTrackInfo] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   return (
     <>
@@ -84,9 +85,7 @@ function PlayerScreen() {
           repeatEnabled={repeatEnabled}
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
-          onEffectsPress={() => setShowEffects(true)}
-          onQueuePress={() => setShowQueue(true)}
-          onInfoPress={() => setShowTrackInfo(true)}
+          onMorePress={() => setShowMore(true)}
         />
       ) : (
         <Player
@@ -103,12 +102,53 @@ function PlayerScreen() {
           repeatEnabled={repeatEnabled}
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
-          onEffectsPress={() => setShowEffects(true)}
-          onQueuePress={() => setShowQueue(true)}
-          onInfoPress={() => setShowTrackInfo(true)}
+          onMorePress={() => setShowMore(true)}
           sleepTimerRemaining={sleepTimerRemaining}
         />
       )}
+      <Modal
+        visible={showMore}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMore(false)}
+      >
+        <View style={effectsModalStyles.overlay}>
+          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[effectsModalStyles.title, { color: colors.text }]}>More</Text>
+              <Pressable onPress={() => setShowMore(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <View style={{ padding: 12 }}>
+              <Pressable
+                style={[moreMenuStyles.row, { borderBottomColor: colors.border }]}
+                onPress={() => { setShowMore(false); setTimeout(() => setShowQueue(true), 200); }}
+              >
+                <Ionicons name="list" size={24} color={colors.textSecondary} />
+                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Queue</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </Pressable>
+              <Pressable
+                style={[moreMenuStyles.row, { borderBottomColor: colors.border }]}
+                onPress={() => { setShowMore(false); setTimeout(() => setShowEffects(true), 200); }}
+              >
+                <Ionicons name="options" size={24} color={colors.textSecondary} />
+                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Audio Settings</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </Pressable>
+              <Pressable
+                style={moreMenuStyles.row}
+                onPress={() => { setShowMore(false); setTimeout(() => setShowTrackInfo(true), 200); }}
+              >
+                <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
+                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Song Info</Text>
+                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={showEffects}
         animationType="slide"
@@ -580,5 +620,21 @@ const queueModalStyles = StyleSheet.create({
     marginTop: 60,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+  },
+});
+
+const moreMenuStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rowText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
