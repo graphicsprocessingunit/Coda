@@ -69,8 +69,8 @@ export function Player({
 
   useEffect(() => {
     setLyricsText(null);
-    if (lyricsVisible) loadLyrics();
-  }, [currentTrack?.uri, lyricsVisible]);
+    loadLyrics();
+  }, [currentTrack?.uri]);
 
   useEffect(() => {
     Animated.parallel([
@@ -165,7 +165,7 @@ export function Player({
           </Pressable>
         )}
         <Pressable
-          onPress={() => { setLyricsVisible(!lyricsVisible); if (!lyricsVisible) loadLyrics(); }}
+          onPress={() => setLyricsVisible(!lyricsVisible)}
           style={styles.secondaryButton}
         >
           <Ionicons
