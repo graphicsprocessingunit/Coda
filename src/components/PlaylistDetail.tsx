@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata, Playlist } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
+import { EmptyState } from './EmptyState';
 
 function PanResponderView({
   index,
@@ -414,17 +415,16 @@ export function PlaylistDetail({
       )}
 
       {playlist.tracks.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="list" size={64} color={colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No tracks yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Add tracks from your library</Text>
-          {onAddTrack && (
-            <Pressable style={[styles.emptyAddButton, { backgroundColor: colors.card }]} onPress={() => setShowAddModal(true)}>
-              <Ionicons name="add-circle" size={24} color={colors.accent} />
-              <Text style={[styles.emptyAddButtonText, { color: colors.accent }]}>Add Tracks</Text>
-            </Pressable>
-          )}
-        </View>
+        <EmptyState
+          icon="list"
+          decorativeIcons={[
+            { name: 'add-circle-outline', offset: { x: -25, y: -18 }, size: 18, delay: 400 },
+            { name: 'musical-notes-outline', offset: { x: 25, y: 18 }, size: 16, delay: 600 },
+          ]}
+          title="No tracks yet"
+          subtitle="Add tracks from your library"
+          action={onAddTrack ? { label: 'Add Tracks', onPress: () => setShowAddModal(true), primary: false, icon: 'add-circle' } : undefined}
+        />
       ) : (
         <FlatList
           data={playlist.tracks}

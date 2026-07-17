@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
+import { EmptyState } from './EmptyState';
 
 const ITEM_HEIGHT = 68;
 
@@ -235,17 +236,15 @@ export function Queue({ onClose }: QueueProps) {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Up Next</Text>
         </View>
         {queue.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="list" size={48} color={colors.textSecondary} />
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No tracks in queue</Text>
-            <Pressable
-              style={[styles.addButton, { backgroundColor: colors.accent }]}
-              onPress={() => setShowAddModal(true)}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-              <Text style={styles.addButtonText}>Add Tracks</Text>
-            </Pressable>
-          </View>
+          <EmptyState
+            icon="reorder-two"
+            decorativeIcons={[
+              { name: 'add-circle-outline', offset: { x: 25, y: -20 }, size: 18, delay: 400 },
+            ]}
+            title="No tracks in queue"
+            subtitle="Add tracks to play them next"
+            action={{ label: 'Add Tracks', onPress: () => setShowAddModal(true), primary: true, icon: 'add' }}
+          />
         ) : (
           <FlatList
             data={queue}

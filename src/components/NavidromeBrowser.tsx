@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, Pressable, FlatList, Image, TextInput, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, Pressable, FlatList, Image, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { NavidromeService, NavidromeArtist, NavidromeAlbum, NavidromeSong, NavidromeCredentials } from '../services/NavidromeService';
+import { SkeletonLoader } from './SkeletonLoader';
+import { EmptyState } from './EmptyState';
 
 type ViewLevel = 'artists' | 'artist-detail' | 'album-detail';
 
@@ -253,11 +255,15 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
 
   if (!navidromeConnected) {
     return (
-      <View style={styles.notConnected}>
-        <Ionicons name="cloud-offline-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.notConnectedText, { color: colors.textSecondary }]}>Not connected to Navidrome</Text>
-        <Text style={[styles.notConnectedHint, { color: colors.textSecondary }]}>Connect in Settings to browse your music</Text>
-      </View>
+      <EmptyState
+        icon="cloud-offline-outline"
+        decorativeIcons={[
+          { name: 'wifi-outline', offset: { x: 35, y: -25 }, size: 18, delay: 400 },
+          { name: 'server-outline', offset: { x: -35, y: 20 }, size: 16, delay: 600 },
+        ]}
+        title="Not connected to Navidrome"
+        subtitle="Connect in Settings to browse your music"
+      />
     );
   }
 
@@ -312,10 +318,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
       )}
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading...</Text>
-        </View>
+        <SkeletonLoader variant="trackRow" count={5} />
       ) : error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={48} color="#FF3B30" />
@@ -328,9 +331,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
           ListHeaderComponent={
             <View>
               {searching ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                </View>
+                <SkeletonLoader variant="trackRow" count={3} />
               ) : searchResults ? (
                 <>
                   {searchResults.songs.length > 0 && (
@@ -367,10 +368,13 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
                     </View>
                   )}
                   {!searchResults.songs.length && !searchResults.albums.length && !searchResults.artists.length && (
-                    <View style={styles.emptyContainer}>
-                      <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
-                      <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No results found</Text>
-                    </View>
+                    <EmptyState
+                      icon="search-outline"
+                      decorativeIcons={[
+                        { name: 'close-circle-outline', offset: { x: 25, y: -20 }, size: 16, delay: 400 },
+                      ]}
+                      title="No results found"
+                    />
                   )}
                 </>
               ) : null}
@@ -389,10 +393,14 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
           keyExtractor={(item) => (item as any).id}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="musical-notes-outline" size={48} color={colors.textSecondary} />
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No items found</Text>
-            </View>
+            <EmptyState
+              icon="musical-notes-outline"
+              decorativeIcons={[
+                { name: 'folder-outline', offset: { x: -25, y: 15 }, size: 16, delay: 400 },
+                { name: 'disc-outline', offset: { x: 25, y: -15 }, size: 16, delay: 600 },
+              ]}
+              title="No items found"
+            />
           }
         />
       )}

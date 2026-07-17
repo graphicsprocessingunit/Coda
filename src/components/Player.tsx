@@ -6,6 +6,8 @@ import { useTheme } from '../context/ThemeContext';
 import { useAudio } from '../context/AudioContext';
 import { ProgressBar } from './ProgressBar';
 import { LyricsDisplay } from './LyricsDisplay';
+import { SkeletonLoader } from './SkeletonLoader';
+import { EmptyState } from './EmptyState';
 import { fetchLyrics } from '../services/LyricsService';
 
 interface PlayerProps {
@@ -218,10 +220,17 @@ export function Player({
               textColor={colors.text}
               secondaryColor={colors.textSecondary}
             />
+          ) : lyricsText === '' ? (
+            <EmptyState
+              icon="mic-outline"
+              decorativeIcons={[
+                { name: 'close-circle-outline', offset: { x: 20, y: -18 }, size: 16, delay: 400 },
+              ]}
+              title="No lyrics found"
+              subtitle="Try another track"
+            />
           ) : (
-            <View style={styles.lyricsLoading}>
-              <Text style={{ color: colors.textSecondary }}>Loading lyrics...</Text>
-            </View>
+            <SkeletonLoader variant="textLine" count={6} />
           )}
         </View>
       )}

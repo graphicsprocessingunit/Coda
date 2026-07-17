@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
 import { Playlist, TrackMetadata } from '../context/AudioContext';
+import { EmptyState } from './EmptyState';
 
 interface PlaylistsProps {
   playlists: Playlist[];
@@ -169,11 +170,15 @@ export function Playlists({
       </View>
 
       {playlists.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="list" size={64} color={colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No playlists yet</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Tap + to create a playlist</Text>
-        </View>
+        <EmptyState
+          icon="list"
+          decorativeIcons={[
+            { name: 'add-circle-outline', offset: { x: -25, y: -18 }, size: 18, delay: 400 },
+            { name: 'musical-notes-outline', offset: { x: 25, y: 18 }, size: 16, delay: 600 },
+          ]}
+          title="No playlists yet"
+          subtitle="Tap + to create a playlist"
+        />
       ) : (
         <FlatList
           data={playlists}

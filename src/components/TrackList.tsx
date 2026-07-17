@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
+import { EmptyState } from './EmptyState';
 
 type FilterMode = 'all' | 'favorites';
 type SortMode = 'title' | 'playCount';
@@ -232,33 +233,27 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
       )}
 
       {tracks.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="musical-notes" size={80} color={colors.accent} />
-          <Text style={[styles.onboardingTitle, { color: colors.text }]}>Welcome to Coda</Text>
-          <Text style={[styles.onboardingSubtitle, { color: colors.textSecondary }]}>
-            Import music from your device or connect to Navidrome to get started.
-          </Text>
-          <Pressable
-            style={[styles.onboardingButton, { backgroundColor: colors.accent }]}
-            onPress={onAddTracks}
-          >
-            <Ionicons name="cloud-upload" size={20} color="#FFFFFF" />
-            <Text style={styles.onboardingButtonText}>Import Music</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.onboardingButton, styles.onboardingButtonSecondary, { borderColor: colors.textSecondary }]}
-            onPress={() => setShowNavidrome(true)}
-          >
-            <Ionicons name="server-outline" size={20} color={colors.text} />
-            <Text style={[styles.onboardingButtonTextSecondary, { color: colors.text }]}>Connect Navidrome</Text>
-          </Pressable>
-        </View>
+        <EmptyState
+          icon="musical-notes"
+          decorativeIcons={[
+            { name: 'mic-outline', offset: { x: -30, y: -25 }, size: 22, delay: 400 },
+            { name: 'headset-outline', offset: { x: 30, y: -20 }, size: 20, delay: 600 },
+            { name: 'disc-outline', offset: { x: -20, y: 25 }, size: 18, delay: 800 },
+          ]}
+          title="Welcome to Coda"
+          subtitle="Import music from your device or connect to Navidrome to get started."
+          action={{ label: 'Import Music', onPress: onAddTracks, primary: true, icon: 'cloud-upload' }}
+          secondaryAction={{ label: 'Connect Navidrome', onPress: () => setShowNavidrome(true), icon: 'server-outline' }}
+        />
       ) : filteredTracks.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="search" size={64} color={colors.textSecondary} />
-          <Text style={[styles.emptyText, { color: colors.text }]}>No matches</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try a different search</Text>
-        </View>
+        <EmptyState
+          icon="search"
+          decorativeIcons={[
+            { name: 'close-circle-outline', offset: { x: 25, y: -20 }, size: 18, delay: 400 },
+          ]}
+          title="No matches"
+          subtitle="Try a different search"
+        />
       ) : (
         <FlatList
           data={filteredTracks}
