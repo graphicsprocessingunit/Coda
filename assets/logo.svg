@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#818CF8" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+
+  <!-- Subtle highlight overlay -->
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#highlight)"/>
+
+  <!-- Musical note: stem -->
+  <rect x="320" y="108" width="18" height="200" rx="9" fill="white" opacity="0.95"/>
+
+  <!-- Musical note: flag -->
+  <path d="M338 108 C338 108 390 130 390 170 C390 200 358 195 338 178" fill="white" opacity="0.95"/>
+
+  <!-- Musical note: note head -->
+  <ellipse cx="304" cy="318" rx="42" ry="32" transform="rotate(-20 304 318)" fill="white" opacity="0.95"/>
+
+  <!-- Letter C: main arc -->
+  <path d="M256 170 C196 170 148 218 148 278 C148 338 196 386 256 386"
+        stroke="white" stroke-width="36" stroke-linecap="round" fill="none" opacity="0.95"/>
+
+</svg>
