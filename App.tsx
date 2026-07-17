@@ -60,6 +60,7 @@ function PlayerScreen() {
     repeatEnabled,
     toggleShuffle,
     toggleRepeat,
+    toggleFavorite,
     sleepTimerRemaining,
   } = useAudio();
   const { colors } = useTheme();
@@ -102,6 +103,8 @@ function PlayerScreen() {
           repeatEnabled={repeatEnabled}
           onToggleShuffle={toggleShuffle}
           onToggleRepeat={toggleRepeat}
+          onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack.uri)}
+          isFavorite={currentTrack?.isFavorite}
           onMorePress={() => setShowMore(true)}
           sleepTimerRemaining={sleepTimerRemaining}
         />
@@ -207,7 +210,7 @@ function PlayerScreen() {
 }
 
 function LibraryScreen() {
-  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue } = useAudio();
+  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite } = useAudio();
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -243,6 +246,10 @@ function LibraryScreen() {
             setSelectedTrack(track);
             setShowPlaylistModal(true);
           },
+        },
+        {
+          text: track.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+          onPress: () => toggleFavorite(track.uri),
         },
         { text: 'Cancel', style: 'cancel' },
       ]
@@ -286,6 +293,7 @@ function LibraryScreen() {
         onAddTracks={handleAddTracks}
         onTrackLongPress={handleTrackLongPress}
         onRemoveTrack={removeFromLibrary}
+        onToggleFavorite={toggleFavorite}
       />
       <MiniPlayer />
       <Modal

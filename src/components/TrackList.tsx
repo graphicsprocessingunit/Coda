@@ -7,6 +7,9 @@ import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 
+type FilterMode = 'all' | 'favorites';
+type SortMode = 'title' | 'playCount';
+
 interface TrackListProps {
   tracks: TrackMetadata[];
   currentTrack: TrackMetadata | null;
@@ -14,15 +17,17 @@ interface TrackListProps {
   onAddTracks: () => void;
   onTrackLongPress?: (track: TrackMetadata) => void;
   onRemoveTrack?: (trackUri: string) => void;
+  onToggleFavorite?: (uri: string) => void;
 }
 
-function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress }: {
+function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
   colors: any;
   onPress: () => void;
   onLongPress?: () => void;
+  onToggleFavorite?: () => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -89,24 +94,50 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
         {isCurrentTrack && (
           <Ionicons name="play" size={20} color={colors.accent} />
         )}
+        {onToggleFavorite && (
+          <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(); }} hitSlop={8} style={styles.heartButton}>
+            <Ionicons
+              name={item.isFavorite ? 'heart' : 'heart-outline'}
+              size={18}
+              color={item.isFavorite ? '#FF2D55' : colors.textSecondary}
+            />
+          </Pressable>
+        )}
       </Pressable>
     </Animated.View>
   );
 }
 
-export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack }: TrackListProps) {
+export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite }: TrackListProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addToLibrary } = useAudio();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNavidrome, setShowNavidrome] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('title');
 
   const filteredTracks = useMemo(() => {
-    if (!searchQuery.trim()) return tracks;
-    const q = searchQuery.toLowerCase();
-    return tracks.filter(
-      (t) => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q)
-    );
-  }, [tracks, searchQuery]);
+    let result = tracks;
+
+    if (filterMode === 'favorites') {
+      result = result.filter((t) => t.isFavorite);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (t) => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q)
+      );
+    }
+
+    if (sortMode === 'playCount') {
+      result = [...result].sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+    } else {
+      result = [...result].sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    return result;
+  }, [tracks, searchQuery, filterMode, sortMode]);
 
   const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
@@ -119,6 +150,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         colors={colors}
         onPress={() => onTrackPress(item)}
         onLongPress={() => onTrackLongPress?.(item)}
+        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item.uri) : undefined}
       />
     );
 
@@ -166,6 +198,36 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
               <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
             </Pressable>
           )}
+        </View>
+      )}
+
+      {tracks.length > 0 && (
+        <View style={[styles.filterBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+          <View style={styles.filterChips}>
+            <Pressable
+              style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'all' && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+              onPress={() => setFilterMode('all')}
+            >
+              <Text style={[styles.filterChipText, { color: filterMode === 'all' ? '#FFFFFF' : colors.text }]}>All</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'favorites' && { backgroundColor: '#FF2D55', borderColor: '#FF2D55' }]}
+              onPress={() => setFilterMode('favorites')}
+            >
+              <Ionicons name="heart" size={14} color={filterMode === 'favorites' ? '#FFFFFF' : '#FF2D55'} />
+              <Text style={[styles.filterChipText, { color: filterMode === 'favorites' ? '#FFFFFF' : colors.text }]}>Favorites</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            style={styles.sortButton}
+            onPress={() => setSortMode((prev) => prev === 'title' ? 'playCount' : 'title')}
+          >
+            <Ionicons
+              name={sortMode === 'playCount' ? 'trophy' : 'arrow-down'}
+              size={18}
+              color={sortMode === 'playCount' ? colors.accent : colors.textSecondary}
+            />
+          </Pressable>
         </View>
       )}
 
@@ -375,6 +437,37 @@ const styles = StyleSheet.create({
   onboardingButtonTextSecondary: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  filterChips: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sortButton: {
+    padding: 8,
+  },
+  heartButton: {
+    marginLeft: 8,
   },
   modalOverlay: {
     flex: 1,

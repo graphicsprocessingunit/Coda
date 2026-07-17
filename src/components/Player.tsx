@@ -24,6 +24,8 @@ interface PlayerProps {
   onToggleRepeat?: () => void;
   onQueuePress?: () => void;
   onMorePress?: () => void;
+  onToggleFavorite?: () => void;
+  isFavorite?: boolean;
   sleepTimerRemaining?: number | null;
 }
 
@@ -42,6 +44,8 @@ export function Player({
   onToggleShuffle,
   onToggleRepeat,
   onMorePress,
+  onToggleFavorite,
+  isFavorite = false,
   sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
@@ -168,6 +172,15 @@ export function Player({
             color={lyricsVisible ? colors.accent : colors.textSecondary}
           />
         </Pressable>
+        {onToggleFavorite && (
+          <Pressable onPress={onToggleFavorite} style={styles.secondaryButton}>
+            <Ionicons
+              name={isFavorite ? 'heart' : 'heart-outline'}
+              size={24}
+              color={isFavorite ? '#FF2D55' : colors.textSecondary}
+            />
+          </Pressable>
+        )}
         {onMorePress && (
           <Pressable onPress={onMorePress} style={styles.secondaryButton}>
             <Ionicons name="ellipsis-horizontal" size={24} color={colors.textSecondary} />

@@ -14,6 +14,8 @@ export interface TrackMetadata {
   album?: string;
   source?: 'local' | 'navidrome';
   navidromeId?: string;
+  isFavorite?: boolean;
+  playCount?: number;
 }
 
 export interface Playlist {
@@ -79,6 +81,7 @@ interface AudioContextType {
   setCrossfadeEnabled: (enabled: boolean) => void;
   setCrossfadeDuration: (seconds: number) => void;
   clearAllData: () => void;
+  toggleFavorite: (uri: string) => void;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -397,6 +400,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setQueue(remainingQueue);
       historyRef.current.push(nextTrack);
       historyIndexRef.current = historyRef.current.length - 1;
+      incrementPlayCount(nextTrack.uri);
       loadTrackInternal(nextTrack.uri, nextTrack, true);
     } else if (sourceTracksRef.current.length > 0) {
       const tracks = sourceTracksRef.current;
@@ -405,6 +409,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setQueue(remainingTracks);
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
+      incrementPlayCount(firstTrack.uri);
       loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
   }, []);
@@ -648,6 +653,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
+  const toggleFavorite = (uri: string) => {
+    setLibrary((prev) =>
+      prev.map((track) =>
+        track.uri === uri ? { ...track, isFavorite: !track.isFavorite } : track
+      )
+    );
+  };
+
+  const incrementPlayCount = (uri: string) => {
+    setLibrary((prev) =>
+      prev.map((track) =>
+        track.uri === uri ? { ...track, playCount: (track.playCount || 0) + 1 } : track
+      )
+    );
+  };
+
   const playFromLibrary = async (track: TrackMetadata) => {
     const trackIndex = library.findIndex((t) => t.uri === track.uri);
     const history = trackIndex >= 0 ? library.slice(0, trackIndex) : [];
@@ -657,6 +678,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     historyRef.current = [...history, track];
     historyIndexRef.current = history.length;
     setQueue(queueTracks);
+    incrementPlayCount(track.uri);
 
     await loadTrackInternal(track.uri, track, true);
   };
@@ -725,6 +747,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
       setQueue(remainingTracks);
+      incrementPlayCount(firstTrack.uri);
 
       await loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
@@ -744,6 +767,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     historyRef.current = [...history, track];
     historyIndexRef.current = history.length;
     setQueue(queueTracks);
+    incrementPlayCount(track.uri);
 
     await loadTrackInternal(track.uri, track, true);
   };
@@ -1044,6 +1068,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCrossfadeEnabled,
     setCrossfadeDuration,
     clearAllData,
+    toggleFavorite,
   };
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;
