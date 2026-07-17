@@ -24,6 +24,7 @@ interface PlayerProps {
   onToggleRepeat?: () => void;
   onEffectsPress?: () => void;
   onQueuePress?: () => void;
+  onInfoPress?: () => void;
   sleepTimerRemaining?: number | null;
 }
 
@@ -43,6 +44,7 @@ export function Player({
   onToggleRepeat,
   onEffectsPress,
   onQueuePress,
+  onInfoPress,
   sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
@@ -174,6 +176,11 @@ export function Player({
             color={lyricsVisible ? colors.accent : colors.textSecondary}
           />
         </Pressable>
+        {onInfoPress && (
+          <Pressable onPress={onInfoPress} style={styles.secondaryButton}>
+            <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
+          </Pressable>
+        )}
         {onQueuePress && (
           <Pressable onPress={onQueuePress} style={styles.secondaryButton}>
             <Ionicons name="list" size={24} color={colors.textSecondary} />

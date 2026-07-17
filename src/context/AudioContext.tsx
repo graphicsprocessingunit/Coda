@@ -11,6 +11,7 @@ export interface TrackMetadata {
   uri: string;
   duration?: number;
   artwork?: string;
+  album?: string;
   source?: 'local' | 'navidrome';
   navidromeId?: string;
 }
@@ -138,6 +139,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const seekingRef = useRef(false);
   const sourceTracksRef = useRef<TrackMetadata[]>([]);
   const sleepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const preFadeVolumeRef = useRef(1.0);
+  const isFadingRef = useRef(false);
   const positionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPositionRef = useRef(0);
   const loadGenerationRef = useRef(0);
@@ -205,6 +209,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (sleepTimerRef.current) {
         clearInterval(sleepTimerRef.current);
       }
+      if (fadeIntervalRef.current) {
+        clearInterval(fadeIntervalRef.current);
+      }
       if (positionSaveTimerRef.current) {
         clearTimeout(positionSaveTimerRef.current);
       }
@@ -236,14 +243,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
 
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+      });
+
       if (savedCurrentTrack && savedCurrentTrack.source !== 'navidrome') {
         setCurrentTrack(savedCurrentTrack);
         try {
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            shouldDuckAndroid: true,
-          });
           const { sound } = await Audio.Sound.createAsync(
             { uri: savedCurrentTrack.uri },
             { shouldPlay: false, progressUpdateIntervalMillis: 500 },
@@ -342,52 +350,43 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         crossfadeTimerRef.current = null;
       }
       if (crossfadeSoundRef.current) {
-        try { await crossfadeSoundRef.current.unloadAsync(); } catch {}
+        const cfSound = crossfadeSoundRef.current;
         crossfadeSoundRef.current = null;
+        cfSound.unloadAsync().catch(() => {});
       }
     }
 
     if (soundRef.current) {
-      const prevStatus = await soundRef.current.getStatusAsync();
-      if (prevStatus.isLoaded) {
+      const prevSound = soundRef.current;
+      const prevStatus = playbackStatusRef.current;
+      if (prevStatus?.isLoaded) {
         savePositionImmediate(prevStatus.positionMillis || 0);
       }
-      await soundRef.current.unloadAsync();
+      prevSound.unloadAsync().catch(() => {});
+      soundRef.current = null;
     }
 
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-    });
-
-    const { sound } = await Audio.Sound.createAsync(
+    const { sound, status: initialStatus } = await Audio.Sound.createAsync(
       { uri: trackUri },
       {
-        shouldPlay: false,
+        shouldPlay: autoPlay,
         progressUpdateIntervalMillis: 500,
       },
       onPlaybackStatusUpdate
     );
 
     if (generation !== loadGenerationRef.current) {
-      await sound.unloadAsync();
+      sound.unloadAsync().catch(() => {});
       return;
     }
 
     soundRef.current = sound;
     setCurrentTrack(metadata);
     setPlaybackPosition(0);
-
-    const status = await sound.getStatusAsync();
-    if (status.isLoaded) {
-      setDuration(status.durationMillis || 0);
+    if (initialStatus?.isLoaded) {
+      setDuration(initialStatus.durationMillis || 0);
     }
-
-    if (autoPlay) {
-      await sound.playAsync();
-      setIsPlaying(true);
-    }
+    setIsPlaying(autoPlay);
   };
 
   const playNextFromQueue = useCallback(() => {
@@ -872,10 +871,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     cancelSleepTimer();
   };
 
+  const FADE_DURATION = 30;
+
   const cancelSleepTimer = () => {
     if (sleepTimerRef.current) {
       clearInterval(sleepTimerRef.current);
       sleepTimerRef.current = null;
+    }
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+    if (isFadingRef.current) {
+      isFadingRef.current = false;
+      if (soundRef.current) {
+        soundRef.current.setVolumeAsync(preFadeVolumeRef.current).catch(() => {});
+      }
     }
     setSleepTimerEnd(null);
     setSleepTimerRemaining(0);
@@ -892,6 +903,25 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     sleepTimerRef.current = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
       setSleepTimerRemaining(remaining);
+
+      if (remaining <= FADE_DURATION && !isFadingRef.current && remaining > 0 && soundRef.current) {
+        isFadingRef.current = true;
+        preFadeVolumeRef.current = volumeRef.current;
+        fadeIntervalRef.current = setInterval(() => {
+          const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+          if (rem <= 0) {
+            if (fadeIntervalRef.current) {
+              clearInterval(fadeIntervalRef.current);
+              fadeIntervalRef.current = null;
+            }
+            return;
+          }
+          const fraction = rem / FADE_DURATION;
+          const newVol = preFadeVolumeRef.current * fraction;
+          soundRef.current?.setVolumeAsync(Math.max(0, newVol)).catch(() => {});
+        }, 100);
+      }
+
       if (remaining <= 0) {
         cancelSleepTimer();
         if (soundRef.current) {
@@ -905,6 +935,25 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (!sleepTimerEnd) return;
     const remaining = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
     setSleepTimerRemaining(remaining);
+
+    if (remaining <= FADE_DURATION && !isFadingRef.current && remaining > 0 && soundRef.current) {
+      isFadingRef.current = true;
+      preFadeVolumeRef.current = volumeRef.current;
+      fadeIntervalRef.current = setInterval(() => {
+        const rem = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
+        if (rem <= 0) {
+          if (fadeIntervalRef.current) {
+            clearInterval(fadeIntervalRef.current);
+            fadeIntervalRef.current = null;
+          }
+          return;
+        }
+        const fraction = rem / FADE_DURATION;
+        const newVol = preFadeVolumeRef.current * fraction;
+        soundRef.current?.setVolumeAsync(Math.max(0, newVol)).catch(() => {});
+      }, 100);
+    }
+
     if (remaining <= 0) {
       cancelSleepTimer();
       if (soundRef.current) {

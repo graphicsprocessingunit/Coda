@@ -16,6 +16,7 @@ import { Settings } from './src/components/Settings';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { Queue } from './src/components/Queue';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { TrackInfo } from './src/components/TrackInfo';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
@@ -64,6 +65,7 @@ function PlayerScreen() {
   const { colors } = useTheme();
   const [showEffects, setShowEffects] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [showTrackInfo, setShowTrackInfo] = useState(false);
 
   return (
     <>
@@ -84,6 +86,7 @@ function PlayerScreen() {
           onToggleRepeat={toggleRepeat}
           onEffectsPress={() => setShowEffects(true)}
           onQueuePress={() => setShowQueue(true)}
+          onInfoPress={() => setShowTrackInfo(true)}
         />
       ) : (
         <Player
@@ -102,6 +105,7 @@ function PlayerScreen() {
           onToggleRepeat={toggleRepeat}
           onEffectsPress={() => setShowEffects(true)}
           onQueuePress={() => setShowQueue(true)}
+          onInfoPress={() => setShowTrackInfo(true)}
           sleepTimerRemaining={sleepTimerRemaining}
         />
       )}
@@ -135,6 +139,26 @@ function PlayerScreen() {
         <View style={queueModalStyles.overlay}>
           <View style={[queueModalStyles.content, { backgroundColor: colors.background }]}>
             <Queue onClose={() => setShowQueue(false)} />
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        visible={showTrackInfo}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTrackInfo(false)}
+      >
+        <View style={effectsModalStyles.overlay}>
+          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Song Info</Text>
+              <Pressable onPress={() => setShowTrackInfo(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+              {currentTrack && <TrackInfo track={currentTrack} duration={duration} />}
+            </ScrollView>
           </View>
         </View>
       </Modal>

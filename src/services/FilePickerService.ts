@@ -71,13 +71,15 @@ export class FilePickerService {
       const fallbackTitle = file.name.replace(/\.[^/.]+$/, '');
       let title = fallbackTitle;
       let artist = 'Unknown Artist';
+      let album: string | undefined;
       let artwork: string | undefined;
 
       try {
-        const data = await getAudioMetadata(file.uri, ['name', 'artist', 'artwork']);
+        const data = await getAudioMetadata(file.uri, ['name', 'artist', 'album', 'artwork']);
         const meta = data?.metadata;
         if (meta?.name) title = meta.name;
         if (meta?.artist) artist = meta.artist;
+        if (meta?.album) album = meta.album;
         if (meta?.artwork) {
           artwork = base64ToArtworkFile(meta.artwork, file.name) || undefined;
         }
@@ -89,6 +91,7 @@ export class FilePickerService {
         title,
         artist,
         uri: file.uri,
+        album,
         artwork,
       });
     }
