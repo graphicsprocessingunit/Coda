@@ -6,14 +6,15 @@
 
 **Your music. Your way.**
 
-A beautifully crafted music player for iOS with local library management, Navidrome streaming, crossfade, synced lyrics, and full theming support.
+A beautifully crafted music player for iOS and Android with local library management, Navidrome streaming, crossfade, synced lyrics, and full theming support.
 
 ![Expo](https://img.shields.io/badge/Expo_SDK-54-000020?style=for-the-badge&logo=expo)
 ![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript)
+![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)
 
-[Features](#features) &nbsp;&bull;&nbsp; [Tech Stack](#tech-stack) &nbsp;&bull;&nbsp; [Getting Started](#getting-started) &nbsp;&bull;&nbsp; [Architecture](#architecture) &nbsp;&bull;&nbsp; [License](#license)
+[Installation](#installation) &nbsp;&bull;&nbsp; [Features](#features) &nbsp;&bull;&nbsp; [Tech Stack](#tech-stack) &nbsp;&bull;&nbsp; [For Developers](#for-developers) &nbsp;&bull;&nbsp; [Architecture](#architecture) &nbsp;&bull;&nbsp; [License](#license)
 
 </div>
 
@@ -63,7 +64,28 @@ A beautifully crafted music player for iOS with local library management, Navidr
 | Lyrics | LRCLIB API | Synced lyrics search and caching |
 | Icons | @expo/vector-icons | Ionicons throughout the app |
 
-## Getting Started
+## Installation
+
+### Android
+
+[![Download APK](https://img.shields.io/badge/Download-v1.0.0%20APK-00C853?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.0.0/Coda-v1.0.0.apk)
+
+1. Download the `.apk` file from the link above
+2. Open the file on your Android device
+3. If prompted, enable **Install from unknown sources** in Settings
+4. Tap **Install**
+
+### iOS
+
+[![Download IPA](https://img.shields.io/badge/Download-v1.0.0%20IPA-007AFF?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.0.0/Coda-v1.0.0.ipa)
+
+Install using [AltStore](https://altstore.io), [SideStore](https://sidestore.io), or any IPA signing tool.
+
+> **Note:** Apps signed with a free Apple ID expire after 7 days and must be refreshed.
+
+---
+
+## For Developers
 
 ### Prerequisites
 
@@ -71,7 +93,7 @@ A beautifully crafted music player for iOS with local library management, Navidr
 - Xcode 15+ (for iOS)
 - Expo CLI (`npm install -g expo-cli`)
 
-### Installation
+### Setup
 
 ```bash
 # Clone the repository
@@ -102,11 +124,11 @@ npx expo run:ios
 <summary><strong>Building for Production</strong></summary>
 
 ```bash
-# Using EAS Build
-eas build --platform ios --profile production
+# iOS (local archive → IPA for sideloading)
+./scripts/build-ipa.sh
 
-# Or using local build
-eas build --platform ios --profile production --local
+# Android APK via EAS Build
+eas build --platform android --profile preview-android
 ```
 
 </details>
