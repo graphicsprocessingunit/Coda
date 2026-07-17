@@ -38,7 +38,9 @@
         "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -52,6 +54,7 @@
     "plugins": [
       "expo-audio",
       "expo-asset"
-    ]
+    ],
+    "owner": "aaron656"
   }
 }
