@@ -7,8 +7,9 @@ import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 import { EmptyState } from './EmptyState';
+import { OfflineCacheService } from '../services/OfflineCacheService';
 
-type FilterMode = 'all' | 'favorites';
+type FilterMode = 'all' | 'favorites' | 'downloads';
 type SortMode = 'title' | 'playCount';
 
 interface TrackListProps {
@@ -122,6 +123,8 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
 
     if (filterMode === 'favorites') {
       result = result.filter((t) => t.isFavorite);
+    } else if (filterMode === 'downloads') {
+      result = result.filter((t) => OfflineCacheService.isTrackCached(t));
     }
 
     if (searchQuery.trim()) {
@@ -217,6 +220,13 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
             >
               <Ionicons name="heart" size={14} color={filterMode === 'favorites' ? '#FFFFFF' : '#FF2D55'} />
               <Text style={[styles.filterChipText, { color: filterMode === 'favorites' ? '#FFFFFF' : colors.text }]}>Favorites</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'downloads' && { backgroundColor: '#34C759', borderColor: '#34C759' }]}
+              onPress={() => setFilterMode('downloads')}
+            >
+              <Ionicons name="download-outline" size={14} color={filterMode === 'downloads' ? '#FFFFFF' : '#34C759'} />
+              <Text style={[styles.filterChipText, { color: filterMode === 'downloads' ? '#FFFFFF' : colors.text }]}>Downloads</Text>
             </Pressable>
           </View>
           <Pressable

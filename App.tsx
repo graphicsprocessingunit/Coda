@@ -211,7 +211,7 @@ function PlayerScreen() {
 }
 
 function LibraryScreen() {
-  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite } = useAudio();
+  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, downloadTrackForLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite } = useAudio();
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -231,6 +231,8 @@ function LibraryScreen() {
   };
 
   const handleTrackLongPress = (track: TrackMetadata) => {
+    const isDownloadable = track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track);
+    const isDownloaded = OfflineCacheService.isTrackCached(track);
     Alert.alert(
       track.title,
       track.artist,
@@ -254,7 +256,18 @@ function LibraryScreen() {
           text: track.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
           onPress: () => toggleFavorite(track.uri),
         },
-        { text: 'Cancel', style: 'cancel' },
+        ...(isDownloadable ? [{
+          text: 'Download for Offline',
+          onPress: async () => {
+            await downloadTrackForLibrary(track);
+            Alert.alert('Downloaded', `"${track.title}" is now available offline.`);
+          },
+        }] : []),
+        ...(isDownloaded ? [{
+          text: 'Downloaded ✓',
+          onPress: () => {},
+        }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
       ]
     );
   };

@@ -62,6 +62,7 @@ interface AudioContextType {
   toggleRepeat: () => void;
   addToLibrary: (tracks: TrackMetadata[]) => void;
   removeFromLibrary: (trackUri: string) => void;
+  downloadTrackForLibrary: (track: TrackMetadata) => Promise<void>;
   playFromLibrary: (track: TrackMetadata) => Promise<void>;
   playFromPlaylist: (playlist: Playlist, track: TrackMetadata) => Promise<void>;
   createPlaylist: (name: string) => string;
@@ -778,6 +779,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  const downloadTrackForLibrary = useCallback(async (track: TrackMetadata) => {
+    const creds = navidromeCredentialsRef.current;
+    if (!creds || !track.navidromeId) return;
+    const offlineTrack = await OfflineCacheService.downloadTrackForOffline(creds, track);
+    setLibrary((prev) =>
+      prev.map((t) => (t.uri === track.uri ? { ...t, cachedUri: offlineTrack.cachedUri, cachedArtwork: offlineTrack.cachedArtwork, artwork: offlineTrack.artwork } : t))
+    );
+  }, []);
+
   const toggleFavorite = useCallback((uri: string) => {
     setLibrary((prev) =>
       prev.map((track) =>
@@ -1210,6 +1220,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     toggleRepeat,
     addToLibrary,
     removeFromLibrary,
+    downloadTrackForLibrary,
     playFromLibrary,
     playFromPlaylist,
     createPlaylist,
@@ -1246,7 +1257,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     seamlessEnabled,
     loadTrack, play, pause, seekTo, skipNext, skipPrevious,
     removeFromQueue, addToQueue, playNextInQueue, reorderQueue, shuffleQueue, setQueue,
-    toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary,
+    toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary, downloadTrackForLibrary,
     playFromLibrary, playFromPlaylist, createPlaylist, addTrackToPlaylist,
     removeTrackFromPlaylist, reorderPlaylistTracks, deletePlaylist,
     renamePlaylist, playPlaylist, setPlaybackRate, setVolume, setAudioPreset,
