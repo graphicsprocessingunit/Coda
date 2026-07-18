@@ -40,5 +40,12 @@ yarn-error.*
 /ios
 /android
 
-#build files
+# build files
 /build
+
+# test
+coverage/
+
+# env
+.env
+.env.local
