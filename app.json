@@ -53,7 +53,8 @@
     },
     "plugins": [
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store"
     ],
     "owner": "aaron656"
   }
