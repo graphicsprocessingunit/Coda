@@ -9,13 +9,21 @@ export interface PickedFile {
   size: number;
 }
 
+function sanitizeFileName(name: string): string {
+  return name
+    .replace(/[/\\]/g, '')
+    .replace(/\.\./g, '')
+    .replace(/\0/g, '')
+    .trim();
+}
+
 function base64ToArtworkFile(base64Data: string, fileName: string): string {
   const match = base64Data.match(/^data:image\/\w+;base64,(.+)$/);
   if (!match) return '';
 
   const base64 = match[1];
   const ext = base64Data.match(/^data:image\/(\w+);/)?.[1] || 'jpg';
-  const artFileName = `${fileName.replace(/\.[^/.]+$/, '')}_artwork.${ext}`;
+  const artFileName = `${sanitizeFileName(fileName.replace(/\.[^/.]+$/, ''))}_artwork.${ext}`;
   const artFile = new File(Paths.document, artFileName);
 
   if (artFile.exists) {
@@ -45,14 +53,15 @@ export class FilePickerService {
       }
 
       const files: PickedFile[] = result.assets.map((asset) => {
-        const destFile = new File(Paths.document, asset.name);
+        const safeName = sanitizeFileName(asset.name);
+        const destFile = new File(Paths.document, safeName);
         if (!destFile.exists) {
           const sourceFile = new File(asset.uri);
           sourceFile.copy(destFile);
         }
         return {
           uri: destFile.uri,
-          name: asset.name,
+          name: safeName,
           size: asset.size || 0,
         };
       });

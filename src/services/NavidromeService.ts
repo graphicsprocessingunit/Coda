@@ -136,13 +136,13 @@ export class NavidromeService {
     }
   }
 
-  static async ping(url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  static async ping(url: string, username: string, password: string): Promise<{ ok: boolean; error?: string; creds?: NavidromeCredentials }> {
     try {
       const salt = generateSalt();
       const token = NavidromeService.createToken(password, salt);
       const creds: NavidromeCredentials = { url, username, token, salt };
       await NavidromeService.apiCall(creds, 'ping');
-      return { ok: true };
+      return { ok: true, creds };
     } catch (error: any) {
       return { ok: false, error: error.message || 'Connection failed' };
     }

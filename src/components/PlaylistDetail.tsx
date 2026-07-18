@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -234,11 +234,11 @@ export function PlaylistDetail({
     );
   };
 
-  const getCollageImages = () => {
+  const collageImages = useMemo(() => {
     const images = playlist.tracks.slice(0, 4).map((track) => track.artwork);
     while (images.length < 4) images.push(undefined);
     return images;
-  };
+  }, [playlist.tracks]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -300,12 +300,12 @@ export function PlaylistDetail({
       {playlist.tracks.length > 0 ? (
         <View style={styles.collageContainer}>
           <View style={styles.collageRow}>
-            <AnimatedCollageImage artwork={getCollageImages()[0]} index={0} colors={colors} />
-            <AnimatedCollageImage artwork={getCollageImages()[1]} index={1} colors={colors} />
+            <AnimatedCollageImage artwork={collageImages[0]} index={0} colors={colors} />
+            <AnimatedCollageImage artwork={collageImages[1]} index={1} colors={colors} />
           </View>
           <View style={styles.collageRow}>
-            <AnimatedCollageImage artwork={getCollageImages()[2]} index={2} colors={colors} />
-            <AnimatedCollageImage artwork={getCollageImages()[3]} index={3} colors={colors} />
+            <AnimatedCollageImage artwork={collageImages[2]} index={2} colors={colors} />
+            <AnimatedCollageImage artwork={collageImages[3]} index={3} colors={colors} />
           </View>
         </View>
       ) : (
@@ -553,34 +553,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: 40,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 16,
-    marginTop: 8,
-  },
-  emptyAddButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  emptyAddButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

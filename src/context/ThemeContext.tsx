@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Theme = 'dark' | 'light' | 'midnight' | 'ocean';
@@ -92,12 +92,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const isDark = theme !== 'light';
 
-  const value: ThemeContextType = {
+  const value: ThemeContextType = useMemo(() => ({
     theme,
     colors: themes[theme],
     setTheme,
     isDark,
-  };
+  }), [theme, isDark]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

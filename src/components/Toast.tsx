@@ -27,7 +27,7 @@ export function Toast({ message, type = 'error', onDismiss, duration = 3000 }: T
     }, duration);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [onDismiss, duration]);
 
   const config = {
     error: { bg: '#FF3B30', icon: 'alert-circle' as const },

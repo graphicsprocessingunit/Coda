@@ -6,7 +6,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
-import { loadDemoContent } from '../services/DemoDataService';
 
 export interface TrackMetadata {
   title: string;
@@ -57,6 +56,7 @@ interface AudioContextType {
   addToQueue: (track: TrackMetadata) => void;
   playNextInQueue: (track: TrackMetadata) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
+  shuffleQueue: () => void;
   setQueue: (tracks: TrackMetadata[]) => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
@@ -64,7 +64,7 @@ interface AudioContextType {
   removeFromLibrary: (trackUri: string) => void;
   playFromLibrary: (track: TrackMetadata) => Promise<void>;
   playFromPlaylist: (playlist: Playlist, track: TrackMetadata) => Promise<void>;
-  createPlaylist: (name: string) => void;
+  createPlaylist: (name: string) => string;
   addTrackToPlaylist: (playlistId: string, track: TrackMetadata) => void;
   removeTrackFromPlaylist: (playlistId: string, trackUri: string) => void;
   reorderPlaylistTracks: (playlistId: string, fromIndex: number, toIndex: number) => void;
@@ -89,20 +89,12 @@ interface AudioContextType {
   setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
   toggleFavorite: (uri: string) => void;
-  loadDemoData: () => Promise<void>;
   error: string | null;
   clearError: () => void;
   isLoading: boolean;
 }
 
 const AudioCtx = createContext<AudioContextType | undefined>(undefined);
-
-const SAMPLE_TRACK: TrackMetadata = {
-  title: 'Test Track',
-  artist: 'Coda Player',
-  uri: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-  artwork: 'https://picsum.photos/400/400?random=1',
-};
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -111,15 +103,6 @@ function shuffleArray<T>(array: T[]): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
-}
-
-function generateSalt(): string {
-  const chars = 'abcdef0123456789';
-  let salt = '';
-  for (let i = 0; i < 16; i++) {
-    salt += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return salt;
 }
 
 function updateLockScreen(player: AudioPlayer, track: TrackMetadata) {
@@ -390,6 +373,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [playlists]);
 
   useEffect(() => {
+    if (!isLoadedRef.current) return;
     if (currentTrack) {
       StorageService.saveCurrentTrack(currentTrack);
     }
@@ -607,13 +591,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             historyIndexRef.current = historyRef.current.length - 1;
           } else if (sourceTracksRef.current.length > 0) {
             const tracks = sourceTracksRef.current;
-            historyRef.current = [tracks[0]];
-            historyIndexRef.current = 0;
-            setQueue(tracks.slice(1));
+            const playedSet = new Set(historyRef.current.map(t => t.uri));
+            const remaining = tracks.filter(t => !playedSet.has(t.uri));
+            if (remaining.length > 0) {
+              const nextTrack = remaining[0];
+              historyRef.current.push(nextTrack);
+              historyIndexRef.current = historyRef.current.length - 1;
+              setQueue(remaining.slice(1));
+            } else {
+              crossfadeActiveRef.current = false;
+              newPlayer.pause();
+              return;
+            }
           }
 
           const libMatch = libraryRef.current.find(t => t.uri === nextTrack.uri);
           setCurrentTrack({ ...nextTrack, isFavorite: libMatch?.isFavorite ?? nextTrack.isFavorite ?? false });
+          incrementPlayCount(nextTrack.uri);
           setPlaybackPosition(0);
 
           const newStatus = newPlayer.currentStatus;
@@ -766,6 +760,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const shuffleQueue = useCallback(() => {
+    setQueue((prev) => shuffleArray(prev));
+  }, []);
+
   const addToLibrary = useCallback((tracks: TrackMetadata[]) => {
     setLibrary((prev) => [...prev, ...tracks]);
   }, []);
@@ -813,14 +811,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     await loadTrackInternal(track.uri, track, true);
   }, [library, incrementPlayCount, loadTrackInternal]);
 
-  const createPlaylist = useCallback((name: string) => {
+  const createPlaylist = useCallback((name: string): string => {
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const newPlaylist: Playlist = {
-      id: Date.now().toString(),
+      id,
       name,
       tracks: [],
       createdAt: Date.now(),
     };
     setPlaylists((prev) => [...prev, newPlaylist]);
+    return id;
   }, []);
 
   const addTrackToPlaylist = useCallback((playlistId: string, track: TrackMetadata) => {
@@ -1050,7 +1050,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           const fraction = rem / FADE_DURATION;
           const newVol = preFadeVolumeRef.current * fraction;
           if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
-        }, 100);
+        }, 500);
       }
 
       if (remaining <= 0) {
@@ -1118,10 +1118,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setNavidromeServerUrl('');
   }, [cancelSleepTimer]);
 
-  const loadDemoData = useCallback(async () => {
-    await loadDemoContent(setLibrary);
-  }, []);
-
   const checkSleepTimerExpiry = useCallback(() => {
     if (!sleepTimerEnd) return;
     const remaining = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
@@ -1142,7 +1138,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         const fraction = rem / FADE_DURATION;
         const newVol = preFadeVolumeRef.current * fraction;
         if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
-      }, 100);
+      }, 500);
     }
 
     if (remaining <= 0) {
@@ -1159,12 +1155,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const connectNavidrome = useCallback(async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);
-    if (result.ok) {
-      const salt = generateSalt();
-      const token = NavidromeService.createToken(password, salt);
-      const creds: NavidromeCredentials = { url, username, token, salt };
-      await NavidromeService.saveCredentials(creds);
-      navidromeCredentialsRef.current = creds;
+    if (result.ok && result.creds) {
+      await NavidromeService.saveCredentials(result.creds);
+      navidromeCredentialsRef.current = result.creds;
       setNavidromeConnected(true);
       setNavidromeServerUrl(url);
     }
@@ -1211,6 +1204,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     addToQueue,
     playNextInQueue,
     reorderQueue,
+    shuffleQueue,
     setQueue,
     toggleShuffle,
     toggleRepeat,
@@ -1241,7 +1235,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setSeamlessEnabled,
     clearAllData,
     toggleFavorite,
-    loadDemoData,
     error,
     clearError,
     isLoading,
@@ -1252,14 +1245,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     navidromeConnected, navidromeServerUrl, crossfadeEnabled, crossfadeDuration,
     seamlessEnabled,
     loadTrack, play, pause, seekTo, skipNext, skipPrevious,
-    removeFromQueue, addToQueue, playNextInQueue, reorderQueue, setQueue,
+    removeFromQueue, addToQueue, playNextInQueue, reorderQueue, shuffleQueue, setQueue,
     toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary,
     playFromLibrary, playFromPlaylist, createPlaylist, addTrackToPlaylist,
     removeTrackFromPlaylist, reorderPlaylistTracks, deletePlaylist,
     renamePlaylist, playPlaylist, setPlaybackRate, setVolume, setAudioPreset,
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
     getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
-    setSeamlessEnabled, clearAllData, toggleFavorite, loadDemoData,
+    setSeamlessEnabled, clearAllData, toggleFavorite,
     error, clearError, isLoading,
   ]);
 
@@ -1273,5 +1266,3 @@ export function useAudio() {
   }
   return context;
 }
-
-export { SAMPLE_TRACK };

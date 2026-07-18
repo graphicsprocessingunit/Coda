@@ -11,11 +11,10 @@ import { OfflineCacheService } from '../services/OfflineCacheService';
 
 interface SettingsProps {
   onClearData: () => void;
-  onLoadDemoData?: () => void;
   onClearCache?: () => void;
 }
 
-export function Settings({ onClearData, onLoadDemoData, onClearCache }: SettingsProps) {
+export function Settings({ onClearData, onClearCache }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
   const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
@@ -114,18 +113,6 @@ export function Settings({ onClearData, onLoadDemoData, onClearCache }: Settings
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data</Text>
           <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
-            {onLoadDemoData && (
-              <Pressable
-                style={styles.settingItem}
-                onPress={onLoadDemoData}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons name="flask" size={24} color={colors.accent} />
-                  <Text style={[styles.settingText, { color: colors.accent }]}>Load Demo Content</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
-              </Pressable>
-            )}
             {onClearCache && cacheSize > 0 && (
               <Pressable
                 style={styles.settingItem}

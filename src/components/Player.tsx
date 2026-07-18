@@ -24,7 +24,6 @@ interface PlayerProps {
   repeatEnabled?: boolean;
   onToggleShuffle?: () => void;
   onToggleRepeat?: () => void;
-  onQueuePress?: () => void;
   onMorePress?: () => void;
   onToggleFavorite?: () => void;
   isFavorite?: boolean;
@@ -374,10 +373,5 @@ const styles = StyleSheet.create({
   lyricsContainer: {
     flex: 1,
     marginBottom: 16,
-  },
-  lyricsLoading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

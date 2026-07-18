@@ -85,7 +85,7 @@ interface QueueProps {
 
 export function Queue({ onClose }: QueueProps) {
   const { colors } = useTheme();
-  const { currentTrack, queue, removeFromQueue, reorderQueue, addToQueue, loadTrack, library } = useAudio();
+  const { currentTrack, queue, removeFromQueue, reorderQueue, shuffleQueue, addToQueue, loadTrack, library } = useAudio();
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -152,7 +152,7 @@ export function Queue({ onClose }: QueueProps) {
               <Ionicons name="add-circle" size={26} color={colors.accent} />
             </Pressable>
             {queue.length > 0 && (
-              <Pressable onPress={() => reorderQueue(0, queue.length)} hitSlop={10} style={styles.headerButton}>
+              <Pressable onPress={() => shuffleQueue()} hitSlop={10} style={styles.headerButton}>
                 <Ionicons name="shuffle" size={22} color={colors.textSecondary} />
               </Pressable>
             )}
@@ -400,28 +400,6 @@ const styles = StyleSheet.create({
   },
   trackArtist: {
     fontSize: 13,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,

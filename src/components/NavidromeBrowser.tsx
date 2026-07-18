@@ -535,25 +535,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 15,
-  },
   errorContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -562,20 +543,5 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 12,
     fontSize: 15,
-  },
-  notConnected: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  notConnectedText: {
-    marginTop: 12,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  notConnectedHint: {
-    marginTop: 6,
-    fontSize: 14,
   },
 });

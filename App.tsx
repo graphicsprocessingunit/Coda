@@ -274,7 +274,8 @@ function LibraryScreen() {
 
   const handleConfirmCreatePlaylist = () => {
     if (newPlaylistName.trim() && selectedTrack) {
-      createPlaylist(newPlaylistName.trim());
+      const newId = createPlaylist(newPlaylistName.trim());
+      addTrackToPlaylist(newId, selectedTrack);
       setShowPlaylistModal(false);
       setShowCreateFromLibraryModal(false);
       setSelectedTrack(null);
@@ -458,7 +459,7 @@ function PlaylistsStack() {
 
 function SettingsScreen() {
   const { colors } = useTheme();
-  const { clearAllData, loadDemoData } = useAudio();
+  const { clearAllData } = useAudio();
 
   const handleClearData = () => {
     Alert.alert(
@@ -472,23 +473,6 @@ function SettingsScreen() {
           onPress: async () => {
             await clearAllData();
             Alert.alert('Success', 'All data has been cleared.');
-          },
-        },
-      ]
-    );
-  };
-
-  const handleLoadDemoData = () => {
-    Alert.alert(
-      'Load Demo Content',
-      'This will replace your current library with demo tracks for testing.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Load',
-          onPress: async () => {
-            await loadDemoData();
-            Alert.alert('Success', 'Demo content loaded. Swipe down to refresh.');
           },
         },
       ]
@@ -515,7 +499,7 @@ function SettingsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Settings onClearData={handleClearData} onLoadDemoData={handleLoadDemoData} onClearCache={handleClearCache} />
+      <Settings onClearData={handleClearData} onClearCache={handleClearCache} />
       <MiniPlayer />
     </View>
   );

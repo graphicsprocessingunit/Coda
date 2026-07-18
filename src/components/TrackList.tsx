@@ -381,58 +381,6 @@ const styles = StyleSheet.create({
   trackArtist: {
     fontSize: 14,
   },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    marginTop: 4,
-  },
-  onboardingTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  onboardingSubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-    paddingHorizontal: 40,
-  },
-  onboardingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginBottom: 12,
-    minWidth: 220,
-  },
-  onboardingButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  onboardingButtonSecondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-  },
-  onboardingButtonTextSecondary: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   filterBar: {
     flexDirection: 'row',
     alignItems: 'center',
