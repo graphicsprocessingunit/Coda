@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, Pressable } from 'react-native';
 
 interface LyricsDisplayProps {
   lyrics: string;
@@ -7,6 +7,7 @@ interface LyricsDisplayProps {
   accentColor: string;
   textColor: string;
   secondaryColor: string;
+  onSeek?: (position: number) => void;
 }
 
 interface LyricLine {
@@ -44,6 +45,7 @@ export function LyricsDisplay({
   accentColor,
   textColor,
   secondaryColor,
+  onSeek,
 }: LyricsDisplayProps) {
   const scrollRef = useRef<ScrollView>(null);
   const synced = useMemo(() => isSynced(lyrics), [lyrics]);
@@ -79,19 +81,24 @@ export function LyricsDisplay({
         >
           <View style={{ height: 60 }} />
           {lines.map((line, i) => (
-            <Text
+            <Pressable
               key={`${line.time}-${i}`}
-              style={[
-                styles.line,
-                {
-                  color: i === activeIndex ? accentColor : secondaryColor,
-                  fontWeight: i === activeIndex ? '700' : '400',
-                  fontSize: i === activeIndex ? 20 : 17,
-                },
-              ]}
+              onPress={() => onSeek?.(line.time)}
+              style={styles.linePressable}
             >
-              {line.text}
-            </Text>
+              <Text
+                style={[
+                  styles.line,
+                  {
+                    color: i === activeIndex ? accentColor : secondaryColor,
+                    fontWeight: i === activeIndex ? '700' : '400',
+                    fontSize: i === activeIndex ? 20 : 17,
+                  },
+                ]}
+              >
+                {line.text}
+              </Text>
+            </Pressable>
           ))}
           <View style={{ height: 120 }} />
         </ScrollView>
@@ -132,5 +139,8 @@ const styles = StyleSheet.create({
   line: {
     textAlign: 'center',
     lineHeight: 36,
+  },
+  linePressable: {
+    paddingVertical: 2,
   },
 });

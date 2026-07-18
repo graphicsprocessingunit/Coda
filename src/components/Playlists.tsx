@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, TextInput, Modal, Alert, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, TextInput, Modal, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
 import { Playlist, TrackMetadata } from '../context/AudioContext';
 import { EmptyState } from './EmptyState';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface PlaylistsProps {
   playlists: Playlist[];
@@ -97,6 +98,9 @@ export function Playlists({
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Playlist | null>(null);
   const [renameName, setRenameName] = useState('');
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogActions, setDialogActions] = useState<{ label: string; onPress: () => void; style?: 'default' | 'destructive' | 'cancel' }[]>([]);
 
   const handleCreatePlaylist = () => {
     if (playlistName.trim()) {
@@ -116,17 +120,17 @@ export function Playlists({
   };
 
   const handleLongPress = (item: Playlist) => {
-    const options: any[] = [
-      { text: 'Cancel', style: 'cancel' as const },
+    const actions: { label: string; onPress: () => void; style?: 'default' | 'destructive' | 'cancel' }[] = [
+      { label: 'Cancel', style: 'cancel', onPress: () => {} },
       {
-        text: 'Delete',
-        style: 'destructive' as const,
+        label: 'Delete',
+        style: 'destructive',
         onPress: () => onDeletePlaylist(item.id),
       },
     ];
     if (onRenamePlaylist) {
-      options.unshift({
-        text: 'Rename',
+      actions.unshift({
+        label: 'Rename',
         onPress: () => {
           setRenameTarget(item);
           setRenameName(item.name);
@@ -134,7 +138,9 @@ export function Playlists({
         },
       });
     }
-    Alert.alert('Playlist', `"${item.name}"`, options);
+    setDialogTitle(item.name);
+    setDialogActions(actions);
+    setDialogVisible(true);
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -271,6 +277,12 @@ export function Playlists({
           </Pressable>
         </Pressable>
       </Modal>
+      <ConfirmDialog
+        visible={dialogVisible}
+        title={dialogTitle}
+        actions={dialogActions}
+        onClose={() => setDialogVisible(false)}
+      />
     </SafeAreaView>
   );
 }

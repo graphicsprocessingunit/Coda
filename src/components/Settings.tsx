@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, Pressable, Modal, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
@@ -291,19 +291,28 @@ export function Settings({ onClearData }: SettingsProps) {
         transparent={true}
         onRequestClose={() => setShowNavidrome(false)}
       >
-        <View style={modalStyles.overlay}>
-          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
-            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[modalStyles.title, { color: colors.text }]}>Navidrome</Text>
-              <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
-                <Ionicons name="close" size={28} color={colors.textSecondary} />
-              </Pressable>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={modalStyles.overlay}>
+            <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+              <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+                <Text style={[modalStyles.title, { color: colors.text }]}>Navidrome</Text>
+                <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
+                  <Ionicons name="close" size={28} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 40 }}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
+                <NavidromeSettingsSection />
+              </ScrollView>
             </View>
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-              <NavidromeSettingsSection />
-            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

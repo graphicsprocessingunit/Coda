@@ -219,6 +219,7 @@ export function Player({
               accentColor={colors.accent}
               textColor={colors.text}
               secondaryColor={colors.textSecondary}
+              onSeek={onSeek}
             />
           ) : lyricsText === '' ? (
             <EmptyState

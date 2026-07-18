@@ -183,6 +183,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const libraryRef = useRef<TrackMetadata[]>([]);
   const preloadRef = useRef<AudioPlayer | null>(null);
   const preloadedUriRef = useRef<string | null>(null);
+  const isLoadedRef = useRef(false);
 
   const debouncedSavePosition = useCallback((position: number) => {
     if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
@@ -360,16 +361,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           crossfadeDurationRef.current = 2;
         }
       }
+
+      isLoadedRef.current = true;
     };
 
     loadSavedData();
   }, []);
 
   useEffect(() => {
+    if (!isLoadedRef.current) return;
     StorageService.saveLibrary(library);
   }, [library]);
 
   useEffect(() => {
+    if (!isLoadedRef.current) return;
     StorageService.savePlaylists(playlists);
   }, [playlists]);
 
@@ -380,6 +385,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [currentTrack]);
 
   useEffect(() => {
+    if (!isLoadedRef.current) return;
     StorageService.saveQueue(queue);
   }, [queue]);
 

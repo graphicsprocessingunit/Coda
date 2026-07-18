@@ -56,6 +56,7 @@ interface ThemeContextType {
   theme: Theme;
   colors: ThemeColors;
   setTheme: (theme: Theme) => void;
+  isDark: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -89,10 +90,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const isDark = theme !== 'light';
+
   const value: ThemeContextType = {
     theme,
     colors: themes[theme],
     setTheme,
+    isDark,
   };
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

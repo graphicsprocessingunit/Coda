@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput } from 'react-native';
+import { Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, Playlist, TrackMetadata } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -17,6 +17,7 @@ import { MiniPlayer } from './src/components/MiniPlayer';
 import { Queue } from './src/components/Queue';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TrackInfo } from './src/components/TrackInfo';
+import { ConfirmDialog } from './src/components/ConfirmDialog';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
@@ -215,6 +216,32 @@ function LibraryScreen() {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showCreateFromLibraryModal, setShowCreateFromLibraryModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogTitle, setDialogTitle] = useState('');
+  const [dialogMessage, setDialogMessage] = useState<string | undefined>();
+  const [dialogActions, setDialogActions] = useState<{ label: string; onPress: () => void; style?: 'default' | 'destructive' | 'cancel' }[]>([]);
+
+  const showTrackDialog = (track: TrackMetadata) => {
+    setDialogTitle(track.title);
+    setDialogMessage(track.artist);
+    setDialogActions([
+      { label: 'Play Next', onPress: () => playNextInQueue(track) },
+      { label: 'Add to Queue', onPress: () => addToQueue(track) },
+      {
+        label: 'Add to Playlist',
+        onPress: () => {
+          setSelectedTrack(track);
+          setShowPlaylistModal(true);
+        },
+      },
+      {
+        label: track.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
+        onPress: () => toggleFavorite(track.uri),
+      },
+      { label: 'Cancel', style: 'cancel', onPress: () => {} },
+    ]);
+    setDialogVisible(true);
+  };
 
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
@@ -229,32 +256,7 @@ function LibraryScreen() {
   };
 
   const handleTrackLongPress = (track: TrackMetadata) => {
-    Alert.alert(
-      track.title,
-      track.artist,
-      [
-        {
-          text: 'Play Next',
-          onPress: () => playNextInQueue(track),
-        },
-        {
-          text: 'Add to Queue',
-          onPress: () => addToQueue(track),
-        },
-        {
-          text: 'Add to Playlist',
-          onPress: () => {
-            setSelectedTrack(track);
-            setShowPlaylistModal(true);
-          },
-        },
-        {
-          text: track.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-          onPress: () => toggleFavorite(track.uri),
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
+    showTrackDialog(track);
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -292,6 +294,13 @@ function LibraryScreen() {
         onToggleFavorite={toggleFavorite}
       />
       <MiniPlayer />
+      <ConfirmDialog
+        visible={dialogVisible}
+        title={dialogTitle}
+        message={dialogMessage}
+        actions={dialogActions}
+        onClose={() => setDialogVisible(false)}
+      />
       <Modal
         visible={showPlaylistModal}
         animationType="slide"
@@ -457,29 +466,39 @@ function PlaylistsStack() {
 function SettingsScreen() {
   const { colors } = useTheme();
   const { clearAllData } = useAudio();
+  const [clearDialogVisible, setClearDialogVisible] = useState(false);
+  const [successDialogVisible, setSuccessDialogVisible] = useState(false);
 
   const handleClearData = () => {
-    Alert.alert(
-      'Clear All Data',
-      'This will delete all your playlists, library, and settings. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: async () => {
-            await clearAllData();
-            Alert.alert('Success', 'All data has been cleared.');
-          },
-        },
-      ]
-    );
+    setClearDialogVisible(true);
+  };
+
+  const handleConfirmClear = async () => {
+    await clearAllData();
+    setSuccessDialogVisible(true);
   };
 
   return (
     <View style={{ flex: 1 }}>
       <Settings onClearData={handleClearData} />
       <MiniPlayer />
+      <ConfirmDialog
+        visible={clearDialogVisible}
+        title="Clear All Data"
+        message="This will delete all your playlists, library, and settings. This action cannot be undone."
+        actions={[
+          { label: 'Cancel', style: 'cancel', onPress: () => {} },
+          { label: 'Clear', style: 'destructive', onPress: handleConfirmClear },
+        ]}
+        onClose={() => setClearDialogVisible(false)}
+      />
+      <ConfirmDialog
+        visible={successDialogVisible}
+        title="Success"
+        message="All data has been cleared."
+        actions={[{ label: 'OK', onPress: () => {} }]}
+        onClose={() => setSuccessDialogVisible(false)}
+      />
     </View>
   );
 }
@@ -540,6 +559,11 @@ function MainTabs() {
   );
 }
 
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? 'light' : 'dark'} />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -547,7 +571,7 @@ export default function App() {
         <AudioProvider>
           <NavigationContainer>
             <MainTabs />
-            <StatusBar style="auto" />
+            <ThemedStatusBar />
           </NavigationContainer>
         </AudioProvider>
       </ThemeProvider>
