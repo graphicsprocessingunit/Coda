@@ -5,6 +5,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
+import { OfflineCacheService } from '../services/OfflineCacheService';
 import { loadDemoContent } from '../services/DemoDataService';
 
 export interface TrackMetadata {
@@ -18,6 +19,8 @@ export interface TrackMetadata {
   navidromeId?: string;
   isFavorite?: boolean;
   playCount?: number;
+  cachedUri?: string;
+  cachedArtwork?: string;
 }
 
 export interface Playlist {
@@ -433,8 +436,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       preloadedUriRef.current = null;
     }
 
+    const resolvedUri = metadata.cachedUri || trackUri;
     const player = createAudioPlayer(
-      { uri: trackUri },
+      { uri: resolvedUri },
       { updateInterval: 500 }
     );
 
@@ -511,12 +515,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const preloadUri = nextTrack.cachedUri || nextTrack.uri;
       const preloadPlayer = createAudioPlayer(
-        { uri: nextTrack.uri },
+        { uri: preloadUri },
         { updateInterval: 1000 }
       );
       preloadRef.current = preloadPlayer;
-      preloadedUriRef.current = nextTrack.uri;
+      preloadedUriRef.current = preloadUri;
     } catch (error) {
       console.error('Preload error:', error);
       preloadRef.current = null;
@@ -551,7 +556,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         preloadedUriRef.current = null;
       } else {
         newPlayer = createAudioPlayer(
-          { uri: nextTrack.uri },
+          { uri: nextTrack.cachedUri || nextTrack.uri },
           { updateInterval: 500 }
         );
       }
@@ -1107,6 +1112,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem('@coda_crossfade_duration');
     await AsyncStorage.removeItem('@coda_seamless_enabled');
     await NavidromeService.clearCredentials();
+    OfflineCacheService.clearCache();
     navidromeCredentialsRef.current = null;
     setNavidromeConnected(false);
     setNavidromeServerUrl('');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,13 +7,15 @@ import { useAudio } from '../context/AudioContext';
 import { SleepTimerSection } from './SleepTimer';
 import { AudioEffectsSection } from './AudioEffects';
 import { NavidromeSettingsSection } from './NavidromeSettings';
+import { OfflineCacheService } from '../services/OfflineCacheService';
 
 interface SettingsProps {
   onClearData: () => void;
   onLoadDemoData?: () => void;
+  onClearCache?: () => void;
 }
 
-export function Settings({ onClearData, onLoadDemoData }: SettingsProps) {
+export function Settings({ onClearData, onLoadDemoData, onClearCache }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
   const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
@@ -21,6 +23,11 @@ export function Settings({ onClearData, onLoadDemoData }: SettingsProps) {
   const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [showCrossfade, setShowCrossfade] = useState(false);
   const [showNavidrome, setShowNavidrome] = useState(false);
+  const [cacheSize, setCacheSize] = useState(0);
+
+  useEffect(() => {
+    setCacheSize(OfflineCacheService.getCacheSize());
+  }, []);
 
   const themes: { key: Theme; name: string; icon: string }[] = [
     { key: 'dark', name: 'Dark', icon: 'moon' },
@@ -115,6 +122,26 @@ export function Settings({ onClearData, onLoadDemoData }: SettingsProps) {
                 <View style={styles.settingLeft}>
                   <Ionicons name="flask" size={24} color={colors.accent} />
                   <Text style={[styles.settingText, { color: colors.accent }]}>Load Demo Content</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </Pressable>
+            )}
+            {onClearCache && cacheSize > 0 && (
+              <Pressable
+                style={styles.settingItem}
+                onPress={() => {
+                  onClearCache();
+                  setCacheSize(0);
+                }}
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons name="cloud-offline" size={24} color={colors.accent} />
+                  <View>
+                    <Text style={[styles.settingText, { color: colors.accent }]}>Clear Cache</Text>
+                    <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                      {(cacheSize / (1024 * 1024)).toFixed(1)} MB
+                    </Text>
+                  </View>
                 </View>
                 <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
               </Pressable>
@@ -380,6 +407,10 @@ const styles = StyleSheet.create({
   settingText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  settingSubtext: {
+    fontSize: 12,
+    marginTop: 2,
   },
   settingValue: {
     fontSize: 16,

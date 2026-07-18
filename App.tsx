@@ -18,6 +18,7 @@ import { Queue } from './src/components/Queue';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TrackInfo } from './src/components/TrackInfo';
 import { AudioEffectsSection } from './src/components/AudioEffects';
+import { OfflineCacheService } from './src/services/OfflineCacheService';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
 import { Toast } from './src/components/Toast';
@@ -494,9 +495,27 @@ function SettingsScreen() {
     );
   };
 
+  const handleClearCache = () => {
+    Alert.alert(
+      'Clear Cache',
+      'This will delete all cached Navidrome tracks and artwork.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            OfflineCacheService.clearCache();
+            Alert.alert('Success', 'Cache cleared.');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
-      <Settings onClearData={handleClearData} onLoadDemoData={handleLoadDemoData} />
+      <Settings onClearData={handleClearData} onLoadDemoData={handleLoadDemoData} onClearCache={handleClearCache} />
       <MiniPlayer />
     </View>
   );

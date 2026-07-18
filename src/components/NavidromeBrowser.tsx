@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, Pressable, FlatList, Image, TextInput } from 'react-native';
+import { View, StyleSheet, Text, Pressable, FlatList, Image, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { NavidromeService, NavidromeArtist, NavidromeAlbum, NavidromeSong, NavidromeCredentials } from '../services/NavidromeService';
+import { OfflineCacheService } from '../services/OfflineCacheService';
 import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
 
@@ -102,10 +103,24 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     setSearching(false);
   };
 
-  const handleAddSong = (song: NavidromeSong) => {
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+
+  const handleAddSong = async (song: NavidromeSong) => {
     if (!creds) return;
     const track = NavidromeService.songToTrackMetadata(creds, song);
-    onAddTracks([track]);
+    setDownloadingIds(prev => new Set(prev).add(song.id));
+    try {
+      const offlineTrack = await OfflineCacheService.downloadTrackForOffline(creds, track);
+      onAddTracks([offlineTrack]);
+    } catch {
+      onAddTracks([track]);
+    } finally {
+      setDownloadingIds(prev => {
+        const next = new Set(prev);
+        next.delete(song.id);
+        return next;
+      });
+    }
   };
 
   const handlePlaySong = async (song: NavidromeSong, context: NavidromeSong[]) => {
@@ -190,8 +205,12 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
         <Text style={[styles.listItemTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
         <Text style={[styles.listItemSubtitle, { color: colors.textSecondary }]}>{item.artist || 'Unknown Artist'}</Text>
       </View>
-      <Pressable hitSlop={8} onPress={() => handleAddSong(item)} style={styles.addButton}>
-        <Ionicons name="add-circle" size={28} color={colors.accent} />
+      <Pressable hitSlop={8} onPress={() => handleAddSong(item)} style={styles.addButton} disabled={downloadingIds.has(item.id)}>
+        {downloadingIds.has(item.id) ? (
+          <ActivityIndicator size={24} color={colors.accent} />
+        ) : (
+          <Ionicons name="add-circle" size={28} color={colors.accent} />
+        )}
       </Pressable>
     </Pressable>
   );
@@ -247,8 +266,12 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
         <Text style={[styles.listItemTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
         <Text style={[styles.listItemSubtitle, { color: colors.textSecondary }]}>{item.artist || 'Unknown Artist'} · Song</Text>
       </View>
-      <Pressable hitSlop={8} onPress={() => handleAddSong(item)} style={styles.addButton}>
-        <Ionicons name="add-circle" size={28} color={colors.accent} />
+      <Pressable hitSlop={8} onPress={() => handleAddSong(item)} style={styles.addButton} disabled={downloadingIds.has(item.id)}>
+        {downloadingIds.has(item.id) ? (
+          <ActivityIndicator size={24} color={colors.accent} />
+        ) : (
+          <Ionicons name="add-circle" size={28} color={colors.accent} />
+        )}
       </Pressable>
     </Pressable>
   );
