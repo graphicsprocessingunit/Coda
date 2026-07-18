@@ -56,9 +56,10 @@ export function LyricsDisplay({
 
   const activeIndex = useMemo(() => {
     if (!synced || lines.length === 0) return -1;
+    const delay = 300;
     let idx = -1;
     for (let i = 0; i < lines.length; i++) {
-      if (playbackPosition >= lines[i].time) idx = i;
+      if (playbackPosition >= lines[i].time + delay) idx = i;
       else break;
     }
     return idx;
