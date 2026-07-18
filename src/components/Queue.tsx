@@ -1,110 +1,83 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, PanResponder, TextInput, Modal } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { EmptyState } from './EmptyState';
+import { PanResponderView } from './PanResponderView';
 
 const ITEM_HEIGHT = 68;
 
-function PanResponderView({
+const QueueTrackItem = React.memo(function QueueTrackItem({
+  item,
   index,
-  itemCount,
+  isDragging,
+  isOver,
+  colors,
+  queueLength,
+  onPress,
+  onDelete,
   onDragStart,
   onDragMove,
   onDragEnd,
   onDragCancel,
-  children,
 }: {
+  item: TrackMetadata;
   index: number;
-  itemCount: number;
-  onDragStart: () => void;
+  isDragging: boolean;
+  isOver: boolean;
+  colors: any;
+  queueLength: number;
+  onPress: (item: TrackMetadata) => void;
+  onDelete: (index: number) => void;
+  onDragStart: (index: number) => void;
   onDragMove: (overIndex: number) => void;
-  onDragEnd: (fromIndex: number, toIndex: number) => void;
+  onDragEnd: (from: number, to: number) => void;
   onDragCancel: () => void;
-  children: React.ReactNode;
 }) {
-  const indexRef = useRef(index);
-  const itemCountRef = useRef(itemCount);
-  const onDragStartRef = useRef(onDragStart);
-  const onDragMoveRef = useRef(onDragMove);
-  const onDragEndRef = useRef(onDragEnd);
-  const onDragCancelRef = useRef(onDragCancel);
-  const currentOffset = useRef(0);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragActive = useRef(false);
-  const grantXY = useRef({ x: 0, y: 0 });
-
-  indexRef.current = index;
-  itemCountRef.current = itemCount;
-  onDragStartRef.current = onDragStart;
-  onDragMoveRef.current = onDragMove;
-  onDragEndRef.current = onDragEnd;
-  onDragCancelRef.current = onDragCancel;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => false,
-      onPanResponderTerminationRequest: () => !dragActive.current,
-      onPanResponderGrant: (_, gestureState) => {
-        dragActive.current = false;
-        currentOffset.current = 0;
-        grantXY.current = { x: gestureState.x0, y: gestureState.y0 };
-        longPressTimer.current = setTimeout(() => {
-          dragActive.current = true;
-          onDragStartRef.current();
-        }, 400);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (!dragActive.current) {
-          const dx = Math.abs(gestureState.moveX - grantXY.current.x);
-          const dy = Math.abs(gestureState.moveY - grantXY.current.y);
-          if (dx > 10 || dy > 10) {
-            if (longPressTimer.current) {
-              clearTimeout(longPressTimer.current);
-              longPressTimer.current = null;
-            }
-          }
-          return;
-        }
-        const newOffset = gestureState.dy;
-        currentOffset.current = newOffset;
-        const rawIndex = indexRef.current + Math.round(newOffset / ITEM_HEIGHT);
-        const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, rawIndex));
-        onDragMoveRef.current(clampedIndex);
-      },
-      onPanResponderRelease: () => {
-        if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-        if (dragActive.current) {
-          const finalIndex = indexRef.current + Math.round(currentOffset.current / ITEM_HEIGHT);
-          const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, finalIndex));
-          onDragEndRef.current(indexRef.current, clampedIndex);
-          dragActive.current = false;
-        }
-      },
-      onPanResponderTerminate: () => {
-        if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-        dragActive.current = false;
-        onDragCancelRef.current();
-      },
-    })
-  ).current;
-
   return (
-    <View {...panResponder.panHandlers} style={styles.gripHandle}>
-      {children}
-    </View>
+    <SwipeableRow onDelete={() => onDelete(index)}>
+      <Animated.View
+        style={[
+          styles.trackItemRow,
+          { backgroundColor: colors.background },
+          isDragging && { opacity: 0.5, zIndex: 100 },
+          isOver && { backgroundColor: colors.accent + '15' },
+        ]}
+      >
+        <Pressable
+          style={styles.trackContent}
+          onPress={() => onPress(item)}
+        >
+          <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
+          {item.artwork ? (
+            <Image source={{ uri: item.artwork }} style={styles.artwork} />
+          ) : (
+            <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
+              <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
+            </View>
+          )}
+          <View style={styles.trackInfo}>
+            <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+            <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
+          </View>
+        </Pressable>
+        <PanResponderView
+          index={index}
+          itemCount={queueLength}
+          onDragStart={() => onDragStart(index)}
+          onDragMove={onDragMove}
+          onDragEnd={onDragEnd}
+          onDragCancel={onDragCancel}
+        >
+          <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+        </PanResponderView>
+      </Animated.View>
+    </SwipeableRow>
   );
-}
+});
 
 interface QueueProps {
   onClose: () => void;
@@ -135,51 +108,27 @@ export function Queue({ onClose }: QueueProps) {
     const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
 
     return (
-      <SwipeableRow onDelete={() => removeFromQueue(index)}>
-        <Animated.View
-          style={[
-            styles.trackItemRow,
-            { backgroundColor: colors.background },
-            isDragging && { opacity: 0.5, zIndex: 100 },
-            isOver && { backgroundColor: colors.accent + '15' },
-          ]}
-        >
-          <Pressable
-            style={styles.trackContent}
-            onPress={() => handlePlayTrack(item)}
-          >
-            <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
-            {item.artwork ? (
-              <Image source={{ uri: item.artwork }} style={styles.artwork} />
-            ) : (
-              <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
-                <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
-              </View>
-            )}
-            <View style={styles.trackInfo}>
-              <Text style={[styles.trackTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
-              <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
-            </View>
-          </Pressable>
-          <PanResponderView
-            index={index}
-            itemCount={queue.length}
-            onDragStart={() => setDraggingIndex(index)}
-            onDragMove={(overIndex) => setDragOverIndex(overIndex)}
-            onDragEnd={(from, to) => {
-              setDraggingIndex(null);
-              setDragOverIndex(null);
-              if (from !== to) reorderQueue(from, to);
-            }}
-            onDragCancel={() => {
-              setDraggingIndex(null);
-              setDragOverIndex(null);
-            }}
-          >
-            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-          </PanResponderView>
-        </Animated.View>
-      </SwipeableRow>
+      <QueueTrackItem
+        item={item}
+        index={index}
+        isDragging={isDragging}
+        isOver={isOver}
+        colors={colors}
+        queueLength={queue.length}
+        onPress={handlePlayTrack}
+        onDelete={removeFromQueue}
+        onDragStart={setDraggingIndex}
+        onDragMove={setDragOverIndex}
+        onDragEnd={(from, to) => {
+          setDraggingIndex(null);
+          setDragOverIndex(null);
+          if (from !== to) reorderQueue(from, to);
+        }}
+        onDragCancel={() => {
+          setDraggingIndex(null);
+          setDragOverIndex(null);
+        }}
+      />
     );
   };
 
@@ -451,13 +400,6 @@ const styles = StyleSheet.create({
   },
   trackArtist: {
     fontSize: 13,
-  },
-  gripHandle: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyState: {
     alignItems: 'center',

@@ -17,13 +17,13 @@ interface PlaylistsProps {
   trackToAdd?: TrackMetadata | null;
 }
 
-function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack, onAddToPlaylist }: {
+const AnimatedPlaylistItem = React.memo(function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack, onAddToPlaylist }: {
   item: Playlist;
   colors: any;
-  onPress: () => void;
-  onLongPress: () => void;
+  onPress: (item: Playlist) => void;
+  onLongPress: (item: Playlist) => void;
   canAddTrack: boolean;
-  onAddToPlaylist: () => void;
+  onAddToPlaylist: (id: string) => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -48,8 +48,8 @@ function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack,
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
       <Pressable
         style={[styles.playlistItem, { backgroundColor: colors.background }]}
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={() => onPress(item)}
+        onLongPress={() => onLongPress(item)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
@@ -69,7 +69,7 @@ function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack,
         {canAddTrack && (
           <Pressable
             style={styles.addToButton}
-            onPress={onAddToPlaylist}
+            onPress={() => onAddToPlaylist(item.id)}
           >
             <Ionicons name="add-circle" size={24} color={colors.accent} />
           </Pressable>
@@ -79,7 +79,7 @@ function AnimatedPlaylistItem({ item, colors, onPress, onLongPress, canAddTrack,
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 export function Playlists({
   playlists,

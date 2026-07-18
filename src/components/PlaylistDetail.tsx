@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing, PanResponder } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -7,107 +7,7 @@ import { useAudio, TrackMetadata, Playlist } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 import { EmptyState } from './EmptyState';
-
-function PanResponderView({
-  index,
-  itemCount,
-  itemHeight,
-  onDragStart,
-  onDragMove,
-  onDragEnd,
-  onDragCancel,
-  children,
-}: {
-  index: number;
-  itemCount: number;
-  itemHeight: number;
-  onDragStart: () => void;
-  onDragMove: (overIndex: number) => void;
-  onDragEnd: (fromIndex: number, toIndex: number) => void;
-  onDragCancel: () => void;
-  children: React.ReactNode;
-}) {
-  const indexRef = useRef(index);
-  const itemCountRef = useRef(itemCount);
-  const itemHeightRef = useRef(itemHeight);
-  const onDragStartRef = useRef(onDragStart);
-  const onDragMoveRef = useRef(onDragMove);
-  const onDragEndRef = useRef(onDragEnd);
-  const onDragCancelRef = useRef(onDragCancel);
-  const currentOffset = useRef(0);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragActive = useRef(false);
-  const grantXY = useRef({ x: 0, y: 0 });
-
-  indexRef.current = index;
-  itemCountRef.current = itemCount;
-  itemHeightRef.current = itemHeight;
-  onDragStartRef.current = onDragStart;
-  onDragMoveRef.current = onDragMove;
-  onDragEndRef.current = onDragEnd;
-  onDragCancelRef.current = onDragCancel;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => false,
-      onPanResponderTerminationRequest: () => !dragActive.current,
-      onPanResponderGrant: (_, gestureState) => {
-        dragActive.current = false;
-        currentOffset.current = 0;
-        grantXY.current = { x: gestureState.x0, y: gestureState.y0 };
-        longPressTimer.current = setTimeout(() => {
-          dragActive.current = true;
-          onDragStartRef.current();
-        }, 400);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (!dragActive.current) {
-          const dx = Math.abs(gestureState.moveX - grantXY.current.x);
-          const dy = Math.abs(gestureState.moveY - grantXY.current.y);
-          if (dx > 10 || dy > 10) {
-            if (longPressTimer.current) {
-              clearTimeout(longPressTimer.current);
-              longPressTimer.current = null;
-            }
-          }
-          return;
-        }
-        const newOffset = gestureState.dy;
-        currentOffset.current = newOffset;
-        const rawIndex = indexRef.current + Math.round(newOffset / itemHeightRef.current);
-        const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, rawIndex));
-        onDragMoveRef.current(clampedIndex);
-      },
-      onPanResponderRelease: () => {
-        if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-        if (dragActive.current) {
-          const finalIndex = indexRef.current + Math.round(currentOffset.current / itemHeightRef.current);
-          const clampedIndex = Math.max(0, Math.min(itemCountRef.current - 1, finalIndex));
-          onDragEndRef.current(indexRef.current, clampedIndex);
-          dragActive.current = false;
-        }
-      },
-      onPanResponderTerminate: () => {
-        if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-          longPressTimer.current = null;
-        }
-        dragActive.current = false;
-        onDragCancelRef.current();
-      },
-    })
-  ).current;
-
-  return (
-    <View {...panResponder.panHandlers} style={styles.gripHandle}>
-      {children}
-    </View>
-  );
-}
+import { PanResponderView } from './PanResponderView';
 
 interface PlaylistDetailProps {
   playlist: Playlist;
@@ -122,12 +22,12 @@ interface PlaylistDetailProps {
   library?: TrackMetadata[];
 }
 
-function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
+const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
   colors: any;
-  onPress: () => void;
+  onPress: (item: TrackMetadata) => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -152,7 +52,7 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
       <Pressable
         style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
-        onPress={onPress}
+        onPress={() => onPress(item)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
@@ -188,7 +88,7 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | undefined; index: number; colors: any }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -653,13 +553,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     width: 40,
-  },
-  gripHandle: {
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyState: {
     flex: 1,

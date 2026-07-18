@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
@@ -658,15 +658,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }, [playNextFromQueue, startCrossfade]);
 
-  const loadTrack = async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
+  const loadTrack = useCallback(async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
     try {
       await loadTrackInternal(trackUri, metadata, autoPlay);
     } catch (error) {
       console.error('Error loading track:', error);
     }
-  };
+  }, [loadTrackInternal]);
 
-  const play = async () => {
+  const play = useCallback(async () => {
     if (!soundRef.current) return;
     try {
       const status = soundRef.current.currentStatus;
@@ -677,9 +677,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error playing:', error);
     }
-  };
+  }, []);
 
-  const pause = async () => {
+  const pause = useCallback(async () => {
     if (soundRef.current) {
       try {
         soundRef.current.pause();
@@ -692,9 +692,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         console.error('Error pausing:', error);
       }
     }
-  };
+  }, []);
 
-  const seekTo = async (position: number) => {
+  const seekTo = useCallback(async (position: number) => {
     if (soundRef.current) {
       try {
         seekingRef.current = true;
@@ -709,9 +709,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         console.error('Error seeking:', error);
       }
     }
-  };
+  }, []);
 
-  const skipNext = () => {
+  const skipNext = useCallback(() => {
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current += 1;
       const track = historyRef.current[historyIndexRef.current];
@@ -719,9 +719,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     } else {
       playNextFromQueue();
     }
-  };
+  }, [loadTrackInternal, playNextFromQueue]);
 
-  const skipPrevious = () => {
+  const skipPrevious = useCallback(() => {
     if (historyIndexRef.current > 0) {
       historyIndexRef.current -= 1;
       const track = historyRef.current[historyIndexRef.current];
@@ -729,34 +729,34 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     } else if (soundRef.current) {
       seekTo(0);
     }
-  };
+  }, [loadTrackInternal, seekTo]);
 
-  const removeFromQueue = (index: number) => {
+  const removeFromQueue = useCallback((index: number) => {
     setQueue((prev) => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
-  const addToQueue = (track: TrackMetadata) => {
+  const addToQueue = useCallback((track: TrackMetadata) => {
     setQueue((prev) => [...prev, track]);
-  };
+  }, []);
 
-  const playNextInQueue = (track: TrackMetadata) => {
+  const playNextInQueue = useCallback((track: TrackMetadata) => {
     setQueue((prev) => [track, ...prev]);
-  };
+  }, []);
 
-  const reorderQueue = (fromIndex: number, toIndex: number) => {
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
     setQueue((prev) => {
       const next = [...prev];
       const [moved] = next.splice(fromIndex, 1);
       next.splice(toIndex, 0, moved);
       return next;
     });
-  };
+  }, []);
 
-  const addToLibrary = (tracks: TrackMetadata[]) => {
+  const addToLibrary = useCallback((tracks: TrackMetadata[]) => {
     setLibrary((prev) => [...prev, ...tracks]);
-  };
+  }, []);
 
-  const removeFromLibrary = (trackUri: string) => {
+  const removeFromLibrary = useCallback((trackUri: string) => {
     setLibrary((prev) => prev.filter((track) => track.uri !== trackUri));
     setPlaylists((prev) =>
       prev.map((playlist) => ({
@@ -764,9 +764,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         tracks: playlist.tracks.filter((t) => t.uri !== trackUri),
       }))
     );
-  };
+  }, []);
 
-  const toggleFavorite = (uri: string) => {
+  const toggleFavorite = useCallback((uri: string) => {
     setLibrary((prev) =>
       prev.map((track) =>
         track.uri === uri ? { ...track, isFavorite: !track.isFavorite } : track
@@ -775,17 +775,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCurrentTrack((prev) =>
       prev?.uri === uri ? { ...prev, isFavorite: !prev.isFavorite } : prev
     );
-  };
+  }, []);
 
-  const incrementPlayCount = (uri: string) => {
+  const incrementPlayCount = useCallback((uri: string) => {
     setLibrary((prev) =>
       prev.map((track) =>
         track.uri === uri ? { ...track, playCount: (track.playCount || 0) + 1 } : track
       )
     );
-  };
+  }, []);
 
-  const playFromLibrary = async (track: TrackMetadata) => {
+  const playFromLibrary = useCallback(async (track: TrackMetadata) => {
     const trackIndex = library.findIndex((t) => t.uri === track.uri);
     const history = trackIndex >= 0 ? library.slice(0, trackIndex) : [];
     const queueTracks = trackIndex >= 0 ? library.slice(trackIndex + 1) : [];
@@ -797,9 +797,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     incrementPlayCount(track.uri);
 
     await loadTrackInternal(track.uri, track, true);
-  };
+  }, [library, incrementPlayCount, loadTrackInternal]);
 
-  const createPlaylist = (name: string) => {
+  const createPlaylist = useCallback((name: string) => {
     const newPlaylist: Playlist = {
       id: Date.now().toString(),
       name,
@@ -807,9 +807,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       createdAt: Date.now(),
     };
     setPlaylists((prev) => [...prev, newPlaylist]);
-  };
+  }, []);
 
-  const addTrackToPlaylist = (playlistId: string, track: TrackMetadata) => {
+  const addTrackToPlaylist = useCallback((playlistId: string, track: TrackMetadata) => {
     setPlaylists((prev) =>
       prev.map((playlist) => {
         if (playlist.id !== playlistId) return playlist;
@@ -817,9 +817,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         return { ...playlist, tracks: [...playlist.tracks, track] };
       })
     );
-  };
+  }, []);
 
-  const removeTrackFromPlaylist = (playlistId: string, trackUri: string) => {
+  const removeTrackFromPlaylist = useCallback((playlistId: string, trackUri: string) => {
     setPlaylists((prev) =>
       prev.map((playlist) =>
         playlist.id === playlistId
@@ -827,9 +827,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           : playlist
       )
     );
-  };
+  }, []);
 
-  const reorderPlaylistTracks = (playlistId: string, fromIndex: number, toIndex: number) => {
+  const reorderPlaylistTracks = useCallback((playlistId: string, fromIndex: number, toIndex: number) => {
     setPlaylists((prev) =>
       prev.map((playlist) => {
         if (playlist.id !== playlistId) return playlist;
@@ -839,21 +839,21 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         return { ...playlist, tracks };
       })
     );
-  };
+  }, []);
 
-  const deletePlaylist = (playlistId: string) => {
+  const deletePlaylist = useCallback((playlistId: string) => {
     setPlaylists((prev) => prev.filter((playlist) => playlist.id !== playlistId));
-  };
+  }, []);
 
-  const renamePlaylist = (playlistId: string, newName: string) => {
+  const renamePlaylist = useCallback((playlistId: string, newName: string) => {
     setPlaylists((prev) =>
       prev.map((playlist) =>
         playlist.id === playlistId ? { ...playlist, name: newName } : playlist
       )
     );
-  };
+  }, []);
 
-  const playPlaylist = async (playlist: Playlist) => {
+  const playPlaylist = useCallback(async (playlist: Playlist) => {
     if (playlist.tracks.length > 0) {
       const tracks = shuffleEnabledRef.current ? shuffleArray(playlist.tracks) : playlist.tracks;
       const firstTrack = tracks[0];
@@ -867,9 +867,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
       await loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
-  };
+  }, [incrementPlayCount, loadTrackInternal]);
 
-  const playFromPlaylist = async (playlist: Playlist, track: TrackMetadata) => {
+  const playFromPlaylist = useCallback(async (playlist: Playlist, track: TrackMetadata) => {
     if (playlist.tracks.length === 0) return;
 
     const tracks = shuffleEnabledRef.current ? shuffleArray(playlist.tracks) : playlist.tracks;
@@ -886,9 +886,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     incrementPlayCount(track.uri);
 
     await loadTrackInternal(track.uri, track, true);
-  };
+  }, [incrementPlayCount, loadTrackInternal]);
 
-  const toggleShuffle = () => {
+  const toggleShuffle = useCallback(() => {
     setShuffleEnabled((prev) => {
       const next = !prev;
       shuffleEnabledRef.current = next;
@@ -897,17 +897,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
       return next;
     });
-  };
+  }, []);
 
-  const toggleRepeat = () => {
+  const toggleRepeat = useCallback(() => {
     setRepeatEnabled((prev) => {
       const next = !prev;
       repeatEnabledRef.current = next;
       return next;
     });
-  };
+  }, []);
 
-  const applyPreset = (preset: AudioPreset) => {
+  const applyPreset = useCallback((preset: AudioPreset) => {
     const presets: Record<AudioPreset, { rate: number; vol: number }> = {
       flat: { rate: 1.0, vol: 1.0 },
       relaxed: { rate: 0.9, vol: 1.0 },
@@ -924,9 +924,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         soundRef.current.volume = p.vol;
       } catch {}
     }
-  };
+  }, []);
 
-  const setPlaybackRate = async (rate: number) => {
+  const setPlaybackRate = useCallback(async (rate: number) => {
     setPlaybackRateState(rate);
     setAudioPresetState('flat');
     if (soundRef.current) {
@@ -934,23 +934,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         soundRef.current.setPlaybackRate(rate, 'high');
       } catch {}
     }
-  };
+  }, []);
 
-  const setVolume = async (vol: number) => {
+  const setVolume = useCallback(async (vol: number) => {
     setVolumeState(vol);
     if (soundRef.current) {
       try {
         soundRef.current.volume = vol;
       } catch {}
     }
-  };
+  }, []);
 
-  const setAudioPreset = (preset: AudioPreset) => {
+  const setAudioPreset = useCallback((preset: AudioPreset) => {
     setAudioPresetState(preset);
     applyPreset(preset);
-  };
+  }, [applyPreset]);
 
-  const setCrossfadeEnabled = (enabled: boolean) => {
+  const setCrossfadeEnabled = useCallback((enabled: boolean) => {
     setCrossfadeEnabledState(enabled);
     crossfadeEnabledRef.current = enabled;
     AsyncStorage.setItem('@coda_crossfade_enabled', enabled.toString());
@@ -959,9 +959,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       seamlessEnabledRef.current = false;
       AsyncStorage.removeItem('@coda_seamless_enabled');
     }
-  };
+  }, []);
 
-  const setCrossfadeDuration = (seconds: number) => {
+  const setCrossfadeDuration = useCallback((seconds: number) => {
     setCrossfadeDurationState(seconds);
     crossfadeDurationRef.current = seconds;
     AsyncStorage.setItem('@coda_crossfade_duration', seconds.toString());
@@ -970,9 +970,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       seamlessEnabledRef.current = false;
       AsyncStorage.removeItem('@coda_seamless_enabled');
     }
-  };
+  }, []);
 
-  const setSeamlessEnabled = (enabled: boolean) => {
+  const setSeamlessEnabled = useCallback((enabled: boolean) => {
     setSeamlessEnabledState(enabled);
     seamlessEnabledRef.current = enabled;
     AsyncStorage.setItem('@coda_seamless_enabled', enabled.toString());
@@ -986,9 +986,70 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.setItem('@coda_crossfade_duration', '2');
       }
     }
-  };
+  }, []);
 
-  const clearAllData = async () => {
+  const FADE_DURATION = 30;
+
+  const cancelSleepTimer = useCallback(() => {
+    if (sleepTimerRef.current) {
+      clearInterval(sleepTimerRef.current);
+      sleepTimerRef.current = null;
+    }
+    if (fadeIntervalRef.current) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
+    if (isFadingRef.current) {
+      isFadingRef.current = false;
+      if (soundRef.current) {
+        soundRef.current.volume = preFadeVolumeRef.current;
+      }
+    }
+    setSleepTimerEnd(null);
+    setSleepTimerRemaining(0);
+    AsyncStorage.removeItem('@coda_sleep_timer_end');
+  }, []);
+
+  const setSleepTimer = useCallback((minutes: number) => {
+    cancelSleepTimer();
+    const endTime = Date.now() + minutes * 60 * 1000;
+    setSleepTimerEnd(endTime);
+    setSleepTimerRemaining(minutes * 60);
+    AsyncStorage.setItem('@coda_sleep_timer_end', endTime.toString());
+
+    sleepTimerRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      setSleepTimerRemaining(remaining);
+
+      if (remaining <= FADE_DURATION && !isFadingRef.current && remaining > 0 && soundRef.current) {
+        isFadingRef.current = true;
+        preFadeVolumeRef.current = volumeRef.current;
+        fadeIntervalRef.current = setInterval(() => {
+          const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+          if (rem <= 0) {
+            if (fadeIntervalRef.current) {
+              clearInterval(fadeIntervalRef.current);
+              fadeIntervalRef.current = null;
+            }
+            return;
+          }
+          const fraction = rem / FADE_DURATION;
+          const newVol = preFadeVolumeRef.current * fraction;
+          if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
+        }, 100);
+      }
+
+      if (remaining <= 0) {
+        cancelSleepTimer();
+        if (soundRef.current) {
+          soundRef.current.pause();
+          setIsPlaying(false);
+        }
+      }
+    }, 1000);
+  }, [cancelSleepTimer]);
+
+  const clearAllData = useCallback(async () => {
     await StorageService.clearAll();
     destroyPlayer(soundRef.current);
     soundRef.current = null;
@@ -1033,72 +1094,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     crossfadeDurationRef.current = 0;
     seamlessEnabledRef.current = false;
     cancelSleepTimer();
-  };
+    await AsyncStorage.removeItem('@coda_crossfade_enabled');
+    await AsyncStorage.removeItem('@coda_crossfade_duration');
+    await AsyncStorage.removeItem('@coda_seamless_enabled');
+    await NavidromeService.clearCredentials();
+    navidromeCredentialsRef.current = null;
+    setNavidromeConnected(false);
+    setNavidromeServerUrl('');
+  }, [cancelSleepTimer]);
 
-  const loadDemoData = async () => {
+  const loadDemoData = useCallback(async () => {
     await loadDemoContent(setLibrary);
-  };
-
-  const FADE_DURATION = 30;
-
-  const cancelSleepTimer = () => {
-    if (sleepTimerRef.current) {
-      clearInterval(sleepTimerRef.current);
-      sleepTimerRef.current = null;
-    }
-    if (fadeIntervalRef.current) {
-      clearInterval(fadeIntervalRef.current);
-      fadeIntervalRef.current = null;
-    }
-    if (isFadingRef.current) {
-      isFadingRef.current = false;
-      if (soundRef.current) {
-        soundRef.current.volume = preFadeVolumeRef.current;
-      }
-    }
-    setSleepTimerEnd(null);
-    setSleepTimerRemaining(0);
-    AsyncStorage.removeItem('@coda_sleep_timer_end');
-  };
-
-  const setSleepTimer = (minutes: number) => {
-    cancelSleepTimer();
-    const endTime = Date.now() + minutes * 60 * 1000;
-    setSleepTimerEnd(endTime);
-    setSleepTimerRemaining(minutes * 60);
-    AsyncStorage.setItem('@coda_sleep_timer_end', endTime.toString());
-
-    sleepTimerRef.current = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-      setSleepTimerRemaining(remaining);
-
-      if (remaining <= FADE_DURATION && !isFadingRef.current && remaining > 0 && soundRef.current) {
-        isFadingRef.current = true;
-        preFadeVolumeRef.current = volumeRef.current;
-        fadeIntervalRef.current = setInterval(() => {
-          const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-          if (rem <= 0) {
-            if (fadeIntervalRef.current) {
-              clearInterval(fadeIntervalRef.current);
-              fadeIntervalRef.current = null;
-            }
-            return;
-          }
-          const fraction = rem / FADE_DURATION;
-          const newVol = preFadeVolumeRef.current * fraction;
-          if (soundRef.current) soundRef.current.volume = Math.max(0, newVol);
-        }, 100);
-      }
-
-      if (remaining <= 0) {
-        cancelSleepTimer();
-        if (soundRef.current) {
-          soundRef.current.pause();
-          setIsPlaying(false);
-        }
-      }
-    }, 1000);
-  };
+  }, []);
 
   const checkSleepTimerExpiry = useCallback(() => {
     if (!sleepTimerEnd) return;
@@ -1135,7 +1142,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const checkSleepTimerExpiryRef = useRef(checkSleepTimerExpiry);
   checkSleepTimerExpiryRef.current = checkSleepTimerExpiry;
 
-  const connectNavidrome = async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+  const connectNavidrome = useCallback(async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);
     if (result.ok) {
       const salt = generateSalt();
@@ -1147,20 +1154,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setNavidromeServerUrl(url);
     }
     return result;
-  };
+  }, []);
 
-  const disconnectNavidrome = async () => {
+  const disconnectNavidrome = useCallback(async () => {
     await NavidromeService.clearCredentials();
     navidromeCredentialsRef.current = null;
     setNavidromeConnected(false);
     setNavidromeServerUrl('');
-  };
+  }, []);
 
-  const getNavidromeCredentials = (): NavidromeCredentials | null => {
+  const getNavidromeCredentials = useCallback((): NavidromeCredentials | null => {
     return navidromeCredentialsRef.current;
-  };
+  }, []);
 
-  const value: AudioContextType = {
+  const value: AudioContextType = useMemo(() => ({
     currentTrack,
     isPlaying,
     queue,
@@ -1218,7 +1225,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     clearAllData,
     toggleFavorite,
     loadDemoData,
-  };
+  }), [
+    currentTrack, isPlaying, queue, library, playlists,
+    playbackPosition, duration, shuffleEnabled, repeatEnabled,
+    playbackRate, volume, audioPreset, sleepTimerEnd, sleepTimerRemaining,
+    navidromeConnected, navidromeServerUrl, crossfadeEnabled, crossfadeDuration,
+    seamlessEnabled,
+    loadTrack, play, pause, seekTo, skipNext, skipPrevious,
+    removeFromQueue, addToQueue, playNextInQueue, reorderQueue, setQueue,
+    toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary,
+    playFromLibrary, playFromPlaylist, createPlaylist, addTrackToPlaylist,
+    removeTrackFromPlaylist, reorderPlaylistTracks, deletePlaylist,
+    renamePlaylist, playPlaylist, setPlaybackRate, setVolume, setAudioPreset,
+    setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
+    getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
+    setSeamlessEnabled, clearAllData, toggleFavorite, loadDemoData,
+  ]);
 
   return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
 }

@@ -21,14 +21,14 @@ interface TrackListProps {
   onToggleFavorite?: (uri: string) => void;
 }
 
-function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite }: {
+const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
   colors: any;
-  onPress: () => void;
-  onLongPress?: () => void;
-  onToggleFavorite?: () => void;
+  onPress: (item: TrackMetadata) => void;
+  onLongPress?: (item: TrackMetadata) => void;
+  onToggleFavorite?: (uri: string) => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -53,8 +53,8 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
       <Pressable
         style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={() => onPress(item)}
+        onLongPress={onLongPress ? () => onLongPress(item) : undefined}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
@@ -96,7 +96,7 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
           <Ionicons name="play" size={20} color={colors.accent} />
         )}
         {onToggleFavorite && (
-          <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(); }} hitSlop={8} style={styles.heartButton}>
+          <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(item.uri); }} hitSlop={8} style={styles.heartButton}>
             <Ionicons
               name="heart"
               size={20}
@@ -107,7 +107,7 @@ function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLon
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite }: TrackListProps) {
   const { colors } = useTheme();
@@ -149,9 +149,9 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         index={index}
         isCurrentTrack={isCurrentTrack}
         colors={colors}
-        onPress={() => onTrackPress(item)}
-        onLongPress={() => onTrackLongPress?.(item)}
-        onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(item.uri) : undefined}
+        onPress={onTrackPress}
+        onLongPress={onTrackLongPress}
+        onToggleFavorite={onToggleFavorite}
       />
     );
 
