@@ -11,13 +11,11 @@
 
     :root {
       --bg: #000000;
-      --card: #1C1C1E;
+      --surface: #1C1C1E;
       --text: #FFFFFF;
-      --text-secondary: #8E8E93;
+      --text-dim: #8E8E93;
       --accent: #007AFF;
       --border: #2C2C2E;
-      --purple: #7C3AED;
-      --indigo: #4F46E5;
     }
 
     body {
@@ -28,71 +26,80 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+    .container { max-width: 720px; margin: 0 auto; padding: 0 24px; }
 
-    /* Hero */
+    /* ── Hero ── */
     .hero {
       text-align: center;
-      padding: 80px 0 60px;
+      padding: 100px 0 72px;
       position: relative;
       overflow: hidden;
     }
     .hero::before {
       content: '';
       position: absolute;
-      top: -200px;
+      top: -240px;
       left: 50%;
       transform: translateX(-50%);
-      width: 600px;
-      height: 600px;
-      background: radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+      width: 700px;
+      height: 700px;
+      background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 65%);
       pointer-events: none;
+      animation: pulse 6s ease-in-out infinite alternate;
+    }
+    @keyframes pulse {
+      0%   { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      100% { opacity: 1;   transform: translateX(-50%) scale(1.08); }
     }
     .hero-logo {
-      width: 120px;
-      height: 120px;
-      margin: 0 auto 32px;
-      border-radius: 28px;
+      width: 112px;
+      height: 112px;
+      margin: 0 auto 28px;
+      border-radius: 26px;
       overflow: hidden;
-      box-shadow: 0 8px 40px rgba(124,58,237,0.3);
+      box-shadow: 0 0 60px rgba(124,58,237,0.35), 0 0 120px rgba(124,58,237,0.1);
+      animation: float 4s ease-in-out infinite alternate;
+    }
+    @keyframes float {
+      0%   { transform: translateY(0); }
+      100% { transform: translateY(-6px); }
     }
     .hero-logo svg { display: block; width: 100%; height: 100%; }
     .hero h1 {
-      font-size: 56px;
+      font-size: 52px;
       font-weight: 800;
       letter-spacing: -1.5px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    .hero .tagline {
-      font-size: 20px;
-      color: var(--text-secondary);
-      margin-bottom: 40px;
+    .tagline {
+      font-size: 19px;
+      color: var(--text-dim);
+      margin-bottom: 36px;
       font-weight: 400;
     }
     .badges {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       justify-content: center;
       flex-wrap: wrap;
-      margin-bottom: 40px;
+      margin-bottom: 36px;
     }
     .badge {
-      display: inline-block;
-      padding: 6px 14px;
+      padding: 5px 13px;
       border-radius: 20px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
-      background: var(--card);
-      color: var(--text-secondary);
+      background: var(--surface);
+      color: var(--text-dim);
       border: 1px solid var(--border);
     }
     .download-buttons {
       display: flex;
-      gap: 16px;
+      gap: 14px;
       justify-content: center;
       flex-wrap: wrap;
     }
@@ -100,119 +107,149 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 14px 28px;
-      border-radius: 14px;
-      font-size: 16px;
+      padding: 13px 26px;
+      border-radius: 13px;
+      font-size: 15px;
       font-weight: 600;
       text-decoration: none;
       color: #fff;
       transition: transform 0.2s, box-shadow 0.2s;
     }
-    .dl-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .dl-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
     .dl-btn-android { background: #34A853; }
     .dl-btn-ios { background: #007AFF; }
-    .dl-btn svg { width: 20px; height: 20px; fill: currentColor; }
+    .dl-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
-    /* Sections */
-    section { padding: 80px 0; }
+    /* ── Sections ── */
+    section { padding: 64px 0; }
     .section-label {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1.5px;
       color: var(--accent);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       text-align: center;
     }
     .section-title {
-      font-size: 36px;
+      font-size: 28px;
       font-weight: 700;
       text-align: center;
-      margin-bottom: 48px;
-      letter-spacing: -0.5px;
+      margin-bottom: 32px;
+      letter-spacing: -0.3px;
     }
 
-    /* Features Grid */
-    .features-grid {
+    /* ── About ── */
+    .about-text {
+      font-size: 17px;
+      color: var(--text-dim);
+      text-align: center;
+      max-width: 560px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+    .about-text strong { color: var(--text); font-weight: 600; }
+
+    /* ── Install ── */
+    .install-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
     }
-    .feature-card {
-      background: var(--card);
+    .install-card {
+      background: var(--surface);
       border-radius: 16px;
-      padding: 24px;
+      padding: 28px 24px;
       border: 1px solid var(--border);
-      transition: border-color 0.2s;
     }
-    .feature-card:hover { border-color: var(--accent); }
-    .feature-icon {
-      font-size: 28px;
-      margin-bottom: 12px;
+    .install-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
     }
-    .feature-card h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 6px;
+    .install-card .platform {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
     }
-    .feature-card p {
+    .install-card ol {
+      list-style: none;
+      counter-reset: step;
+    }
+    .install-card li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 28px;
+      margin-bottom: 10px;
       font-size: 14px;
-      color: var(--text-secondary);
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+    .install-card li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 1px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .install-card .note {
+      margin-top: 14px;
+      padding: 10px 12px;
+      background: rgba(255,200,0,0.08);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #FFC107;
       line-height: 1.5;
     }
 
-    /* Screenshots */
-    .screenshots-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
-    .screenshot {
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      background: var(--card);
-    }
-    .screenshot img {
-      width: 100%;
-      display: block;
-    }
-
-    /* Tech Stack */
-    .tech-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-    }
-    .tech-pill {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 18px;
-      background: var(--card);
+    /* ── Dev ── */
+    .dev-commands {
+      background: var(--surface);
       border-radius: 12px;
+      padding: 20px 24px;
       border: 1px solid var(--border);
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 2;
+      color: var(--text-dim);
+      overflow-x: auto;
     }
-    .tech-pill .label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    .dev-commands .prompt { color: var(--accent); }
+    .dev-commands .comment { color: #48484A; }
+    .readme-link {
+      display: inline-block;
+      margin-top: 16px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    .tech-pill .value {
-      font-size: 15px;
-      font-weight: 600;
-    }
+    .readme-link:hover { text-decoration: underline; }
 
-    /* Footer */
+    /* ── Footer ── */
     footer {
       padding: 40px 0;
       text-align: center;
       border-top: 1px solid var(--border);
     }
     footer p {
-      color: var(--text-secondary);
-      font-size: 14px;
+      color: var(--text-dim);
+      font-size: 13px;
     }
     footer a {
       color: var(--accent);
@@ -220,13 +257,13 @@
     }
     footer a:hover { text-decoration: underline; }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      .hero h1 { font-size: 40px; }
-      .hero .tagline { font-size: 17px; }
-      .features-grid, .screenshots-grid, .tech-grid { grid-template-columns: 1fr; }
-      section { padding: 60px 0; }
-      .hero { padding: 60px 0 40px; }
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 38px; }
+      .tagline { font-size: 16px; }
+      .install-grid { grid-template-columns: 1fr; }
+      .hero { padding: 72px 0 56px; }
+      section { padding: 48px 0; }
     }
   </style>
 </head>
@@ -274,126 +311,66 @@
     </div>
   </section>
 
-  <!-- Features -->
+  <!-- About -->
   <section>
     <div class="container">
-      <p class="section-label">Features</p>
-      <h2 class="section-title">Everything you need</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">&#127925;</div>
-          <h3>Local Library</h3>
-          <p>Import audio files with automatic metadata and artwork extraction.</p>
+      <p class="section-label">About</p>
+      <h2 class="section-title">What is Coda?</h2>
+      <p class="about-text">
+        <strong>Coda</strong> is a music player for iOS and Android built with Expo and React Native.
+        Import your local library, connect to a <strong>Navidrome</strong> server, or both.
+        Enjoy <strong>crossfade</strong>, <strong>gapless playback</strong>, <strong>synced lyrics</strong>,
+        and four beautiful themes — all without ads or subscriptions.
+      </p>
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section>
+    <div class="container">
+      <p class="section-label">Get Started</p>
+      <h2 class="section-title">Install Coda</h2>
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>Android</h3>
+          <p class="platform">APK Download</p>
+          <ol>
+            <li>Download the APK from the button above</li>
+            <li>Open the file on your Android device</li>
+            <li>Enable <strong style="color:#fff">Install from unknown sources</strong> if prompted</li>
+            <li>Tap Install</li>
+          </ol>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#128279;</div>
-          <h3>Navidrome Streaming</h3>
-          <p>Connect to any Subsonic-compatible server to stream your collection.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#127911;</div>
-          <h3>Crossfade</h3>
-          <p>Smooth transitions between tracks with configurable duration.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#127926;</div>
-          <h3>Gapless Playback</h3>
-          <p>Seamless transitions with next-track pre-buffering.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#128241;</div>
-          <h3>Lock Screen Controls</h3>
-          <p>Full playback controls in Control Center and on the lock screen.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#127912;</div>
-          <h3>4 Themes</h3>
-          <p>Dark, Light, Midnight, and Ocean with full accent color support.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#128203;</div>
-          <h3>Smart Playlists</h3>
-          <p>Create, rename, reorder, and manage playlists with drag-and-drop.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#10084;&#65039;</div>
-          <h3>Favorites</h3>
-          <p>Heart your tracks with play count tracking and filtering.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#128221;</div>
-          <h3>Synced Lyrics</h3>
-          <p>Auto-scrolling lyrics with tap-to-seek and highlighted current line.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#9200;</div>
-          <h3>Sleep Timer</h3>
-          <p>Set a countdown with a smooth 30-second volume fade-out.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#128256;</div>
-          <h3>Queue Management</h3>
-          <p>Full queue with drag-to-reorder, swipe-to-delete, and library search.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">&#127926;</div>
-          <h3>Audio Effects</h3>
-          <p>EQ presets, speed control, and volume adjustment.</p>
+        <div class="install-card">
+          <h3>iOS</h3>
+          <p class="platform">IPA Sideload</p>
+          <ol>
+            <li>Download the IPA from the button above</li>
+            <li>Sideload using <strong style="color:#fff">AltStore</strong>, <strong style="color:#fff">SideStore</strong>, or any IPA signing tool</li>
+            <li>Trust the developer profile in Settings &rarr; General &rarr; VPN &amp; Device Management</li>
+          </ol>
+          <div class="note">Apps signed with a free Apple ID expire after 7 days and must be refreshed.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Screenshots -->
+  <!-- For Developers -->
   <section>
     <div class="container">
-      <p class="section-label">Gallery</p>
-      <h2 class="section-title">See it in action</h2>
-      <div class="screenshots-grid">
-        <div class="screenshot"><img src="../assets/screenshots/Player.png" alt="Player" loading="lazy"></div>
-        <div class="screenshot"><img src="../assets/screenshots/Library.png" alt="Library" loading="lazy"></div>
-        <div class="screenshot"><img src="../assets/screenshots/Lyrics.png" alt="Lyrics" loading="lazy"></div>
-        <div class="screenshot"><img src="../assets/screenshots/Playlist.png" alt="Playlists" loading="lazy"></div>
-        <div class="screenshot"><img src="../assets/screenshots/Queue.png" alt="Queue" loading="lazy"></div>
-        <div class="screenshot"><img src="../assets/screenshots/Settings.png" alt="Settings" loading="lazy"></div>
+      <p class="section-label">For Developers</p>
+      <h2 class="section-title">Build from source</h2>
+      <div class="dev-commands">
+        <span class="comment"># Clone the repository</span><br>
+        <span class="prompt">$</span> git clone https://github.com/graphicsprocessingunit/Coda.git<br>
+        <span class="prompt">$</span> cd Coda<br><br>
+        <span class="comment"># Install dependencies</span><br>
+        <span class="prompt">$</span> npm install<br><br>
+        <span class="comment"># Generate native projects and start dev server</span><br>
+        <span class="prompt">$</span> npx expo prebuild --clean<br>
+        <span class="prompt">$</span> npx expo start
       </div>
-    </div>
-  </section>
-
-  <!-- Tech Stack -->
-  <section>
-    <div class="container">
-      <p class="section-label">Built with</p>
-      <h2 class="section-title">Tech stack</h2>
-      <div class="tech-grid">
-        <div class="tech-pill">
-          <div><div class="label">Framework</div><div class="value">Expo SDK 54</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">UI</div><div class="value">React Native 0.81</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Language</div><div class="value">TypeScript</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Audio</div><div class="value">expo-audio</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">State</div><div class="value">React Context</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Persistence</div><div class="value">AsyncStorage</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Navigation</div><div class="value">React Navigation</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Lyrics</div><div class="value">LRCLIB API</div></div>
-        </div>
-        <div class="tech-pill">
-          <div><div class="label">Icons</div><div class="value">Ionicons</div></div>
-        </div>
-      </div>
+      <a href="https://github.com/graphicsprocessingunit/Coda#readme" class="readme-link">Read the full README &rarr;</a>
     </div>
   </section>
 
@@ -401,7 +378,7 @@
   <footer>
     <div class="container">
       <p>Built with care by <a href="https://github.com/graphicsprocessingunit">Graphicsprocessingunit</a></p>
-      <p style="margin-top: 8px; font-size: 12px;">Copyright &copy; 2025 All Rights Reserved</p>
+      <p style="margin-top: 6px; font-size: 11px;">Copyright &copy; 2025 All Rights Reserved</p>
     </div>
   </footer>
 

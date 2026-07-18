@@ -10,9 +10,10 @@ import { NavidromeSettingsSection } from './NavidromeSettings';
 
 interface SettingsProps {
   onClearData: () => void;
+  onLoadDemoData?: () => void;
 }
 
-export function Settings({ onClearData }: SettingsProps) {
+export function Settings({ onClearData, onLoadDemoData }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
   const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
@@ -106,6 +107,18 @@ export function Settings({ onClearData }: SettingsProps) {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data</Text>
           <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
+            {onLoadDemoData && (
+              <Pressable
+                style={styles.settingItem}
+                onPress={onLoadDemoData}
+              >
+                <View style={styles.settingLeft}>
+                  <Ionicons name="flask" size={24} color={colors.accent} />
+                  <Text style={[styles.settingText, { color: colors.accent }]}>Load Demo Content</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </Pressable>
+            )}
             <Pressable
               style={styles.settingItem}
               onPress={onClearData}

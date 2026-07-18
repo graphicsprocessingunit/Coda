@@ -5,6 +5,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
+import { loadDemoContent } from '../services/DemoDataService';
 
 export interface TrackMetadata {
   title: string;
@@ -85,6 +86,7 @@ interface AudioContextType {
   setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
   toggleFavorite: (uri: string) => void;
+  loadDemoData: () => Promise<void>;
 }
 
 const AudioCtx = createContext<AudioContextType | undefined>(undefined);
@@ -1033,6 +1035,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     cancelSleepTimer();
   };
 
+  const loadDemoData = async () => {
+    await loadDemoContent(setLibrary);
+  };
+
   const FADE_DURATION = 30;
 
   const cancelSleepTimer = () => {
@@ -1211,6 +1217,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setSeamlessEnabled,
     clearAllData,
     toggleFavorite,
+    loadDemoData,
   };
 
   return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;

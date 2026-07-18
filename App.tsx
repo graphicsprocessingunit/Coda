@@ -456,7 +456,7 @@ function PlaylistsStack() {
 
 function SettingsScreen() {
   const { colors } = useTheme();
-  const { clearAllData } = useAudio();
+  const { clearAllData, loadDemoData } = useAudio();
 
   const handleClearData = () => {
     Alert.alert(
@@ -476,9 +476,26 @@ function SettingsScreen() {
     );
   };
 
+  const handleLoadDemoData = () => {
+    Alert.alert(
+      'Load Demo Content',
+      'This will replace your current library with demo tracks for testing.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Load',
+          onPress: async () => {
+            await loadDemoData();
+            Alert.alert('Success', 'Demo content loaded. Swipe down to refresh.');
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
-      <Settings onClearData={handleClearData} />
+      <Settings onClearData={handleClearData} onLoadDemoData={handleLoadDemoData} />
       <MiniPlayer />
     </View>
   );
