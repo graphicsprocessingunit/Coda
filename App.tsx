@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput } from 'react-native';
+import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, Playlist, TrackMetadata } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -20,6 +20,7 @@ import { TrackInfo } from './src/components/TrackInfo';
 import { AudioEffectsSection } from './src/components/AudioEffects';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
+import { Toast } from './src/components/Toast';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -503,9 +504,21 @@ function SettingsScreen() {
 
 function MainTabs() {
   const { colors } = useTheme();
+  const { error, clearError, isLoading } = useAudio();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={{ color: colors.textSecondary, marginTop: 16, fontSize: 15 }}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <Tab.Navigator
+    <View style={{ flex: 1 }}>
+      {error && <Toast message={error} type="error" onDismiss={clearError} />}
+      <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -554,6 +567,7 @@ function MainTabs() {
         }}
       />
     </Tab.Navigator>
+    </View>
   );
 }
 

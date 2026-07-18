@@ -87,6 +87,9 @@ interface AudioContextType {
   clearAllData: () => void;
   toggleFavorite: (uri: string) => void;
   loadDemoData: () => Promise<void>;
+  error: string | null;
+  clearError: () => void;
+  isLoading: boolean;
 }
 
 const AudioCtx = createContext<AudioContextType | undefined>(undefined);
@@ -156,6 +159,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [seamlessEnabled, setSeamlessEnabledState] = useState(false);
   const [navidromeConnected, setNavidromeConnected] = useState(false);
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
 
   const soundRef = useRef<AudioPlayer | null>(null);
@@ -365,6 +370,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
 
       isLoadedRef.current = true;
+      setIsLoading(false);
     };
 
     loadSavedData();
@@ -663,6 +669,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       await loadTrackInternal(trackUri, metadata, autoPlay);
     } catch (error) {
       console.error('Error loading track:', error);
+      setError('Failed to load track');
     }
   }, [loadTrackInternal]);
 
@@ -676,6 +683,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error playing:', error);
+      setError('Playback error');
     }
   }, []);
 
@@ -690,6 +698,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('Error pausing:', error);
+        setError('Playback error');
       }
     }
   }, []);
@@ -1167,6 +1176,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return navidromeCredentialsRef.current;
   }, []);
 
+  const clearError = useCallback(() => setError(null), []);
+
   const value: AudioContextType = useMemo(() => ({
     currentTrack,
     isPlaying,
@@ -1225,6 +1236,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     clearAllData,
     toggleFavorite,
     loadDemoData,
+    error,
+    clearError,
+    isLoading,
   }), [
     currentTrack, isPlaying, queue, library, playlists,
     playbackPosition, duration, shuffleEnabled, repeatEnabled,
@@ -1240,6 +1254,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
     getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
     setSeamlessEnabled, clearAllData, toggleFavorite, loadDemoData,
+    error, clearError, isLoading,
   ]);
 
   return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
