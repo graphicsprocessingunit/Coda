@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import md5 from 'md5';
 import { TrackMetadata } from '../context/AudioContext';
 
@@ -54,7 +55,7 @@ function generateSalt(): string {
 export class NavidromeService {
   static async saveCredentials(creds: NavidromeCredentials): Promise<void> {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+      await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
     } catch (error) {
       console.error('Error saving Navidrome credentials:', error);
     }
@@ -62,7 +63,14 @@ export class NavidromeService {
 
   static async loadCredentials(): Promise<NavidromeCredentials | null> {
     try {
-      const data = await AsyncStorage.getItem(STORAGE_KEYS.CREDENTIALS);
+      let data = await SecureStore.getItemAsync(STORAGE_KEYS.CREDENTIALS);
+      if (!data) {
+        data = await AsyncStorage.getItem(STORAGE_KEYS.CREDENTIALS);
+        if (data) {
+          await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, data);
+          await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+        }
+      }
       return data ? JSON.parse(data) : null;
     } catch (error) {
       console.error('Error loading Navidrome credentials:', error);
@@ -72,6 +80,7 @@ export class NavidromeService {
 
   static async clearCredentials(): Promise<void> {
     try {
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.CREDENTIALS);
       await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
     } catch (error) {
       console.error('Error clearing Navidrome credentials:', error);
