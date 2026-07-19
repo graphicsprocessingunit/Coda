@@ -155,7 +155,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
 
 export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload }: TrackListProps) {
   const { colors } = useTheme();
-  const { navidromeConnected, addToLibrary } = useAudio();
+  const { navidromeConnected, addToLibrary, getNavidromeCredentials } = useAudio();
   const { activeDownloads, cancelDownload } = useDownloadProgress();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNavidrome, setShowNavidrome] = useState(false);
@@ -163,6 +163,9 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
   const [sortMode, setSortMode] = useState<SortMode>('title');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
+
+  const trackKeyExtractor = useMemo(() => (item: TrackMetadata) => item.uri, []);
+  const getItemLayout = useMemo(() => (_: any, index: number) => ({ length: 72, offset: 72 * index, index }), []);
 
   const filteredTracks = useMemo(() => {
     let result = tracks;
@@ -195,6 +198,19 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     setSelectedUris(new Set([track.uri]));
   };
 
+  const isTrackDownloadable = (track: TrackMetadata) => {
+    return track.source === 'navidrome' && !OfflineCacheService.isTrackCached(track) && !activeDownloads?.has(track.uri);
+  };
+
+  const handleTrackDownload = (track: TrackMetadata) => {
+    if (isTrackDownloadable(track)) {
+      const creds = getNavidromeCredentials();
+      if (creds) {
+        OfflineCacheService.downloadTrackForOffline(creds, track).catch(() => {});
+      }
+    }
+  };
+
   const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
     const downloadProgress = activeDownloads?.get(item.uri);
@@ -224,9 +240,13 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
       />
     );
 
-    if (onRemoveTrack && !selectionMode) {
+    if (!selectionMode) {
+      const canDownload = isTrackDownloadable(item);
       return (
-        <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
+        <SwipeableRow
+          onDelete={onRemoveTrack ? () => onRemoveTrack(item.uri) : undefined}
+          onDownload={canDownload ? () => handleTrackDownload(item) : undefined}
+        >
           {trackContent}
         </SwipeableRow>
       );
@@ -348,10 +368,11 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         <FlatList
           data={filteredTracks}
           renderItem={renderTrack}
-          keyExtractor={(item) => item.uri}
+          keyExtractor={trackKeyExtractor}
           style={styles.list}
           contentContainerStyle={styles.listContent}
-          getItemLayout={(_, index) => ({ length: 72, offset: 72 * (index ?? 0), index: index ?? 0 })}
+          getItemLayout={getItemLayout}
+          removeClippedSubviews
         />
       )}
 

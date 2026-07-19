@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { unstable_batchedUpdates } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
@@ -556,19 +557,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (autoPlay) player.play();
 
     const libMatch = libraryRef.current.find(t => t.uri === metadata.uri);
-    setCurrentTrack({ ...metadata, isFavorite: libMatch?.isFavorite ?? metadata.isFavorite ?? false });
+    unstable_batchedUpdates(() => {
+      setCurrentTrack({ ...metadata, isFavorite: libMatch?.isFavorite ?? metadata.isFavorite ?? false });
+      setPlaybackPosition(0);
+      const status = player.currentStatus;
+      if (status.isLoaded) {
+        setDuration((status.duration || 0) * 1000);
+      }
+      setIsPlaying(autoPlay);
+    });
     listeningStartRef.current = Date.now();
     scrobbleSubmittedRef.current = false;
     if (lastFmConnectedRef.current && lastFmCredsRef.current) {
       LastFmService.nowPlaying(lastFmCredsRef.current, metadata).catch(() => {});
     }
-    setPlaybackPosition(0);
-
-    const status = player.currentStatus;
-    if (status.isLoaded) {
-      setDuration((status.duration || 0) * 1000);
-    }
-    setIsPlaying(autoPlay);
 
     updateLockScreen(player, metadata);
 
@@ -582,19 +584,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (currentQueue.length > 0) {
       const nextTrack = currentQueue[0];
       const remainingQueue = currentQueue.slice(1);
-      setQueue(remainingQueue);
+      unstable_batchedUpdates(() => {
+        setQueue(remainingQueue);
+        incrementPlayCount(nextTrack.uri);
+      });
       historyRef.current.push(nextTrack);
       historyIndexRef.current = historyRef.current.length - 1;
-      incrementPlayCount(nextTrack.uri);
       loadTrackInternal(nextTrack.uri, nextTrack, true);
     } else if (sourceTracksRef.current.length > 0) {
       const tracks = sourceTracksRef.current;
       const firstTrack = tracks[0];
       const remainingTracks = tracks.slice(1);
-      setQueue(remainingTracks);
+      unstable_batchedUpdates(() => {
+        setQueue(remainingTracks);
+        incrementPlayCount(firstTrack.uri);
+      });
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
-      incrementPlayCount(firstTrack.uri);
       loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
   }, []);
@@ -759,12 +765,16 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const positionMs = (status.currentTime || 0) * 1000;
       const durationMs = (status.duration || 0) * 1000;
 
+      unstable_batchedUpdates(() => {
+        if (!seekingRef.current) {
+          setPlaybackPosition(positionMs);
+        }
+        setDuration(durationMs);
+        setIsPlaying(status.playing);
+      });
       if (!seekingRef.current) {
-        setPlaybackPosition(positionMs);
         debouncedSavePosition(positionMs);
       }
-      setDuration(durationMs);
-      setIsPlaying(status.playing);
 
       if (status.didJustFinish) {
         if (crossfadeActiveRef.current) {
@@ -1030,8 +1040,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     sourceTracksRef.current = library;
     historyRef.current = [...history, track];
     historyIndexRef.current = history.length;
-    setQueue(queueTracks);
-    incrementPlayCount(track.uri);
+    unstable_batchedUpdates(() => {
+      setQueue(queueTracks);
+      incrementPlayCount(track.uri);
+    });
 
     await loadTrackInternal(track.uri, track, true);
   }, [library, incrementPlayCount, loadTrackInternal]);
@@ -1129,8 +1141,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       sourceTracksRef.current = tracks;
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
-      setQueue(remainingTracks);
-      incrementPlayCount(firstTrack.uri);
+      unstable_batchedUpdates(() => {
+        setQueue(remainingTracks);
+        incrementPlayCount(firstTrack.uri);
+      });
 
       await loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
@@ -1149,8 +1163,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     sourceTracksRef.current = tracks;
     historyRef.current = [...history, track];
     historyIndexRef.current = history.length;
-    setQueue(queueTracks);
-    incrementPlayCount(track.uri);
+    unstable_batchedUpdates(() => {
+      setQueue(queueTracks);
+      incrementPlayCount(track.uri);
+    });
 
     await loadTrackInternal(track.uri, track, true);
   }, [incrementPlayCount, loadTrackInternal]);

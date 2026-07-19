@@ -532,7 +532,7 @@ function PlaylistDetailScreen({ route, navigation }: any) {
 }
 
 function SmartPlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, library, smartPlaylists, deleteSmartPlaylist, removeFromLibrary, loadTrack, playFromLibrary } = useAudio();
+  const { currentTrack, library, smartPlaylists, deleteSmartPlaylist, updateSmartPlaylist, removeFromLibrary, loadTrack, playFromLibrary } = useAudio();
   const { smartPlaylistId } = route.params;
   const playlist = smartPlaylists.find((sp: SmartPlaylist) => sp.id === smartPlaylistId);
 
@@ -552,6 +552,7 @@ function SmartPlaylistDetailScreen({ route, navigation }: any) {
         deleteSmartPlaylist(playlist.id);
         navigation.goBack();
       }}
+      onUpdate={updateSmartPlaylist}
     />
   );
 }

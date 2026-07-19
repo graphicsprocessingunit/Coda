@@ -5,7 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio } from '../context/AudioContext';
 
-export function MiniPlayer() {
+export const MiniPlayer = React.memo(function MiniPlayer() {
   const { currentTrack, isPlaying, play, pause, skipNext, skipPrevious } = useAudio();
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
@@ -63,7 +63,7 @@ export function MiniPlayer() {
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
@@ -228,6 +228,53 @@ export function Playlists({
     );
   };
 
+  type SectionItem = { id: string; type: 'header'; title: string; icon: string } | { id: string; type: 'smart'; data: SmartPlaylist } | { id: string; type: 'playlist'; data: Playlist };
+
+  const playlistSections = React.useMemo(() => {
+    const sections: { title: string; icon: string; data: SectionItem[] }[] = [];
+
+    if (smartPlaylists.length > 0) {
+      sections.push({
+        title: 'Smart Playlists',
+        icon: 'prism',
+        data: smartPlaylists.map(sp => ({ id: sp.id, type: 'smart' as const, data: sp })),
+      });
+    }
+
+    sections.push({
+      title: 'Playlists',
+      icon: 'list',
+      data: playlists.map(p => ({ id: p.id, type: 'playlist' as const, data: p })),
+    });
+
+    return sections;
+  }, [smartPlaylists, playlists]);
+
+  const renderSectionHeader = ({ section }: { section: { title: string; icon: string } }) => (
+    <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+      <Ionicons name={section.icon as any} size={18} color={colors.accent} />
+      <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>{section.title}</Text>
+    </View>
+  );
+
+  const renderPlaylistSectionItem = ({ item }: { item: SectionItem }) => {
+    if (item.type === 'smart') {
+      return renderSmartPlaylistItem({ item: item.data });
+    }
+    if (item.type === 'header') return null;
+    const canAddTrack = trackToAdd && !item.data.tracks.some((t) => t.uri === trackToAdd.uri);
+    return (
+      <AnimatedPlaylistItem
+        item={item.data}
+        colors={colors}
+        onPress={() => onPlaylistPress ? onPlaylistPress(item.data) : onPlayPlaylist(item.data)}
+        onLongPress={() => handleLongPress(item.data)}
+        canAddTrack={!!canAddTrack}
+        onAddToPlaylist={() => handleAddToPlaylist(item.data.id)}
+      />
+    );
+  };
+
   const renderSmartPlaylistItem = ({ item }: { item: SmartPlaylist }) => {
     const trackCount = library.length > 0 ? evaluateSmartPlaylist(library, item).length : 0;
 
@@ -281,60 +328,26 @@ export function Playlists({
         </View>
       </View>
 
-      <FlatList
-        data={[]}
-        renderItem={() => null}
-        ListHeaderComponent={() => (
-          <>
-            {smartPlaylists.length > 0 && (
-              <>
-                <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
-                  <Ionicons name="prism" size={18} color={colors.accent} />
-                  <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Smart Playlists</Text>
-                </View>
-                {smartPlaylists.map((item) => (
-                  <React.Fragment key={item.id}>
-                    {renderSmartPlaylistItem({ item })}
-                  </React.Fragment>
-                ))}
-              </>
-            )}
-
-            <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
-              <Ionicons name="list" size={18} color={colors.accent} />
-              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Playlists</Text>
-            </View>
-            {playlists.length === 0 && smartPlaylists.length === 0 ? (
-              <EmptyState
-                icon="list"
-                decorativeIcons={[
-                  { name: 'add-circle-outline', offset: { x: -25, y: -18 }, size: 18, delay: 400 },
-                  { name: 'musical-notes-outline', offset: { x: 25, y: 18 }, size: 16, delay: 600 },
-                ]}
-                title="No playlists yet"
-                subtitle="Tap + to create a playlist"
-              />
-            ) : (
-              playlists.map((item) => {
-                const canAddTrack = trackToAdd && !item.tracks.some((t) => t.uri === trackToAdd.uri);
-                return (
-                  <AnimatedPlaylistItem
-                    key={item.id}
-                    item={item}
-                    colors={colors}
-                    onPress={() => onPlaylistPress ? onPlaylistPress(item) : onPlayPlaylist(item)}
-                    onLongPress={() => handleLongPress(item)}
-                    canAddTrack={!!canAddTrack}
-                    onAddToPlaylist={() => handleAddToPlaylist(item.id)}
-                  />
-                );
-              })
-            )}
-          </>
-        )}
-        keyExtractor={() => 'dummy'}
+      <SectionList
+        sections={playlistSections}
+        renderItem={renderPlaylistSectionItem}
+        renderSectionHeader={renderSectionHeader}
+        keyExtractor={(item) => item.id}
         style={styles.list}
         contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled={false}
+        removeClippedSubviews
+        ListEmptyComponent={
+          <EmptyState
+            icon="list"
+            decorativeIcons={[
+              { name: 'add-circle-outline', offset: { x: -25, y: -18 }, size: 18, delay: 400 },
+              { name: 'musical-notes-outline', offset: { x: 25, y: 18 }, size: 16, delay: 600 },
+            ]}
+            title="No playlists yet"
+            subtitle="Tap + to create a playlist"
+          />
+        }
       />
 
       <Modal
