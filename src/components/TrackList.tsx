@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio, TrackMetadata } from '../context/AudioContext';
+import { useAudio, useDownloadProgress, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 import { EmptyState } from './EmptyState';
@@ -20,9 +20,13 @@ interface TrackListProps {
   onTrackLongPress?: (track: TrackMetadata) => void;
   onRemoveTrack?: (trackUri: string) => void;
   onToggleFavorite?: (uri: string) => void;
+  onBatchFavorite?: (uris: string[]) => void;
+  onBatchAddToPlaylist?: (uris: string[]) => void;
+  onBatchRemove?: (uris: string[]) => void;
+  onBatchDownload?: (tracks: TrackMetadata[]) => void;
 }
 
-const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite }: {
+const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite, downloadProgress, onCancelDownload, selectionMode, isSelected, onToggleSelection }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
@@ -30,6 +34,11 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
   onPress: (item: TrackMetadata) => void;
   onLongPress?: (item: TrackMetadata) => void;
   onToggleFavorite?: (uri: string) => void;
+  downloadProgress?: number;
+  onCancelDownload?: () => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: () => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -50,17 +59,33 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
     Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 200 }).start();
   };
 
+  const handlePress = () => {
+    if (selectionMode && onToggleSelection) {
+      onToggleSelection();
+    } else {
+      onPress(item);
+    }
+  };
+
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
       <Pressable
-        style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
-        onPress={() => onPress(item)}
-        onLongPress={onLongPress ? () => onLongPress(item) : undefined}
+        style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && !selectionMode && { backgroundColor: colors.card }, isSelected && { backgroundColor: colors.accent + '15' }]}
+        onPress={handlePress}
+        onLongPress={!selectionMode && onLongPress ? () => onLongPress(item) : undefined}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
         <View style={styles.trackNumber}>
-          {item.source === 'navidrome' ? (
+          {selectionMode ? (
+            <Ionicons
+              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={isSelected ? colors.accent : colors.textSecondary}
+            />
+          ) : typeof downloadProgress === 'number' ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : item.source === 'navidrome' ? (
             <Ionicons name="cloud-outline" size={16} color={colors.textSecondary} />
           ) : (
             <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
@@ -83,7 +108,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
 
         <View style={styles.trackInfo}>
           <Text
-            style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
+            style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && !selectionMode && { color: colors.accent }]}
             numberOfLines={1}
           >
             {item.title}
@@ -91,12 +116,30 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.artist}
           </Text>
+          {typeof downloadProgress === 'number' && (
+            <View style={styles.downloadProgressContainer}>
+              <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                <View style={[styles.downloadProgressFill, {
+                  backgroundColor: colors.accent,
+                  width: `${Math.min(downloadProgress * 100, 100)}%`,
+                }]} />
+              </View>
+              <Text style={[styles.downloadProgressText, { color: colors.textSecondary }]}>
+                {downloadProgress >= 1 ? 'Done' : `${Math.round(downloadProgress * 100)}%`}
+              </Text>
+              {onCancelDownload && downloadProgress < 1 && (
+                <Pressable onPress={onCancelDownload} hitSlop={4} style={styles.cancelDownloadButton}>
+                  <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
 
-        {isCurrentTrack && (
+        {!selectionMode && isCurrentTrack && (
           <Ionicons name="play" size={20} color={colors.accent} />
         )}
-        {onToggleFavorite && (
+        {!selectionMode && onToggleFavorite && (
           <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(item.uri); }} hitSlop={8} style={styles.heartButton}>
             <Ionicons
               name="heart"
@@ -110,13 +153,16 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
   );
 });
 
-export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite }: TrackListProps) {
+export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload }: TrackListProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addToLibrary } = useAudio();
+  const { activeDownloads, cancelDownload } = useDownloadProgress();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNavidrome, setShowNavidrome] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [sortMode, setSortMode] = useState<SortMode>('title');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
 
   const filteredTracks = useMemo(() => {
     let result = tracks;
@@ -124,7 +170,8 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     if (filterMode === 'favorites') {
       result = result.filter((t) => t.isFavorite);
     } else if (filterMode === 'downloads') {
-      result = result.filter((t) => OfflineCacheService.isTrackCached(t));
+      const downloadingUris = activeDownloads ? [...activeDownloads.keys()] : [];
+      result = result.filter((t) => OfflineCacheService.isTrackCached(t) || downloadingUris.includes(t.uri));
     }
 
     if (searchQuery.trim()) {
@@ -141,10 +188,17 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     }
 
     return result;
-  }, [tracks, searchQuery, filterMode, sortMode]);
+  }, [tracks, searchQuery, filterMode, sortMode, activeDownloads]);
+
+  const handleTrackLongPress = (track: TrackMetadata) => {
+    setSelectionMode(true);
+    setSelectedUris(new Set([track.uri]));
+  };
 
   const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
+    const downloadProgress = activeDownloads?.get(item.uri);
+    const isSelected = selectedUris.has(item.uri);
 
     const trackContent = (
       <AnimatedTrackItem
@@ -153,12 +207,24 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         isCurrentTrack={isCurrentTrack}
         colors={colors}
         onPress={onTrackPress}
-        onLongPress={onTrackLongPress}
+        onLongPress={handleTrackLongPress}
         onToggleFavorite={onToggleFavorite}
+        downloadProgress={downloadProgress}
+        onCancelDownload={typeof downloadProgress === 'number' ? () => cancelDownload(item.uri) : undefined}
+        selectionMode={selectionMode}
+        isSelected={isSelected}
+        onToggleSelection={selectionMode ? () => {
+          setSelectedUris(prev => {
+            const next = new Set(prev);
+            if (next.has(item.uri)) next.delete(item.uri);
+            else next.add(item.uri);
+            return next;
+          });
+        } : undefined}
       />
     );
 
-    if (onRemoveTrack) {
+    if (onRemoveTrack && !selectionMode) {
       return (
         <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
           {trackContent}
@@ -186,7 +252,21 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         </View>
       </View>
 
-      {tracks.length > 0 && (
+      {selectionMode && (
+        <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+          <Pressable onPress={() => setSelectedUris(new Set(filteredTracks.map(t => t.uri)))}>
+            <Text style={[styles.selectionAction, { color: colors.accent }]}>All</Text>
+          </Pressable>
+          <Pressable onPress={() => setSelectedUris(new Set())}>
+            <Text style={[styles.selectionAction, { color: colors.textSecondary }]}>None</Text>
+          </Pressable>
+          <Pressable onPress={() => { setSelectionMode(false); setSelectedUris(new Set()); }}>
+            <Text style={[styles.selectionAction, { color: colors.accent }]}>Done</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {tracks.length > 0 && !selectionMode && (
         <View style={[styles.searchContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
@@ -205,7 +285,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         </View>
       )}
 
-      {tracks.length > 0 && (
+      {tracks.length > 0 && !selectionMode && (
         <View style={[styles.filterBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <View style={styles.filterChips}>
             <Pressable
@@ -271,7 +351,39 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           keyExtractor={(item) => item.uri}
           style={styles.list}
           contentContainerStyle={styles.listContent}
+          getItemLayout={(_, index) => ({ length: 72, offset: 72 * (index ?? 0), index: index ?? 0 })}
         />
+      )}
+
+      {selectedUris.size > 0 && (
+        <View style={[styles.batchBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <Text style={[styles.batchCount, { color: colors.text }]}>{selectedUris.size} selected</Text>
+          <View style={styles.batchActions}>
+            {onBatchFavorite && (
+              <Pressable style={styles.batchButton} onPress={() => onBatchFavorite([...selectedUris])}>
+                <Ionicons name="heart" size={20} color={colors.accent} />
+              </Pressable>
+            )}
+            {onBatchAddToPlaylist && (
+              <Pressable style={styles.batchButton} onPress={() => onBatchAddToPlaylist([...selectedUris])}>
+                <Ionicons name="list" size={20} color={colors.accent} />
+              </Pressable>
+            )}
+            {onBatchDownload && (
+              <Pressable style={styles.batchButton} onPress={() => {
+                const tracks = filteredTracks.filter(t => selectedUris.has(t.uri));
+                onBatchDownload(tracks);
+              }}>
+                <Ionicons name="download" size={20} color={colors.accent} />
+              </Pressable>
+            )}
+            {onBatchRemove && (
+              <Pressable style={styles.batchButton} onPress={() => onBatchRemove([...selectedUris])}>
+                <Ionicons name="trash" size={20} color="#FF3B30" />
+              </Pressable>
+            )}
+          </View>
+        </View>
       )}
 
       <Modal
@@ -421,6 +533,61 @@ const styles = StyleSheet.create({
   },
   heartButton: {
     marginLeft: 8,
+  },
+  downloadProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+  downloadProgressBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 1.5,
+    overflow: 'hidden',
+  },
+  downloadProgressFill: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  downloadProgressText: {
+    fontSize: 11,
+    minWidth: 32,
+    textAlign: 'right',
+  },
+  cancelDownloadButton: {
+    padding: 2,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  selectionAction: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  batchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  batchCount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  batchActions: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  batchButton: {
+    padding: 4,
   },
   modalOverlay: {
     flex: 1,

@@ -6,12 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AudioProvider, useAudio, Playlist, TrackMetadata } from './src/context/AudioContext';
+import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Player } from './src/components/Player';
 import { TrackList } from './src/components/TrackList';
 import { Playlists } from './src/components/Playlists';
 import { PlaylistDetail } from './src/components/PlaylistDetail';
+import { SmartPlaylistDetail } from './src/components/SmartPlaylistDetail';
+import { evaluateSmartPlaylist } from './src/services/SmartPlaylistEngine';
 import { Settings } from './src/components/Settings';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { Queue } from './src/components/Queue';
@@ -49,8 +51,6 @@ function PlayerScreen() {
   const {
     currentTrack,
     isPlaying,
-    playbackPosition,
-    duration,
     loadTrack,
     play,
     pause,
@@ -64,6 +64,7 @@ function PlayerScreen() {
     toggleFavorite,
     sleepTimerRemaining,
   } = useAudio();
+  const { playbackPosition, duration } = usePlaybackPosition();
   const { colors } = useTheme();
   const [showEffects, setShowEffects] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
@@ -211,12 +212,14 @@ function PlayerScreen() {
 }
 
 function LibraryScreen() {
-  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, downloadTrackForLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite } = useAudio();
+  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, downloadTrackForLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite, batchToggleFavorite, batchRemoveFromLibrary } = useAudio();
+  const { activeDownloads, cancelDownload } = useDownloadProgress();
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [showCreateFromLibraryModal, setShowCreateFromLibraryModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [batchUris, setBatchUris] = useState<string[] | null>(null);
 
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
@@ -231,7 +234,8 @@ function LibraryScreen() {
   };
 
   const handleTrackLongPress = (track: TrackMetadata) => {
-    const isDownloadable = track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track);
+    const isAlreadyDownloading = activeDownloads?.has(track.uri);
+    const isDownloadable = track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track) && !isAlreadyDownloading;
     const isDownloaded = OfflineCacheService.isTrackCached(track);
     Alert.alert(
       track.title,
@@ -259,8 +263,10 @@ function LibraryScreen() {
         ...(isDownloadable ? [{
           text: 'Download for Offline',
           onPress: async () => {
-            await downloadTrackForLibrary(track);
-            Alert.alert('Downloaded', `"${track.title}" is now available offline.`);
+            const success = await downloadTrackForLibrary(track);
+            if (success) {
+              Alert.alert('Downloaded', `"${track.title}" is now available offline.`);
+            }
           },
         }] : []),
         ...(isDownloaded ? [{
@@ -272,8 +278,35 @@ function LibraryScreen() {
     );
   };
 
+  const handleBatchFavorite = (uris: string[]) => {
+    batchToggleFavorite(uris);
+  };
+
+  const handleBatchRemove = (uris: string[]) => {
+    Alert.alert(
+      'Remove Tracks',
+      `Remove ${uris.length} track${uris.length > 1 ? 's' : ''} from library?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => batchRemoveFromLibrary(uris) },
+      ]
+    );
+  };
+
+  const handleBatchAddToPlaylist = (uris: string[]) => {
+    setBatchUris(uris);
+    setShowPlaylistModal(true);
+  };
+
   const handleAddToPlaylist = (playlistId: string) => {
-    if (selectedTrack) {
+    if (batchUris) {
+      batchUris.forEach(uri => {
+        const track = library.find(t => t.uri === uri);
+        if (track) addTrackToPlaylist(playlistId, track);
+      });
+      setBatchUris(null);
+      setShowPlaylistModal(false);
+    } else if (selectedTrack) {
       addTrackToPlaylist(playlistId, selectedTrack);
       setShowPlaylistModal(false);
       setSelectedTrack(null);
@@ -286,12 +319,20 @@ function LibraryScreen() {
   };
 
   const handleConfirmCreatePlaylist = () => {
-    if (newPlaylistName.trim() && selectedTrack) {
+    if (newPlaylistName.trim()) {
       const newId = createPlaylist(newPlaylistName.trim());
-      addTrackToPlaylist(newId, selectedTrack);
+      if (batchUris) {
+        batchUris.forEach(uri => {
+          const track = library.find(t => t.uri === uri);
+          if (track) addTrackToPlaylist(newId, track);
+        });
+        setBatchUris(null);
+      } else if (selectedTrack) {
+        addTrackToPlaylist(newId, selectedTrack);
+        setSelectedTrack(null);
+      }
       setShowPlaylistModal(false);
       setShowCreateFromLibraryModal(false);
-      setSelectedTrack(null);
       setNewPlaylistName('');
     }
   };
@@ -306,6 +347,9 @@ function LibraryScreen() {
         onTrackLongPress={handleTrackLongPress}
         onRemoveTrack={removeFromLibrary}
         onToggleFavorite={toggleFavorite}
+        onBatchFavorite={handleBatchFavorite}
+        onBatchRemove={handleBatchRemove}
+        onBatchAddToPlaylist={handleBatchAddToPlaylist}
       />
       <MiniPlayer />
       <Modal
@@ -345,6 +389,7 @@ function LibraryScreen() {
               onPress={() => {
                 setShowPlaylistModal(false);
                 setSelectedTrack(null);
+                setBatchUris(null);
               }}
             >
               <Text style={[modalStyles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
@@ -413,34 +458,60 @@ function PlaylistsScreen({ navigation }: any) {
     deletePlaylist,
     renamePlaylist,
     playPlaylist, 
-    addTrackToPlaylist 
+    addTrackToPlaylist,
+    smartPlaylists,
+    createSmartPlaylist,
+    deleteSmartPlaylist,
+    library,
   } = useAudio();
 
   const handlePlaylistPress = (playlist: Playlist) => {
     navigation.navigate('PlaylistDetail', { playlistId: playlist.id });
   };
 
+  const handleSmartPlaylistPress = (playlist: SmartPlaylist) => {
+    navigation.navigate('SmartPlaylistDetail', { smartPlaylistId: playlist.id });
+  };
+
   return (
     <Playlists
       playlists={playlists}
+      smartPlaylists={smartPlaylists}
+      library={library}
       onCreatePlaylist={createPlaylist}
       onDeletePlaylist={deletePlaylist}
       onRenamePlaylist={renamePlaylist}
       onPlayPlaylist={playPlaylist}
       onAddTrackToPlaylist={addTrackToPlaylist}
       onPlaylistPress={handlePlaylistPress}
+      onSmartPlaylistPress={handleSmartPlaylistPress}
+      onCreateSmartPlaylist={createSmartPlaylist}
+      onDeleteSmartPlaylist={deleteSmartPlaylist}
     />
   );
 }
 
 function PlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, removeTrackFromPlaylist, reorderPlaylistTracks, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist, renamePlaylist } = useAudio();
+  const { currentTrack, removeTrackFromPlaylist, reorderPlaylistTracks, addTrackToPlaylist, library, playlists, playPlaylist, playFromPlaylist, renamePlaylist, setQueue, loadTrack } = useAudio();
   const { playlistId } = route.params;
   const playlist = playlists.find((p) => p.id === playlistId);
 
   if (!playlist) {
     return null;
   }
+
+  const handleBatchRemoveFromPlaylist = (uris: string[]) => {
+    uris.forEach(uri => removeTrackFromPlaylist(playlist.id, uri));
+  };
+
+  const handleBatchPlaySelected = (tracks: TrackMetadata[]) => {
+    if (tracks.length === 0) return;
+    const remaining = playlist.tracks.filter(t => !tracks.some(st => st.uri === t.uri));
+    const firstTrack = tracks[0];
+    const rest = tracks.slice(1);
+    setQueue([...rest, ...remaining]);
+    loadTrack(firstTrack.uri, firstTrack, true);
+  };
 
   return (
     <PlaylistDetail
@@ -454,6 +525,33 @@ function PlaylistDetailScreen({ route, navigation }: any) {
       onAddTrack={(track) => addTrackToPlaylist(playlist.id, track)}
       onRename={(newName) => renamePlaylist(playlist.id, newName)}
       library={library}
+      onBatchRemoveFromPlaylist={handleBatchRemoveFromPlaylist}
+      onBatchPlaySelected={handleBatchPlaySelected}
+    />
+  );
+}
+
+function SmartPlaylistDetailScreen({ route, navigation }: any) {
+  const { currentTrack, library, smartPlaylists, deleteSmartPlaylist, removeFromLibrary, loadTrack, playFromLibrary } = useAudio();
+  const { smartPlaylistId } = route.params;
+  const playlist = smartPlaylists.find((sp: SmartPlaylist) => sp.id === smartPlaylistId);
+
+  if (!playlist) {
+    return null;
+  }
+
+  return (
+    <SmartPlaylistDetail
+      playlist={playlist}
+      library={library}
+      currentTrack={currentTrack}
+      onTrackPress={(track: TrackMetadata) => playFromLibrary(track)}
+      onRemoveTrack={(trackUri: string) => removeFromLibrary(trackUri)}
+      onBack={() => navigation.goBack()}
+      onDelete={() => {
+        deleteSmartPlaylist(playlist.id);
+        navigation.goBack();
+      }}
     />
   );
 }
@@ -464,6 +562,7 @@ function PlaylistsStack() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="PlaylistsList" component={PlaylistsScreen} />
         <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
+        <Stack.Screen name="SmartPlaylistDetail" component={SmartPlaylistDetailScreen} />
       </Stack.Navigator>
       <MiniPlayer />
     </View>

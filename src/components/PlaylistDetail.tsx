@@ -20,6 +20,8 @@ interface PlaylistDetailProps {
   onAddTrack?: (track: TrackMetadata) => void;
   onRename?: (newName: string) => void;
   library?: TrackMetadata[];
+  onBatchRemoveFromPlaylist?: (uris: string[]) => void;
+  onBatchPlaySelected?: (tracks: TrackMetadata[]) => void;
 }
 
 const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
@@ -121,6 +123,8 @@ export function PlaylistDetail({
   onAddTrack,
   onRename,
   library = [],
+  onBatchRemoveFromPlaylist,
+  onBatchPlaySelected,
 }: PlaylistDetailProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addTrackToPlaylist } = useAudio();
@@ -131,6 +135,8 @@ export function PlaylistDetail({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
   const itemHeight = 72;
 
   const playButtonScale = useRef(new Animated.Value(1)).current;
@@ -143,14 +149,14 @@ export function PlaylistDetail({
     onPlayPlaylist();
   };
 
-  const playlistTrackUris = new Set(playlist.tracks.map((t) => t.uri));
+  const playlistTrackUris = useMemo(() => new Set(playlist.tracks.map((t) => t.uri)), [playlist.tracks]);
 
-  const filteredLibrary = library.filter(
+  const filteredLibrary = useMemo(() => library.filter(
     (track) =>
       !playlistTrackUris.has(track.uri) &&
       (track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
        track.artist.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  ), [library, playlistTrackUris, searchQuery]);
 
   const handleAddTrack = (track: TrackMetadata) => {
     if (onAddTrack) {
@@ -158,27 +164,52 @@ export function PlaylistDetail({
     }
   };
 
+  const handleTrackLongPress = (track: TrackMetadata) => {
+    setSelectionMode(true);
+    setSelectedUris(new Set([track.uri]));
+  };
+
   const renderPlaylistTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
     const isDragging = draggingIndex === index;
     const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
+    const isSelected = selectedUris.has(item.uri);
 
-    return (
-      <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
-        <Animated.View
-          style={[
-            styles.trackItemRow,
-            { backgroundColor: colors.background },
-            isCurrentTrack && { backgroundColor: colors.card },
-            isDragging && { opacity: 0.5, zIndex: 100 },
-            isOver && { backgroundColor: colors.accent + '15' },
-          ]}
+    const trackRow = (
+      <Animated.View
+        style={[
+          styles.trackItemRow,
+          { backgroundColor: colors.background },
+          isCurrentTrack && !selectionMode && { backgroundColor: colors.card },
+          isDragging && { opacity: 0.5, zIndex: 100 },
+          isOver && { backgroundColor: colors.accent + '15' },
+          isSelected && { backgroundColor: colors.accent + '15' },
+        ]}
+      >
+        <Pressable
+          style={styles.trackContent}
+          onPress={() => {
+            if (selectionMode) {
+              setSelectedUris(prev => {
+                const next = new Set(prev);
+                if (next.has(item.uri)) next.delete(item.uri);
+                else next.add(item.uri);
+                return next;
+              });
+            } else {
+              onTrackPress(item);
+            }
+          }}
+          onLongPress={!selectionMode ? () => handleTrackLongPress(item) : undefined}
         >
-          <Pressable
-            style={styles.trackContent}
-            onPress={() => onTrackPress(item)}
-          >
-            <View style={styles.trackNumber}>
+          <View style={styles.trackNumber}>
+            {selectionMode ? (
+              <Ionicons
+                name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                size={22}
+                color={isSelected ? colors.accent : colors.textSecondary}
+              />
+            ) : (
               <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
                 {isCurrentTrack ? (
                   <Ionicons name="musical-notes" size={16} color={colors.accent} />
@@ -186,52 +217,61 @@ export function PlaylistDetail({
                   index + 1
                 )}
               </Text>
-            </View>
-
-            {item.artwork ? (
-              <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
-            ) : (
-              <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
-                <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
-              </View>
             )}
+          </View>
 
-            <View style={styles.trackInfo}>
-              <Text
-                style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
-                numberOfLines={1}
-              >
-                {item.title}
-              </Text>
-              <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-                {item.artist}
-              </Text>
+          {item.artwork ? (
+            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+          ) : (
+            <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
+              <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
             </View>
-          </Pressable>
-
-          {onReorderTrack && (
-            <PanResponderView
-              index={index}
-              itemCount={playlist.tracks.length}
-              itemHeight={itemHeight}
-              onDragStart={() => setDraggingIndex(index)}
-              onDragMove={(overIndex) => setDragOverIndex(overIndex)}
-              onDragEnd={(from, to) => {
-                setDraggingIndex(null);
-                setDragOverIndex(null);
-                if (from !== to) onReorderTrack(from, to);
-              }}
-              onDragCancel={() => {
-                setDraggingIndex(null);
-                setDragOverIndex(null);
-              }}
-            >
-              <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-            </PanResponderView>
           )}
-        </Animated.View>
-      </SwipeableRow>
+
+          <View style={styles.trackInfo}>
+            <Text
+              style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && !selectionMode && { color: colors.accent }]}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+            <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
+              {item.artist}
+            </Text>
+          </View>
+        </Pressable>
+
+        {!selectionMode && onReorderTrack && (
+          <PanResponderView
+            index={index}
+            itemCount={playlist.tracks.length}
+            itemHeight={itemHeight}
+            onDragStart={() => setDraggingIndex(index)}
+            onDragMove={(overIndex) => setDragOverIndex(overIndex)}
+            onDragEnd={(from, to) => {
+              setDraggingIndex(null);
+              setDragOverIndex(null);
+              if (from !== to) onReorderTrack(from, to);
+            }}
+            onDragCancel={() => {
+              setDraggingIndex(null);
+              setDragOverIndex(null);
+            }}
+          >
+            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+          </PanResponderView>
+        )}
+      </Animated.View>
     );
+
+    if (!selectionMode) {
+      return (
+        <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
+          {trackRow}
+        </SwipeableRow>
+      );
+    }
+    return trackRow;
   };
 
   const collageImages = useMemo(() => {
@@ -297,7 +337,21 @@ export function PlaylistDetail({
         </View>
       </SafeAreaView>
 
-      {playlist.tracks.length > 0 ? (
+      {selectionMode && (
+        <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+          <Pressable onPress={() => setSelectedUris(new Set(playlist.tracks.map(t => t.uri)))}>
+            <Text style={[styles.selectionAction, { color: colors.accent }]}>All</Text>
+          </Pressable>
+          <Pressable onPress={() => setSelectedUris(new Set())}>
+            <Text style={[styles.selectionAction, { color: colors.textSecondary }]}>None</Text>
+          </Pressable>
+          <Pressable onPress={() => { setSelectionMode(false); setSelectedUris(new Set()); }}>
+            <Text style={[styles.selectionAction, { color: colors.accent }]}>Done</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {playlist.tracks.length > 0 && !selectionMode ? (
         <View style={styles.collageContainer}>
           <View style={styles.collageRow}>
             <AnimatedCollageImage artwork={collageImages[0]} index={0} colors={colors} />
@@ -308,11 +362,11 @@ export function PlaylistDetail({
             <AnimatedCollageImage artwork={collageImages[3]} index={3} colors={colors} />
           </View>
         </View>
-      ) : (
+      ) : playlist.tracks.length === 0 ? (
         <View style={[styles.emptyCollage, { backgroundColor: colors.card }]}>
           <Ionicons name="musical-notes" size={64} color={colors.textSecondary} />
         </View>
-      )}
+      ) : null}
 
       {playlist.tracks.length === 0 ? (
         <EmptyState
@@ -332,6 +386,7 @@ export function PlaylistDetail({
           keyExtractor={(item) => item.uri}
           style={styles.list}
           contentContainerStyle={styles.listContent}
+          getItemLayout={(_, index) => ({ length: itemHeight, offset: itemHeight * (index ?? 0), index: index ?? 0 })}
         />
       )}
 
@@ -417,6 +472,33 @@ export function PlaylistDetail({
           </View>
         </View>
       </Modal>
+
+      {selectedUris.size > 0 && (
+        <View style={[styles.batchBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+          <Text style={[styles.batchCount, { color: colors.text }]}>{selectedUris.size} selected</Text>
+          <View style={styles.batchActions}>
+            {onBatchPlaySelected && (
+              <Pressable style={styles.batchButton} onPress={() => {
+                const tracks = playlist.tracks.filter(t => selectedUris.has(t.uri));
+                onBatchPlaySelected(tracks);
+                setSelectionMode(false);
+                setSelectedUris(new Set());
+              }}>
+                <Ionicons name="play" size={20} color={colors.accent} />
+              </Pressable>
+            )}
+            {onBatchRemoveFromPlaylist && (
+              <Pressable style={styles.batchButton} onPress={() => {
+                onBatchRemoveFromPlaylist([...selectedUris]);
+                setSelectedUris(new Set());
+                setSelectionMode(false);
+              }}>
+                <Ionicons name="trash" size={20} color="#FF3B30" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -625,5 +707,36 @@ const styles = StyleSheet.create({
   modalEmptyText: {
     fontSize: 16,
     marginTop: 16,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  selectionAction: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  batchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+  },
+  batchCount: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  batchActions: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  batchButton: {
+    padding: 4,
   },
 });

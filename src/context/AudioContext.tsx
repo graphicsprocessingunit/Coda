@@ -3,9 +3,11 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File, Paths } from 'expo-file-system';
 import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
+import { LastFmService, LastFmCredentials } from '../services/LastFmService';
 
 export interface TrackMetadata {
   title: string;
@@ -29,6 +31,24 @@ export interface Playlist {
   createdAt: number;
 }
 
+export type SmartPlaylistRule =
+  | { field: 'playCount'; op: 'gte' | 'lte' | 'eq'; value: number }
+  | { field: 'isFavorite'; op: 'eq'; value: boolean }
+  | { field: 'artist'; op: 'eq'; value: string }
+  | { field: 'album'; op: 'eq'; value: string }
+  | { field: 'source'; op: 'eq'; value: 'local' | 'navidrome' };
+
+export interface SmartPlaylist {
+  id: string;
+  name: string;
+  rules: SmartPlaylistRule[];
+  limit?: number;
+  sortField?: 'playCount' | 'title';
+  sortDirection?: 'asc' | 'desc';
+  createdAt: number;
+  icon?: string;
+}
+
 export type AudioPreset = 'flat' | 'relaxed' | 'clear' | 'upbeat' | 'quiet';
 
 interface AudioContextType {
@@ -37,8 +57,6 @@ interface AudioContextType {
   queue: TrackMetadata[];
   library: TrackMetadata[];
   playlists: Playlist[];
-  playbackPosition: number;
-  duration: number;
   shuffleEnabled: boolean;
   repeatEnabled: boolean;
   playbackRate: number;
@@ -62,7 +80,7 @@ interface AudioContextType {
   toggleRepeat: () => void;
   addToLibrary: (tracks: TrackMetadata[]) => void;
   removeFromLibrary: (trackUri: string) => void;
-  downloadTrackForLibrary: (track: TrackMetadata) => Promise<void>;
+  downloadTrackForLibrary: (track: TrackMetadata) => Promise<boolean>;
   playFromLibrary: (track: TrackMetadata) => Promise<void>;
   playFromPlaylist: (playlist: Playlist, track: TrackMetadata) => Promise<void>;
   createPlaylist: (name: string) => string;
@@ -72,6 +90,10 @@ interface AudioContextType {
   deletePlaylist: (playlistId: string) => void;
   renamePlaylist: (playlistId: string, newName: string) => void;
   playPlaylist: (playlist: Playlist) => Promise<void>;
+  smartPlaylists: SmartPlaylist[];
+  createSmartPlaylist: (name: string, rules: SmartPlaylistRule[], options?: { limit?: number; sortField?: 'playCount' | 'title'; sortDirection?: 'asc' | 'desc'; icon?: string }) => string;
+  updateSmartPlaylist: (id: string, updates: Partial<Omit<SmartPlaylist, 'id' | 'createdAt'>>) => void;
+  deleteSmartPlaylist: (id: string) => void;
   setPlaybackRate: (rate: number) => Promise<void>;
   setVolume: (vol: number) => Promise<void>;
   setAudioPreset: (preset: AudioPreset) => void;
@@ -89,13 +111,43 @@ interface AudioContextType {
   seamlessEnabled: boolean;
   setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
+  lastFmConnected: boolean;
+  connectLastFm: (apiKey: string, sharedSecret: string, token: string) => Promise<{ ok: boolean; error?: string }>;
+  disconnectLastFm: () => Promise<void>;
   toggleFavorite: (uri: string) => void;
+  batchToggleFavorite: (uris: string[]) => void;
+  batchRemoveFromLibrary: (uris: string[]) => void;
   error: string | null;
   clearError: () => void;
   isLoading: boolean;
 }
 
 const AudioCtx = createContext<AudioContextType | undefined>(undefined);
+
+interface PlaybackPositionType {
+  playbackPosition: number;
+  duration: number;
+}
+
+const PlaybackPositionCtx = createContext<PlaybackPositionType>({ playbackPosition: 0, duration: 0 });
+
+export function usePlaybackPosition() {
+  return useContext(PlaybackPositionCtx);
+}
+
+interface DownloadProgressType {
+  activeDownloads: Map<string, number>;
+  cancelDownload: (uri: string) => void;
+}
+
+const DownloadProgressCtx = createContext<DownloadProgressType>({
+  activeDownloads: new Map(),
+  cancelDownload: () => {},
+});
+
+export function useDownloadProgress() {
+  return useContext(DownloadProgressCtx);
+}
 
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
@@ -148,7 +200,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeDownloads, setActiveDownloads] = useState<Map<string, number>>(new Map());
+  const [smartPlaylists, setSmartPlaylists] = useState<SmartPlaylist[]>([]);
+  const [lastFmConnected, setLastFmConnected] = useState(false);
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
+  const lastFmCredsRef = useRef<LastFmCredentials | null>(null);
+  const scrobbleSubmittedRef = useRef(false);
+  const listeningStartRef = useRef(0);
+  const lastFmConnectedRef = useRef(false);
+  const currentTrackRef = useRef<TrackMetadata | null>(null);
 
   const soundRef = useRef<AudioPlayer | null>(null);
   const playbackStatusRef = useRef<any>(null);
@@ -178,6 +238,42 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const preloadRef = useRef<AudioPlayer | null>(null);
   const preloadedUriRef = useRef<string | null>(null);
   const isLoadedRef = useRef(false);
+  const saveLibraryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savePlaylistsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueueTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveSmartPlaylistsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedSaveLibrary = useCallback((lib: TrackMetadata[]) => {
+    if (saveLibraryTimerRef.current) clearTimeout(saveLibraryTimerRef.current);
+    saveLibraryTimerRef.current = setTimeout(() => {
+      StorageService.saveLibrary(lib);
+      saveLibraryTimerRef.current = null;
+    }, 1000);
+  }, []);
+
+  const debouncedSavePlaylists = useCallback((pls: Playlist[]) => {
+    if (savePlaylistsTimerRef.current) clearTimeout(savePlaylistsTimerRef.current);
+    savePlaylistsTimerRef.current = setTimeout(() => {
+      StorageService.savePlaylists(pls);
+      savePlaylistsTimerRef.current = null;
+    }, 1000);
+  }, []);
+
+  const debouncedSaveQueue = useCallback((q: TrackMetadata[]) => {
+    if (saveQueueTimerRef.current) clearTimeout(saveQueueTimerRef.current);
+    saveQueueTimerRef.current = setTimeout(() => {
+      StorageService.saveQueue(q);
+      saveQueueTimerRef.current = null;
+    }, 1000);
+  }, []);
+
+  const debouncedSaveSmartPlaylists = useCallback((sps: SmartPlaylist[]) => {
+    if (saveSmartPlaylistsTimerRef.current) clearTimeout(saveSmartPlaylistsTimerRef.current);
+    saveSmartPlaylistsTimerRef.current = setTimeout(() => {
+      StorageService.saveSmartPlaylists(sps);
+      saveSmartPlaylistsTimerRef.current = null;
+    }, 1000);
+  }, []);
 
   const debouncedSavePosition = useCallback((position: number) => {
     if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
@@ -233,6 +329,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [library]);
 
   useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
+  useEffect(() => {
     return () => {
       destroyPlayer(soundRef.current);
       destroyPlayer(crossfadeSoundRef.current);
@@ -246,6 +346,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
       if (positionSaveTimerRef.current) clearTimeout(positionSaveTimerRef.current);
       if (crossfadeTimerRef.current) clearInterval(crossfadeTimerRef.current);
+      if (saveLibraryTimerRef.current) clearTimeout(saveLibraryTimerRef.current);
+      if (savePlaylistsTimerRef.current) clearTimeout(savePlaylistsTimerRef.current);
+      if (saveQueueTimerRef.current) clearTimeout(saveQueueTimerRef.current);
+      if (saveSmartPlaylistsTimerRef.current) clearTimeout(saveSmartPlaylistsTimerRef.current);
     };
   }, []);
 
@@ -266,10 +370,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const savedCurrentTrack = await StorageService.loadCurrentTrack();
       const savedPlaybackPosition = await StorageService.loadPlaybackPosition();
       const savedQueue = await StorageService.loadQueue();
+      const savedSmartPlaylists = await StorageService.loadSmartPlaylists();
 
       if (savedLibrary.length > 0) setLibrary(savedLibrary);
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
+      if (savedSmartPlaylists.length > 0) setSmartPlaylists(savedSmartPlaylists);
 
       await setAudioModeAsync({
         playsInSilentMode: true,
@@ -305,6 +411,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         navidromeCredentialsRef.current = savedNavidromeCreds;
         setNavidromeConnected(true);
         setNavidromeServerUrl(savedNavidromeCreds.url);
+      }
+
+      const lastFmCreds = await LastFmService.loadCredentials();
+      if (lastFmCreds) {
+        lastFmCredsRef.current = lastFmCreds;
+        lastFmConnectedRef.current = true;
+        setLastFmConnected(true);
       }
 
       const savedSleepTimerEnd = await AsyncStorage.getItem('@coda_sleep_timer_end');
@@ -365,13 +478,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoadedRef.current) return;
-    StorageService.saveLibrary(library);
-  }, [library]);
+    debouncedSaveLibrary(library);
+  }, [library, debouncedSaveLibrary]);
 
   useEffect(() => {
     if (!isLoadedRef.current) return;
-    StorageService.savePlaylists(playlists);
-  }, [playlists]);
+    debouncedSavePlaylists(playlists);
+  }, [playlists, debouncedSavePlaylists]);
 
   useEffect(() => {
     if (!isLoadedRef.current) return;
@@ -382,10 +495,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoadedRef.current) return;
-    StorageService.saveQueue(queue);
-  }, [queue]);
+    debouncedSaveQueue(queue);
+  }, [queue, debouncedSaveQueue]);
 
-  const loadTrackInternal = async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
+  useEffect(() => {
+    if (!isLoadedRef.current) return;
+    debouncedSaveSmartPlaylists(smartPlaylists);
+  }, [smartPlaylists, debouncedSaveSmartPlaylists]);
+
+  const loadTrackInternal = useCallback(async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
     const generation = ++loadGenerationRef.current;
     crossfadeStartedRef.current = false;
 
@@ -439,6 +557,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
     const libMatch = libraryRef.current.find(t => t.uri === metadata.uri);
     setCurrentTrack({ ...metadata, isFavorite: libMatch?.isFavorite ?? metadata.isFavorite ?? false });
+    listeningStartRef.current = Date.now();
+    scrobbleSubmittedRef.current = false;
+    if (lastFmConnectedRef.current && lastFmCredsRef.current) {
+      LastFmService.nowPlaying(lastFmCredsRef.current, metadata).catch(() => {});
+    }
     setPlaybackPosition(0);
 
     const status = player.currentStatus;
@@ -452,7 +575,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     if (autoPlay) {
       setTimeout(() => preloadNextTrack(), 100);
     }
-  };
+  }, []);
 
   const playNextFromQueue = useCallback(() => {
     const currentQueue = queueRef.current;
@@ -661,6 +784,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           startCrossfade();
         }
       }
+
+      if (lastFmConnectedRef.current && lastFmCredsRef.current && !scrobbleSubmittedRef.current) {
+        const elapsed = (Date.now() - listeningStartRef.current) / 1000;
+        const durationSec = status.duration || 0;
+        const threshold = Math.min(240, durationSec / 2);
+        if (elapsed >= threshold && threshold > 0) {
+          scrobbleSubmittedRef.current = true;
+          const currentMeta = currentTrackRef.current;
+          if (currentMeta) {
+            LastFmService.scrobble(
+              lastFmCredsRef.current,
+              currentMeta,
+              Math.floor(listeningStartRef.current / 1000)
+            ).catch(() => {});
+          }
+        }
+      }
     }
   }, [playNextFromQueue, startCrossfade]);
 
@@ -777,15 +917,69 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         tracks: playlist.tracks.filter((t) => t.uri !== trackUri),
       }))
     );
+    setQueue((prev) => {
+      const next = prev.filter((t) => t.uri !== trackUri);
+      queueRef.current = next;
+      return next;
+    });
   }, []);
 
-  const downloadTrackForLibrary = useCallback(async (track: TrackMetadata) => {
+  const downloadTrackForLibrary = useCallback(async (track: TrackMetadata): Promise<boolean> => {
     const creds = navidromeCredentialsRef.current;
-    if (!creds || !track.navidromeId) return;
-    const offlineTrack = await OfflineCacheService.downloadTrackForOffline(creds, track);
-    setLibrary((prev) =>
-      prev.map((t) => (t.uri === track.uri ? { ...t, cachedUri: offlineTrack.cachedUri, cachedArtwork: offlineTrack.cachedArtwork, artwork: offlineTrack.artwork } : t))
-    );
+    if (!creds || !track.navidromeId) return false;
+
+    const controller = OfflineCacheService.getAbortController(track.uri);
+    setActiveDownloads((prev) => new Map(prev).set(track.uri, 0));
+
+    let lastUpdate = 0;
+    try {
+      const offlineTrack = await OfflineCacheService.downloadTrackForOffline(
+        creds, track,
+        (progress) => {
+          const now = Date.now();
+          if (now - lastUpdate < 100 && progress < 1) return;
+          lastUpdate = now;
+          setActiveDownloads((prev) => new Map(prev).set(track.uri, progress));
+        },
+        controller.signal,
+      );
+
+      setActiveDownloads((prev) => {
+        const next = new Map(prev);
+        next.delete(track.uri);
+        return next;
+      });
+      OfflineCacheService.removeController(track.uri);
+
+      if (!offlineTrack.cachedUri) return false;
+
+      setLibrary((prev) =>
+        prev.map((t) => (t.uri === track.uri ? {
+          ...t,
+          cachedUri: offlineTrack.cachedUri,
+          cachedArtwork: offlineTrack.cachedArtwork,
+          artwork: offlineTrack.artwork,
+        } : t))
+      );
+      return true;
+    } catch (err: any) {
+      setActiveDownloads((prev) => {
+        const next = new Map(prev);
+        next.delete(track.uri);
+        return next;
+      });
+      OfflineCacheService.removeController(track.uri);
+      if (err?.name === 'AbortError') {
+        const partial = new File(Paths.document, `cache/navidrome/audio/${track.navidromeId}.mp3`);
+        if (partial.exists) partial.delete();
+        return false;
+      }
+      return false;
+    }
+  }, []);
+
+  const cancelDownload = useCallback((uri: string) => {
+    OfflineCacheService.cancelDownload(uri);
   }, []);
 
   const toggleFavorite = useCallback((uri: string) => {
@@ -797,6 +991,27 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCurrentTrack((prev) =>
       prev?.uri === uri ? { ...prev, isFavorite: !prev.isFavorite } : prev
     );
+  }, []);
+
+  const batchToggleFavorite = useCallback((uris: string[]) => {
+    setLibrary(prev => prev.map(track =>
+      uris.includes(track.uri) ? { ...track, isFavorite: !track.isFavorite } : track
+    ));
+  }, []);
+
+  const batchRemoveFromLibrary = useCallback((uris: string[]) => {
+    setLibrary(prev => prev.filter(track => !uris.includes(track.uri)));
+    setPlaylists(prev =>
+      prev.map(playlist => ({
+        ...playlist,
+        tracks: playlist.tracks.filter(t => !uris.includes(t.uri)),
+      }))
+    );
+    setQueue(prev => {
+      const next = prev.filter(t => !uris.includes(t.uri));
+      queueRef.current = next;
+      return next;
+    });
   }, []);
 
   const incrementPlayCount = useCallback((uri: string) => {
@@ -875,6 +1090,34 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         playlist.id === playlistId ? { ...playlist, name: newName } : playlist
       )
     );
+  }, []);
+
+  const createSmartPlaylist = useCallback((name: string, rules: SmartPlaylistRule[], options?: { limit?: number; sortField?: 'playCount' | 'title'; sortDirection?: 'asc' | 'desc'; icon?: string }): string => {
+    const id = `sp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newSmartPlaylist: SmartPlaylist = {
+      id,
+      name,
+      rules,
+      limit: options?.limit,
+      sortField: options?.sortField,
+      sortDirection: options?.sortDirection,
+      createdAt: Date.now(),
+      icon: options?.icon,
+    };
+    setSmartPlaylists((prev) => [...prev, newSmartPlaylist]);
+    return id;
+  }, []);
+
+  const updateSmartPlaylist = useCallback((id: string, updates: Partial<Omit<SmartPlaylist, 'id' | 'createdAt'>>) => {
+    setSmartPlaylists((prev) =>
+      prev.map((sp) =>
+        sp.id === id ? { ...sp, ...updates } : sp
+      )
+    );
+  }, []);
+
+  const deleteSmartPlaylist = useCallback((id: string) => {
+    setSmartPlaylists((prev) => prev.filter((sp) => sp.id !== id));
   }, []);
 
   const playPlaylist = useCallback(async (playlist: Playlist) => {
@@ -1098,6 +1341,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setQueue([]);
     setLibrary([]);
     setPlaylists([]);
+    setSmartPlaylists([]);
     setPlaybackPosition(0);
     setDuration(0);
     setShuffleEnabled(false);
@@ -1126,6 +1370,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     navidromeCredentialsRef.current = null;
     setNavidromeConnected(false);
     setNavidromeServerUrl('');
+    LastFmService.clearCredentials().catch(() => {});
+    lastFmCredsRef.current = null;
+    lastFmConnectedRef.current = false;
+    setLastFmConnected(false);
   }, [cancelSleepTimer]);
 
   const checkSleepTimerExpiry = useCallback(() => {
@@ -1185,6 +1433,32 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     return navidromeCredentialsRef.current;
   }, []);
 
+  const connectLastFm = useCallback(async (apiKey: string, sharedSecret: string, token: string) => {
+    try {
+      const result = await LastFmService.getSession(token, apiKey, sharedSecret);
+      const creds: LastFmCredentials = {
+        apiKey,
+        sharedSecret,
+        sessionKey: result.sessionKey,
+        username: result.username,
+      };
+      await LastFmService.saveCredentials(creds);
+      lastFmCredsRef.current = creds;
+      lastFmConnectedRef.current = true;
+      setLastFmConnected(true);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err.message || 'Failed to connect to Last.fm' };
+    }
+  }, []);
+
+  const disconnectLastFm = useCallback(async () => {
+    await LastFmService.clearCredentials();
+    lastFmCredsRef.current = null;
+    lastFmConnectedRef.current = false;
+    setLastFmConnected(false);
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
   const value: AudioContextType = useMemo(() => ({
@@ -1193,8 +1467,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     queue,
     library,
     playlists,
-    playbackPosition,
-    duration,
     shuffleEnabled,
     repeatEnabled,
     playbackRate,
@@ -1230,6 +1502,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     deletePlaylist,
     renamePlaylist,
     playPlaylist,
+    smartPlaylists,
+    createSmartPlaylist,
+    updateSmartPlaylist,
+    deleteSmartPlaylist,
     setPlaybackRate,
     setVolume,
     setAudioPreset,
@@ -1245,13 +1521,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     seamlessEnabled,
     setSeamlessEnabled,
     clearAllData,
+    lastFmConnected,
+    connectLastFm,
+    disconnectLastFm,
     toggleFavorite,
+    batchToggleFavorite,
+    batchRemoveFromLibrary,
     error,
     clearError,
     isLoading,
   }), [
     currentTrack, isPlaying, queue, library, playlists,
-    playbackPosition, duration, shuffleEnabled, repeatEnabled,
+    shuffleEnabled, repeatEnabled,
     playbackRate, volume, audioPreset, sleepTimerEnd, sleepTimerRemaining,
     navidromeConnected, navidromeServerUrl, crossfadeEnabled, crossfadeDuration,
     seamlessEnabled,
@@ -1260,14 +1541,33 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary, downloadTrackForLibrary,
     playFromLibrary, playFromPlaylist, createPlaylist, addTrackToPlaylist,
     removeTrackFromPlaylist, reorderPlaylistTracks, deletePlaylist,
-    renamePlaylist, playPlaylist, setPlaybackRate, setVolume, setAudioPreset,
+    renamePlaylist, playPlaylist, smartPlaylists, createSmartPlaylist, updateSmartPlaylist, deleteSmartPlaylist,
+    setPlaybackRate, setVolume, setAudioPreset,
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
     getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
-    setSeamlessEnabled, clearAllData, toggleFavorite,
+    setSeamlessEnabled, clearAllData,
+    lastFmConnected, connectLastFm, disconnectLastFm, toggleFavorite,
+    batchToggleFavorite, batchRemoveFromLibrary,
     error, clearError, isLoading,
   ]);
 
-  return <AudioCtx.Provider value={value}>{children}</AudioCtx.Provider>;
+  const positionValue: PlaybackPositionType = useMemo(() => ({
+    playbackPosition, duration,
+  }), [playbackPosition, duration]);
+
+  const downloadProgressValue: DownloadProgressType = useMemo(() => ({
+    activeDownloads, cancelDownload,
+  }), [activeDownloads, cancelDownload]);
+
+  return (
+    <AudioCtx.Provider value={value}>
+      <PlaybackPositionCtx.Provider value={positionValue}>
+        <DownloadProgressCtx.Provider value={downloadProgressValue}>
+          {children}
+        </DownloadProgressCtx.Provider>
+      </PlaybackPositionCtx.Provider>
+    </AudioCtx.Provider>
+  );
 }
 
 export function useAudio() {

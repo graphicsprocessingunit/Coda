@@ -50,6 +50,7 @@ export function Player({
   sleepTimerRemaining,
 }: PlayerProps) {
   const { colors } = useTheme();
+  const { lastFmConnected } = useAudio();
 
   const albumScale = useRef(new Animated.Value(0.9)).current;
   const albumOpacity = useRef(new Animated.Value(0)).current;
@@ -145,6 +146,12 @@ export function Player({
         <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
           {currentTrack?.artist || '-'}
         </Text>
+        {lastFmConnected && currentTrack && (
+          <View style={styles.scrobbleIndicator}>
+            <View style={[styles.scrobbleDot, { backgroundColor: '#E81B23' }]} />
+            <Text style={[styles.scrobbleText, { color: colors.textSecondary }]}>Scrobbling</Text>
+          </View>
+        )}
       </View>
 
       <ProgressBar
@@ -373,5 +380,19 @@ const styles = StyleSheet.create({
   lyricsContainer: {
     flex: 1,
     marginBottom: 16,
+  },
+  scrobbleIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  scrobbleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  scrobbleText: {
+    fontSize: 11,
   },
 });

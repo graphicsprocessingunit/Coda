@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform, TextInput, Alert, Linking, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
@@ -8,6 +8,7 @@ import { SleepTimerSection } from './SleepTimer';
 import { AudioEffectsSection } from './AudioEffects';
 import { NavidromeSettingsSection } from './NavidromeSettings';
 import { OfflineCacheService } from '../services/OfflineCacheService';
+import { LastFmService } from '../services/LastFmService';
 
 interface SettingsProps {
   onClearData: () => void;
@@ -16,12 +17,18 @@ interface SettingsProps {
 
 export function Settings({ onClearData, onClearCache }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
-  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled } = useAudio();
+  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [showCrossfade, setShowCrossfade] = useState(false);
   const [showNavidrome, setShowNavidrome] = useState(false);
+  const [showLastFm, setShowLastFm] = useState(false);
+  const [lastFmApiKey, setLastFmApiKey] = useState('');
+  const [lastFmSharedSecret, setLastFmSharedSecret] = useState('');
+  const [lastFmToken, setLastFmToken] = useState('');
+  const [lastFmLoading, setLastFmLoading] = useState(false);
+  const [lastFmError, setLastFmError] = useState('');
   const [cacheSize, setCacheSize] = useState(0);
 
   useEffect(() => {
@@ -103,6 +110,21 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
               <View style={styles.settingRight}>
                 {navidromeConnected && (
                   <View style={[styles.statusDot, { backgroundColor: '#34C759' }]} />
+                )}
+                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </View>
+            </Pressable>
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => setShowLastFm(true)}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="musical-note" size={24} color={lastFmConnected ? '#E81B23' : colors.textSecondary} />
+                <Text style={[styles.settingText, { color: colors.text }]}>Last.fm</Text>
+              </View>
+              <View style={styles.settingRight}>
+                {lastFmConnected && (
+                  <View style={[styles.statusDot, { backgroundColor: '#E81B23' }]} />
                 )}
                 <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
               </View>
@@ -341,6 +363,166 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal
+        visible={showLastFm}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowLastFm(false)}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={modalStyles.overlay}>
+            <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+              <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+                <Text style={[modalStyles.title, { color: colors.text }]}>Last.fm</Text>
+                <Pressable onPress={() => setShowLastFm(false)} hitSlop={10}>
+                  <Ionicons name="close" size={28} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              >
+                {lastFmConnected ? (
+                  <View>
+                    <View style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}>
+                      <View style={modalStyles.themeLeft}>
+                        <Ionicons name="checkmark-circle" size={24} color="#E81B23" />
+                        <View>
+                          <Text style={[modalStyles.themeName, { color: colors.text }]}>Connected to Last.fm</Text>
+                          <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }}>Scrobbling active</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <Pressable
+                      style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                      onPress={() => {
+                        Alert.alert(
+                          'Disconnect Last.fm',
+                          'Are you sure you want to disconnect from Last.fm?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Disconnect',
+                              style: 'destructive',
+                              onPress: () => {
+                                disconnectLastFm();
+                                setLastFmApiKey('');
+                                setLastFmSharedSecret('');
+                                setLastFmToken('');
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                    >
+                      <View style={modalStyles.themeLeft}>
+                        <Ionicons name="log-out-outline" size={24} color="#FF3B30" />
+                        <Text style={[modalStyles.themeName, { color: '#FF3B30' }]}>Disconnect</Text>
+                      </View>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 16 }}>
+                      Scrobble your listening history to Last.fm
+                    </Text>
+                    <Pressable
+                      onPress={() => Linking.openURL('https://www.last.fm/api/account/create')}
+                      style={{ marginBottom: 16 }}
+                    >
+                      <Text style={{ color: colors.accent, fontSize: 14 }}>Register an API key →</Text>
+                    </Pressable>
+                    <TextInput
+                      style={[styles.lastFmInput, { color: colors.text, borderColor: colors.border }]}
+                      placeholder="API Key"
+                      placeholderTextColor={colors.textSecondary}
+                      value={lastFmApiKey}
+                      onChangeText={setLastFmApiKey}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <TextInput
+                      style={[styles.lastFmInput, { color: colors.text, borderColor: colors.border }]}
+                      placeholder="Shared Secret"
+                      placeholderTextColor={colors.textSecondary}
+                      value={lastFmSharedSecret}
+                      onChangeText={setLastFmSharedSecret}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>
+                      1. Tap 'Authorize App' below{'\n'}2. Copy the token from the browser{'\n'}3. Paste it here
+                    </Text>
+                    <TextInput
+                      style={[styles.lastFmInput, { color: colors.text, borderColor: colors.border }]}
+                      placeholder="Token"
+                      placeholderTextColor={colors.textSecondary}
+                      value={lastFmToken}
+                      onChangeText={setLastFmToken}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {lastFmApiKey.trim() ? (
+                      <Pressable
+                        style={[styles.lastFmButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                        onPress={() => Linking.openURL(LastFmService.getAuthUrl(lastFmApiKey.trim()))}
+                      >
+                        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Authorize App</Text>
+                      </Pressable>
+                    ) : null}
+                    {lastFmError ? (
+                      <View style={[styles.lastFmError, { backgroundColor: '#FF3B30' + '15' }]}>
+                        <Ionicons name="alert-circle" size={18} color="#FF3B30" />
+                        <Text style={{ color: '#FF3B30', fontSize: 14, flex: 1 }}>{lastFmError}</Text>
+                      </View>
+                    ) : null}
+                    <Pressable
+                      style={[
+                        styles.lastFmButton,
+                        { backgroundColor: colors.accent },
+                        lastFmLoading && { opacity: 0.6 },
+                      ]}
+                      onPress={async () => {
+                        if (!lastFmApiKey.trim() || !lastFmSharedSecret.trim() || !lastFmToken.trim()) {
+                          setLastFmError('All fields are required');
+                          return;
+                        }
+                        setLastFmLoading(true);
+                        setLastFmError('');
+                        const result = await connectLastFm(
+                          lastFmApiKey.trim(),
+                          lastFmSharedSecret.trim(),
+                          lastFmToken.trim()
+                        );
+                        setLastFmLoading(false);
+                        if (!result.ok) {
+                          setLastFmError(result.error || 'Connection failed');
+                        } else {
+                          setLastFmApiKey('');
+                          setLastFmSharedSecret('');
+                          setLastFmToken('');
+                        }
+                      }}
+                      disabled={lastFmLoading}
+                    >
+                      {lastFmLoading ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Connect</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -425,6 +607,31 @@ const styles = StyleSheet.create({
     width: 27,
     height: 27,
     borderRadius: 14,
+  },
+  lastFmInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 15,
+    marginBottom: 10,
+  },
+  lastFmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  lastFmError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 10,
   },
 });
 

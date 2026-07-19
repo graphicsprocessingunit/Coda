@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +23,9 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
   onDragMove,
   onDragEnd,
   onDragCancel,
+  selectionMode,
+  isSelected,
+  onToggleSelection,
 }: {
   item: TrackMetadata;
   index: number;
@@ -36,6 +39,9 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
   onDragMove: (overIndex: number) => void;
   onDragEnd: (from: number, to: number) => void;
   onDragCancel: () => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelection?: () => void;
 }) {
   return (
     <SwipeableRow onDelete={() => onDelete(index)}>
@@ -45,13 +51,29 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
           { backgroundColor: colors.background },
           isDragging && { opacity: 0.5, zIndex: 100 },
           isOver && { backgroundColor: colors.accent + '15' },
+          isSelected && { backgroundColor: colors.accent + '15' },
         ]}
       >
         <Pressable
           style={styles.trackContent}
-          onPress={() => onPress(item)}
+          onPress={() => {
+            if (selectionMode && onToggleSelection) {
+              onToggleSelection();
+            } else {
+              onPress(item);
+            }
+          }}
         >
-          <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
+          {selectionMode ? (
+            <Ionicons
+              name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+              size={22}
+              color={isSelected ? colors.accent : colors.textSecondary}
+              style={{ marginRight: 8 }}
+            />
+          ) : (
+            <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
+          )}
           {item.artwork ? (
             <Image source={{ uri: item.artwork }} style={styles.artwork} />
           ) : (
@@ -64,16 +86,18 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
             <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>{item.artist}</Text>
           </View>
         </Pressable>
-        <PanResponderView
-          index={index}
-          itemCount={queueLength}
-          onDragStart={() => onDragStart(index)}
-          onDragMove={onDragMove}
-          onDragEnd={onDragEnd}
-          onDragCancel={onDragCancel}
-        >
-          <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
-        </PanResponderView>
+        {!selectionMode && (
+          <PanResponderView
+            index={index}
+            itemCount={queueLength}
+            onDragStart={() => onDragStart(index)}
+            onDragMove={onDragMove}
+            onDragEnd={onDragEnd}
+            onDragCancel={onDragCancel}
+          >
+            <Ionicons name="reorder-three" size={22} color={colors.textSecondary} />
+          </PanResponderView>
+        )}
       </Animated.View>
     </SwipeableRow>
   );
@@ -90,22 +114,30 @@ export function Queue({ onClose }: QueueProps) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
   const handlePlayTrack = (track: TrackMetadata) => {
     loadTrack(track.uri, track, true);
   };
 
-  const filteredLibrary = library.filter(
+  const filteredLibrary = useMemo(() => library.filter(
     (track) =>
       !queue.some((q) => q.uri === track.uri) &&
       track.uri !== currentTrack?.uri &&
       (track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
        track.artist.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  ), [library, queue, currentTrack, searchQuery]);
+
+  const handleTrackLongPress = (index: number) => {
+    setSelectionMode(true);
+    setSelectedIndices(new Set([index]));
+  };
 
   const renderQueueTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isDragging = draggingIndex === index;
     const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
+    const isSelected = selectedIndices.has(index);
 
     return (
       <QueueTrackItem
@@ -128,6 +160,16 @@ export function Queue({ onClose }: QueueProps) {
           setDraggingIndex(null);
           setDragOverIndex(null);
         }}
+        selectionMode={selectionMode}
+        isSelected={isSelected}
+        onToggleSelection={selectionMode ? () => {
+          setSelectedIndices(prev => {
+            const next = new Set(prev);
+            if (next.has(index)) next.delete(index);
+            else next.add(index);
+            return next;
+          });
+        } : undefined}
       />
     );
   };
@@ -136,9 +178,15 @@ export function Queue({ onClose }: QueueProps) {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.headerButton}>
-            <Ionicons name="close" size={28} color={colors.textSecondary} />
-          </Pressable>
+          {selectionMode ? (
+            <Pressable onPress={() => { setSelectionMode(false); setSelectedIndices(new Set()); }} hitSlop={10} style={styles.headerButton}>
+              <Text style={{ color: colors.accent, fontSize: 16, fontWeight: '600' }}>Done</Text>
+            </Pressable>
+          ) : (
+            <Pressable onPress={onClose} hitSlop={10} style={styles.headerButton}>
+              <Ionicons name="close" size={28} color={colors.textSecondary} />
+            </Pressable>
+          )}
           <View style={styles.headerCenter}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>Queue</Text>
             {queue.length > 0 && (
@@ -148,19 +196,33 @@ export function Queue({ onClose }: QueueProps) {
             )}
           </View>
           <View style={styles.headerActions}>
-            <Pressable onPress={() => setShowAddModal(true)} hitSlop={10} style={styles.headerButton}>
-              <Ionicons name="add-circle" size={26} color={colors.accent} />
-            </Pressable>
-            {queue.length > 0 && (
-              <Pressable onPress={() => shuffleQueue()} hitSlop={10} style={styles.headerButton}>
-                <Ionicons name="shuffle" size={22} color={colors.textSecondary} />
+            {!selectionMode && (
+              <>
+                <Pressable onPress={() => setShowAddModal(true)} hitSlop={10} style={styles.headerButton}>
+                  <Ionicons name="add-circle" size={26} color={colors.accent} />
+                </Pressable>
+                {queue.length > 0 && (
+                  <Pressable onPress={() => shuffleQueue()} hitSlop={10} style={styles.headerButton}>
+                    <Ionicons name="shuffle" size={22} color={colors.textSecondary} />
+                  </Pressable>
+                )}
+              </>
+            )}
+            {selectionMode && selectedIndices.size > 0 && (
+              <Pressable onPress={() => {
+                const sortedIndices = [...selectedIndices].sort((a, b) => b - a);
+                sortedIndices.forEach(i => removeFromQueue(i));
+                setSelectedIndices(new Set());
+                setSelectionMode(false);
+              }} hitSlop={10} style={styles.headerButton}>
+                <Ionicons name="trash" size={22} color="#FF3B30" />
               </Pressable>
             )}
           </View>
         </View>
       </SafeAreaView>
 
-      {currentTrack && (
+      {currentTrack && !selectionMode && (
         <View style={[styles.section, { borderBottomColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Now Playing</Text>
           <View style={[styles.nowPlaying, { backgroundColor: colors.card }]}>
@@ -177,6 +239,17 @@ export function Queue({ onClose }: QueueProps) {
             </View>
             <Ionicons name="play" size={18} color={colors.accent} />
           </View>
+        </View>
+      )}
+
+      {selectionMode && (
+        <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+          <Pressable onPress={() => setSelectedIndices(new Set(queue.map((_, i) => i)))}>
+            <Text style={[styles.selectionAction, { color: colors.accent }]}>All</Text>
+          </Pressable>
+          <Pressable onPress={() => setSelectedIndices(new Set())}>
+            <Text style={[styles.selectionAction, { color: colors.textSecondary }]}>None</Text>
+          </Pressable>
         </View>
       )}
 
@@ -200,6 +273,7 @@ export function Queue({ onClose }: QueueProps) {
             keyExtractor={(item, index) => `queue-${item.uri}-${index}`}
             renderItem={renderQueueTrack}
             contentContainerStyle={styles.listContent}
+            getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * (index ?? 0), index: index ?? 0 })}
           />
         )}
       </View>
@@ -299,6 +373,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  selectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  selectionAction: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   section: {
     paddingHorizontal: 20,

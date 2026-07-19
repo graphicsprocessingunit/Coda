@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TrackMetadata, Playlist } from '../context/AudioContext';
+import { TrackMetadata, Playlist, SmartPlaylist } from '../context/AudioContext';
 
 const STORAGE_KEYS = {
   LIBRARY: '@coda_library',
@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   CURRENT_TRACK: '@coda_current_track',
   PLAYBACK_POSITION: '@coda_playback_position',
   QUEUE: '@coda_queue',
+  SMART_PLAYLISTS: '@coda_smart_playlists',
 };
 
 export class StorageService {
@@ -96,6 +97,24 @@ export class StorageService {
       return data ? JSON.parse(data) : [];
     } catch (error) {
       console.error('Error loading queue:', error);
+      return [];
+    }
+  }
+
+  static async saveSmartPlaylists(smartPlaylists: SmartPlaylist[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.SMART_PLAYLISTS, JSON.stringify(smartPlaylists));
+    } catch (error) {
+      console.error('Error saving smart playlists:', error);
+    }
+  }
+
+  static async loadSmartPlaylists(): Promise<SmartPlaylist[]> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.SMART_PLAYLISTS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Error loading smart playlists:', error);
       return [];
     }
   }
