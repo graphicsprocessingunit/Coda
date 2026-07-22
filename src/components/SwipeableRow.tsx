@@ -93,8 +93,10 @@ export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30', onDo
           closeAll('left');
           lastOffset.current = -80;
         } else if (newValue > 60 && onDownload) {
-          closeAll('right');
-          lastOffset.current = 80;
+          closeAll(null);
+          lastOffset.current = 0;
+          onDownload();
+          return;
         } else {
           closeAll(null);
           lastOffset.current = 0;

@@ -95,39 +95,35 @@ export class OfflineCacheService {
         throw new DownloadError(`Server error (HTTP ${response.status})`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        destFile.write(new Uint8Array(arrayBuffer));
-        onProgress?.(1);
-        return destFile.uri;
-      }
-
-      const contentLength = Number(response.headers.get('content-length')) || 0;
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        received += value.length;
-        if (contentLength > 0) {
-          onProgress?.(received / contentLength);
-        } else {
-          onProgress?.(-(received / 1024));
+      let data: Uint8Array;
+      try {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No reader');
+        const contentLength = Number(response.headers.get('content-length')) || 0;
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (contentLength > 0) {
+            onProgress?.(received / contentLength);
+          } else {
+            onProgress?.(-(received / 1024));
+          }
         }
+        data = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+          data.set(chunk, offset);
+          offset += chunk.length;
+        }
+      } catch {
+        const arrayBuffer = await response.arrayBuffer();
+        data = new Uint8Array(arrayBuffer);
       }
-
-      const total = new Uint8Array(received);
-      let offset = 0;
-      for (const chunk of chunks) {
-        total.set(chunk, offset);
-        offset += chunk.length;
-      }
-
-      destFile.write(total);
+      destFile.write(data);
       onProgress?.(1);
       return destFile.uri;
     } catch (error: any) {
@@ -137,7 +133,8 @@ export class OfflineCacheService {
         if (callerAborted.current) throw error;
         throw new DownloadError('Download timed out');
       }
-      throw new DownloadError('Download failed');
+      console.error('Download failed:', error?.message || error);
+      throw new DownloadError(error?.message || 'Download failed');
     }
   }
 
