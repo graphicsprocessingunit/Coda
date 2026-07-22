@@ -42,6 +42,7 @@ yarn-error.*
 
 # build files
 /build
+.gradle/
 
 # test
 coverage/
