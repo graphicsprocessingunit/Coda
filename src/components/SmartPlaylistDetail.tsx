@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, Alert, Modal, TextInput, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, Alert, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -17,16 +17,18 @@ interface SmartPlaylistDetailProps {
   onBack: () => void;
   onDelete: () => void;
   onUpdate?: (id: string, updates: Partial<Omit<SmartPlaylist, 'id' | 'createdAt'>>) => void;
-  onDownload?: (track: TrackMetadata) => void;
+  onDownload?: (track: TrackMetadata) => Promise<string | null>;
   activeDownloads?: Map<string, number>;
 }
 
-const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
+const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, downloadProgress, downloadError }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
   colors: any;
   onPress: (item: TrackMetadata) => void;
+  downloadProgress?: number;
+  downloadError?: string;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -83,11 +85,25 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.artist}
           </Text>
+          {downloadError && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Ionicons name="alert-circle" size={12} color="#FF3B30" />
+              <Text style={{ fontSize: 11, color: '#FF3B30' }} numberOfLines={1}>{downloadError}</Text>
+            </View>
+          )}
         </View>
 
-        {item.source === 'navidrome' && !OfflineCacheService.isTrackCached(item) && (
+        {typeof downloadProgress === 'number' ? (
+          downloadProgress >= 1 ? (
+            <Ionicons name="checkmark-circle" size={18} color="#34C759" />
+          ) : downloadProgress < 0 ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Text style={{ fontSize: 11, color: colors.textSecondary }}>{Math.round(downloadProgress * 100)}%</Text>
+          )
+        ) : item.source === 'navidrome' && !OfflineCacheService.isTrackCached(item) ? (
           <Ionicons name="cloud-download-outline" size={18} color={colors.textSecondary} />
-        )}
+        ) : null}
       </Pressable>
     </Animated.View>
   );
@@ -158,6 +174,7 @@ export function SmartPlaylistDetail({
   const [editRuleValueText, setEditRuleValueText] = useState('');
   const [editRuleValueBool, setEditRuleValueBool] = useState(true);
   const [editRuleValueSource, setEditRuleValueSource] = useState<'local' | 'navidrome'>('local');
+  const [downloadErrors, setDownloadErrors] = useState<Map<string, string>>(new Map());
 
   const tracks = useMemo(() => evaluateSmartPlaylist(library, playlist), [library, playlist]);
 
@@ -239,10 +256,20 @@ export function SmartPlaylistDetail({
     return track.source === 'navidrome' && !OfflineCacheService.isTrackCached(track) && !activeDownloads?.has(track.uri);
   };
 
-  const handleTrackDownload = (track: TrackMetadata) => {
+  const handleTrackDownload = async (track: TrackMetadata) => {
     if (isTrackDownloadable(track)) {
       if (onDownload) {
-        onDownload(track);
+        const error = await onDownload(track);
+        if (error) {
+          setDownloadErrors(prev => new Map(prev).set(track.uri, error));
+          setTimeout(() => {
+            setDownloadErrors(prev => {
+              const next = new Map(prev);
+              next.delete(track.uri);
+              return next;
+            });
+          }, 3000);
+        }
       } else {
         const creds = getNavidromeCredentials();
         if (creds) {
@@ -254,6 +281,8 @@ export function SmartPlaylistDetail({
 
   const renderTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isCurrentTrack = currentTrack?.uri === item.uri;
+    const downloadProgress = activeDownloads?.get(item.uri);
+    const downloadError = downloadErrors.get(item.uri);
     return (
       <SwipeableRow
         onDelete={() => {
@@ -270,6 +299,8 @@ export function SmartPlaylistDetail({
           isCurrentTrack={isCurrentTrack}
           colors={colors}
           onPress={() => onTrackPress(item)}
+          downloadProgress={downloadProgress}
+          downloadError={downloadError}
         />
       </SwipeableRow>
     );

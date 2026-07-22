@@ -24,10 +24,10 @@ interface TrackListProps {
   onBatchAddToPlaylist?: (uris: string[]) => void;
   onBatchRemove?: (uris: string[]) => void;
   onBatchDownload?: (tracks: TrackMetadata[]) => void;
-  onDownload?: (track: TrackMetadata) => void;
+  onDownload?: (track: TrackMetadata) => Promise<string | null>;
 }
 
-const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite, downloadProgress, onCancelDownload, selectionMode, isSelected, onToggleSelection }: {
+const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite, downloadProgress, downloadError, onCancelDownload, selectionMode, isSelected, onToggleSelection }: {
   item: TrackMetadata;
   index: number;
   isCurrentTrack: boolean;
@@ -36,6 +36,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
   onLongPress?: (item: TrackMetadata) => void;
   onToggleFavorite?: (uri: string) => void;
   downloadProgress?: number;
+  downloadError?: string;
   onCancelDownload?: () => void;
   selectionMode?: boolean;
   isSelected?: boolean;
@@ -141,6 +142,14 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
               )}
             </View>
           )}
+          {downloadError && (
+            <View style={styles.downloadProgressContainer}>
+              <Ionicons name="alert-circle" size={14} color="#FF3B30" />
+              <Text style={[styles.downloadProgressText, { color: '#FF3B30' }]} numberOfLines={1}>
+                {downloadError}
+              </Text>
+            </View>
+          )}
         </View>
 
         {!selectionMode && isCurrentTrack && (
@@ -170,6 +179,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
   const [sortMode, setSortMode] = useState<SortMode>('title');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedUris, setSelectedUris] = useState<Set<string>>(new Set());
+  const [downloadErrors, setDownloadErrors] = useState<Map<string, string>>(new Map());
 
   const trackKeyExtractor = useMemo(() => (item: TrackMetadata) => item.uri, []);
   const getItemLayout = useMemo(() => (_: any, index: number) => ({ length: 72, offset: 72 * index, index }), []);
@@ -209,10 +219,20 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     return track.source === 'navidrome' && !OfflineCacheService.isTrackCached(track) && !activeDownloads?.has(track.uri);
   };
 
-  const handleTrackDownload = (track: TrackMetadata) => {
+  const handleTrackDownload = async (track: TrackMetadata) => {
     if (isTrackDownloadable(track)) {
       if (onDownload) {
-        onDownload(track);
+        const error = await onDownload(track);
+        if (error) {
+          setDownloadErrors(prev => new Map(prev).set(track.uri, error));
+          setTimeout(() => {
+            setDownloadErrors(prev => {
+              const next = new Map(prev);
+              next.delete(track.uri);
+              return next;
+            });
+          }, 3000);
+        }
       } else {
         const creds = getNavidromeCredentials();
         if (creds) {
@@ -226,6 +246,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
     const isCurrentTrack = currentTrack?.uri === item.uri;
     const downloadProgress = activeDownloads?.get(item.uri);
     const isSelected = selectedUris.has(item.uri);
+    const downloadError = downloadErrors.get(item.uri);
 
     const trackContent = (
       <AnimatedTrackItem
@@ -237,6 +258,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         onLongPress={handleTrackLongPress}
         onToggleFavorite={onToggleFavorite}
         downloadProgress={downloadProgress}
+        downloadError={downloadError}
         onCancelDownload={typeof downloadProgress === 'number' ? () => cancelDownload(item.uri) : undefined}
         selectionMode={selectionMode}
         isSelected={isSelected}

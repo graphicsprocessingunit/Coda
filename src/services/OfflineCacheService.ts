@@ -10,6 +10,13 @@ function ensureDirs() {
   if (!ARTWORK_CACHE_DIR.exists) ARTWORK_CACHE_DIR.create({ intermediates: true });
 }
 
+export class DownloadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DownloadError';
+  }
+}
+
 export class OfflineCacheService {
   private static activeControllers = new Map<string, AbortController>();
 
@@ -43,24 +50,50 @@ export class OfflineCacheService {
     track: TrackMetadata,
     onProgress?: (progress: number) => void,
     signal?: AbortSignal,
-  ): Promise<string | null> {
-    if (!track.navidromeId) return null;
+  ): Promise<string> {
+    if (!track.navidromeId) throw new DownloadError('Invalid track');
 
     ensureDirs();
     const destFile = new File(AUDIO_CACHE_DIR, `${track.navidromeId}.mp3`);
     if (destFile.exists) return destFile.uri;
 
     const controller = new AbortController();
+    const callerAborted = { current: false };
     if (signal) {
-      signal.addEventListener('abort', () => controller.abort());
+      signal.addEventListener('abort', () => {
+        callerAborted.current = true;
+        controller.abort();
+      });
     }
     const timeoutId = setTimeout(() => controller.abort(), 60_000);
 
     try {
       const url = NavidromeService.getStreamUrl(creds, track.navidromeId);
-      const response = await fetch(url, { signal: controller.signal });
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: controller.signal });
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err?.name === 'AbortError') {
+          if (callerAborted.current) throw err;
+          throw new DownloadError('Download timed out');
+        }
+        if (err instanceof TypeError) {
+          throw new DownloadError("Can't reach server");
+        }
+        throw new DownloadError('Network error');
+      }
       clearTimeout(timeoutId);
-      if (!response.ok) return null;
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new DownloadError('Server refused — check credentials');
+        }
+        if (response.status === 404) {
+          throw new DownloadError('Track not found on server');
+        }
+        throw new DownloadError(`Server error (HTTP ${response.status})`);
+      }
 
       const reader = response.body?.getReader();
       if (!reader) {
@@ -99,9 +132,12 @@ export class OfflineCacheService {
       return destFile.uri;
     } catch (error: any) {
       clearTimeout(timeoutId);
-      if (error?.name === 'AbortError') throw error;
-      console.error('Error downloading track:', error);
-      return null;
+      if (error instanceof DownloadError) throw error;
+      if (error?.name === 'AbortError') {
+        if (callerAborted.current) throw error;
+        throw new DownloadError('Download timed out');
+      }
+      throw new DownloadError('Download failed');
     }
   }
 

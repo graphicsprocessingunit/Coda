@@ -222,6 +222,7 @@ function LibraryScreen() {
   const [showCreateFromLibraryModal, setShowCreateFromLibraryModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [batchUris, setBatchUris] = useState<string[] | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
@@ -265,8 +266,10 @@ function LibraryScreen() {
         ...(isDownloadable ? [{
           text: 'Download for Offline',
           onPress: async () => {
-            const success = await downloadTrackForLibrary(track);
-            if (success) {
+            const error = await downloadTrackForLibrary(track);
+            if (error) {
+              setDownloadError(error);
+            } else {
               Alert.alert('Downloaded', `"${track.title}" is now available offline.`);
             }
           },
@@ -302,13 +305,22 @@ function LibraryScreen() {
 
   const handleBatchDownload = async (tracks: TrackMetadata[]) => {
     const queue = tracks.filter(t => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t));
+    let failed = 0;
+    let lastError = '';
     const run = async () => {
       while (queue.length > 0) {
         const track = queue.shift()!;
-        await downloadTrackForLibrary(track);
+        const error = await downloadTrackForLibrary(track);
+        if (error) {
+          failed++;
+          lastError = error;
+        }
       }
     };
     await Promise.all([run(), run(), run()]);
+    if (failed > 0) {
+      setDownloadError(`${failed} download${failed > 1 ? 's' : ''} failed — ${lastError}`);
+    }
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -462,6 +474,7 @@ function LibraryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {downloadError && <Toast message={downloadError} type="error" onDismiss={() => setDownloadError(null)} />}
     </View>
   );
 }

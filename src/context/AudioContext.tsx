@@ -95,7 +95,7 @@ interface AudioContextType {
   toggleRepeat: () => void;
   addToLibrary: (tracks: TrackMetadata[]) => void;
   removeFromLibrary: (trackUri: string) => void;
-  downloadTrackForLibrary: (track: TrackMetadata) => Promise<boolean>;
+  downloadTrackForLibrary: (track: TrackMetadata) => Promise<string | null>;
   playFromLibrary: (track: TrackMetadata) => Promise<void>;
   playFromPlaylist: (playlist: Playlist, track: TrackMetadata) => Promise<void>;
   createPlaylist: (name: string) => string;
@@ -981,9 +981,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const downloadTrackForLibrary = useCallback(async (track: TrackMetadata): Promise<boolean> => {
+  const downloadTrackForLibrary = useCallback(async (track: TrackMetadata): Promise<string | null> => {
     const creds = navidromeCredentialsRef.current;
-    if (!creds || !track.navidromeId) return false;
+    if (!creds || !track.navidromeId) return 'Not connected to Navidrome';
 
     const controller = OfflineCacheService.getAbortController(track.uri);
     setActiveDownloads((prev) => new Map(prev).set(track.uri, 0));
@@ -1008,7 +1008,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       });
       OfflineCacheService.removeController(track.uri);
 
-      if (!offlineTrack.cachedUri) return false;
+      if (!offlineTrack.cachedUri) return 'Download failed';
 
       setLibrary((prev) =>
         prev.map((t) => (t.uri === track.uri ? {
@@ -1018,7 +1018,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           artwork: offlineTrack.artwork,
         } : t))
       );
-      return true;
+      return null;
     } catch (err: any) {
       setActiveDownloads((prev) => {
         const next = new Map(prev);
@@ -1029,9 +1029,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (err?.name === 'AbortError') {
         const partial = new File(Paths.document, `cache/navidrome/audio/${track.navidromeId}.mp3`);
         if (partial.exists) partial.delete();
-        return false;
+        return null;
       }
-      return false;
+      return err?.message || 'Download failed';
     }
   }, []);
 
