@@ -30,12 +30,15 @@ A beautifully crafted music player for iOS and Android with local library manage
 | 🎶 | **Gapless Playback** | Seamless transitions with next-track pre-buffering |
 | 📱 | **Lock Screen Controls** | Full playback controls in Control Center and on the lock screen |
 | 🎨 | **4 Themes** | Dark, Light, Midnight, and Ocean — all with full accent color support |
-| 📋 | **Smart Playlists** | Create, rename, reorder, and manage playlists with drag-and-drop |
+| 📋 | **Smart Playlists** | Rule-based auto-updating collections with live match preview and edit mode |
 | ❤️ | **Favorites** | Heart your tracks with play count tracking and filtering |
 | 📝 | **Synced Lyrics** | Auto-scrolling lyrics with highlighted current line via LRCLIB |
 | ⏰ | **Sleep Timer** | Set a countdown with a smooth 30-second volume fade-out |
 | 🔀 | **Queue Management** | Full queue with drag-to-reorder, swipe-to-delete, and library search |
-| 🎚️ | **Audio Effects** | EQ presets (Flat, Relaxed, Clear, Upbeat), speed control, and volume |
+| 🎚️ | **5-Band Equalizer** | Native EQ with 6 presets, per-band gain, and ON/OFF toggle |
+| 🎛️ | **Audio Effects** | Playback speed (0.5x–2.0x), master volume, and sleep timer fade-out |
+| 🔍 | **Batch Operations** | Multi-select tracks for bulk favorite, download, add-to-playlist, or delete |
+| 📡 | **Last.fm Scrobbling** | Auto-scrobble to Last.fm with now-playing updates and secure credential storage |
 
 ## Screenshots
 
@@ -58,10 +61,13 @@ A beautifully crafted music player for iOS and Android with local library manage
 | UI | React Native 0.81 | Cross-platform components |
 | Language | TypeScript (strict) | Type-safe development |
 | Audio Engine | expo-audio | Playback, crossfade, background audio |
+| Native EQ | expo-modules | AVAudioEngine (iOS) / Equalizer (Android) |
 | State | React Context | AudioContext + ThemeContext |
 | Persistence | AsyncStorage | Library, playlists, queue, settings |
+| Secure Storage | expo-secure-store | Navidrome & Last.fm credentials |
 | Navigation | React Navigation | Bottom tabs + stack navigator |
 | Lyrics | LRCLIB API | Synced lyrics search and caching |
+| Scrobbling | Last.fm API | Track scrobbling and now-playing updates |
 | Icons | @expo/vector-icons | Ionicons throughout the app |
 
 ## Installation
@@ -148,22 +154,31 @@ App.tsx                          # Root navigator, tab screens
 │   │   ├── Queue.tsx            # Queue management with drag-reorder
 │   │   ├── Playlists.tsx        # Playlist list with create/rename
 │   │   ├── PlaylistDetail.tsx   # Playlist tracks with add/reorder
+│   │   ├── SmartPlaylistDetail.tsx  # Smart playlist with edit mode
 │   │   ├── Settings.tsx         # Settings with slide-up modals
 │   │   ├── LyricsDisplay.tsx    # Synced lyrics auto-scroll
 │   │   ├── ProgressBar.tsx      # Animated seek bar
-│   │   ├── SwipeableRow.tsx     # Swipe-to-delete gesture
+│   │   ├── SwipeableRow.tsx     # Swipe-to-delete/download gesture
+│   │   ├── Equalizer.tsx        # 5-band EQ with vertical sliders
 │   │   ├── SkeletonLoader.tsx   # Shimmer loading placeholders
 │   │   ├── EmptyState.tsx       # Animated empty state with CTAs
 │   │   ├── ErrorBoundary.tsx    # Crash recovery UI
 │   │   └── TrackInfo.tsx        # Song metadata modal
 │   ├── context/
-│   │   ├── AudioContext.tsx      # Audio engine, queue, library state
+│   │   ├── AudioContext.tsx      # Audio engine, queue, library, EQ state
 │   │   └── ThemeContext.tsx      # 4-theme system with persistence
 │   └── services/
 │       ├── StorageService.ts     # AsyncStorage persistence layer
 │       ├── FilePickerService.ts  # File import with metadata extraction
 │       ├── NavidromeService.ts   # Subsonic API client
-│       └── LyricsService.ts      # LRCLIB lyrics search + cache
+│       ├── LyricsService.ts      # LRCLIB lyrics search + cache
+│       ├── LastFmService.ts      # Last.fm scrobbling client
+│       ├── OfflineCacheService.ts # Track/artwork download for offline
+│       └── SmartPlaylistEngine.ts # Rule-based track filtering
+├── modules/
+│   └── audio-eq/                # Native equalizer Expo module
+│       ├── ios/AudioEQModule.swift   # AVAudioEngine + AVAudioUnitEQ
+│       └── android/.../AudioEQModule.kt  # android.media.audiofx.Equalizer
 ```
 
 ### Key Design Decisions
@@ -172,6 +187,7 @@ App.tsx                          # Root navigator, tab screens
 - **Pre-buffering**: Next track's player is created ahead of time for gapless transitions
 - **Library-as-source**: When queue is exhausted, falls back to the library for continuous playback
 - **Lock screen integration**: Uses `expo-audio`'s `setActiveForLockScreen` with metadata and seek controls
+- **Native equalizer**: Custom Expo module (`modules/audio-eq/`) using platform audio APIs for low-latency EQ processing
 
 </details>
 

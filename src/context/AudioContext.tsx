@@ -9,7 +9,7 @@ import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
-import * as AudioEQ from '../../modules/audio-eq/src/index';
+import * as AudioEQ from 'audio-eq';
 
 export interface TrackMetadata {
   title: string;
