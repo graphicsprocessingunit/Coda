@@ -17,6 +17,8 @@ interface SmartPlaylistDetailProps {
   onBack: () => void;
   onDelete: () => void;
   onUpdate?: (id: string, updates: Partial<Omit<SmartPlaylist, 'id' | 'createdAt'>>) => void;
+  onDownload?: (track: TrackMetadata) => void;
+  activeDownloads?: Map<string, number>;
 }
 
 const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
@@ -105,10 +107,10 @@ function RuleSummary({ rules, onRemoveRule }: { rules: SmartPlaylist['rules']; o
             label = rule.value ? 'Is favorite' : 'Not favorite';
             break;
           case 'artist':
-            label = `Artist: ${rule.value}`;
+            label = `Artist ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`;
             break;
           case 'album':
-            label = `Album: ${rule.value}`;
+            label = `Album ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`;
             break;
           case 'source':
             label = `Source: ${rule.value}`;
@@ -138,6 +140,8 @@ export function SmartPlaylistDetail({
   onBack,
   onDelete,
   onUpdate,
+  onDownload,
+  activeDownloads,
 }: SmartPlaylistDetailProps) {
   const { colors } = useTheme();
   const { getNavidromeCredentials } = useAudio();
@@ -146,6 +150,14 @@ export function SmartPlaylistDetail({
   const [editRules, setEditRules] = useState<SmartPlaylistRule[]>(playlist.rules);
   const [editLimit, setEditLimit] = useState(String(playlist.limit ?? 50));
   const [editSortField, setEditSortField] = useState<'playCount' | 'title'>(playlist.sortField ?? 'title');
+  const [editSortDirection, setEditSortDirection] = useState<'asc' | 'desc'>(playlist.sortDirection ?? 'asc');
+  const [editRuleField, setEditRuleField] = useState<'playCount' | 'isFavorite' | 'artist' | 'album' | 'source'>('playCount');
+  const [editRuleOp, setEditRuleOp] = useState<'gte' | 'lte' | 'eq'>('gte');
+  const [editRuleArtistOp, setEditRuleArtistOp] = useState<'eq' | 'contains'>('eq');
+  const [editRuleAlbumOp, setEditRuleAlbumOp] = useState<'eq' | 'contains'>('eq');
+  const [editRuleValueText, setEditRuleValueText] = useState('');
+  const [editRuleValueBool, setEditRuleValueBool] = useState(true);
+  const [editRuleValueSource, setEditRuleValueSource] = useState<'local' | 'navidrome'>('local');
 
   const tracks = useMemo(() => evaluateSmartPlaylist(library, playlist), [library, playlist]);
 
@@ -168,6 +180,7 @@ export function SmartPlaylistDetail({
         rules: editRules,
         limit: parseInt(editLimit, 10) || 50,
         sortField: editSortField,
+        sortDirection: editSortDirection,
       });
     }
     setShowEditModal(false);
@@ -178,18 +191,63 @@ export function SmartPlaylistDetail({
     setEditRules([...playlist.rules]);
     setEditLimit(String(playlist.limit ?? 50));
     setEditSortField(playlist.sortField ?? 'title');
+    setEditSortDirection(playlist.sortDirection ?? 'asc');
+    setEditRuleField('playCount');
+    setEditRuleOp('gte');
+    setEditRuleValueText('');
     setShowEditModal(true);
   };
 
+  const handleEditAddRule = () => {
+    let rule: SmartPlaylistRule | null = null;
+    switch (editRuleField) {
+      case 'playCount':
+        rule = { field: 'playCount', op: editRuleOp, value: parseInt(editRuleValueText, 10) || 0 };
+        break;
+      case 'isFavorite':
+        rule = { field: 'isFavorite', op: 'eq', value: editRuleValueBool };
+        break;
+      case 'artist':
+        if (!editRuleValueText.trim()) return;
+        rule = { field: 'artist', op: editRuleArtistOp, value: editRuleValueText.trim() };
+        break;
+      case 'album':
+        if (!editRuleValueText.trim()) return;
+        rule = { field: 'album', op: editRuleAlbumOp, value: editRuleValueText.trim() };
+        break;
+      case 'source':
+        rule = { field: 'source', op: 'eq', value: editRuleValueSource };
+        break;
+    }
+    if (rule) {
+      setEditRules((prev) => [...prev, rule!]);
+      setEditRuleValueText('');
+    }
+  };
+
+  const editLiveMatchCount = useMemo(() => {
+    if (!library || editRules.length === 0) return 0;
+    const dummyPlaylist: SmartPlaylist = {
+      id: '', name: '', rules: editRules,
+      limit: parseInt(editLimit, 10) || 50,
+      sortField: editSortField, sortDirection: editSortDirection, createdAt: 0,
+    };
+    return evaluateSmartPlaylist(library, dummyPlaylist).length;
+  }, [library, editRules, editLimit, editSortField, editSortDirection]);
+
   const isTrackDownloadable = (track: TrackMetadata) => {
-    return track.source === 'navidrome' && !OfflineCacheService.isTrackCached(track);
+    return track.source === 'navidrome' && !OfflineCacheService.isTrackCached(track) && !activeDownloads?.has(track.uri);
   };
 
   const handleTrackDownload = (track: TrackMetadata) => {
     if (isTrackDownloadable(track)) {
-      const creds = getNavidromeCredentials();
-      if (creds) {
-        OfflineCacheService.downloadTrackForOffline(creds, track).catch(() => {});
+      if (onDownload) {
+        onDownload(track);
+      } else {
+        const creds = getNavidromeCredentials();
+        if (creds) {
+          OfflineCacheService.downloadTrackForOffline(creds, track).catch(() => {});
+        }
       }
     }
   };
@@ -287,8 +345,8 @@ export function SmartPlaylistDetail({
                 switch (rule.field) {
                   case 'playCount': label = `Play count ${rule.op === 'gte' ? '≥' : rule.op === 'lte' ? '≤' : '='} ${rule.value}`; break;
                   case 'isFavorite': label = rule.value ? 'Is favorite' : 'Not favorite'; break;
-                  case 'artist': label = `Artist: ${rule.value}`; break;
-                  case 'album': label = `Album: ${rule.value}`; break;
+                  case 'artist': label = `Artist ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`; break;
+                  case 'album': label = `Album ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`; break;
                   case 'source': label = `Source: ${rule.value}`; break;
                 }
                 return (
@@ -302,16 +360,140 @@ export function SmartPlaylistDetail({
                 <Text style={[styles.noRules, { color: colors.textSecondary }]}>No rules added yet</Text>
               )}
 
-              <Text style={[styles.label, { color: colors.textSecondary }]}>Sort by</Text>
-              <View style={styles.sortRow}>
+              <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>Add Rule</Text>
+              <View style={[styles.editRulePicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <Text style={[styles.editRulePickerLabel, { color: colors.textSecondary }]}>Field</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {(['playCount', 'isFavorite', 'artist', 'album', 'source'] as const).map((f) => (
+                    <Pressable
+                      key={f}
+                      style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editRuleField === f && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                      onPress={() => { setEditRuleField(f); setEditRuleValueText(''); }}
+                    >
+                      <Text style={{ color: editRuleField === f ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                        {f === 'playCount' ? 'Plays' : f === 'isFavorite' ? 'Favorite' : f === 'artist' ? 'Artist' : f === 'album' ? 'Album' : 'Source'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {editRuleField === 'playCount' && (
+                <View style={[styles.editRulePicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <Text style={[styles.editRulePickerLabel, { color: colors.textSecondary }]}>Operator</Text>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {(['gte', 'lte', 'eq'] as const).map((op) => (
+                      <Pressable
+                        key={op}
+                        style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editRuleOp === op && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                        onPress={() => setEditRuleOp(op)}
+                      >
+                        <Text style={{ color: editRuleOp === op ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                          {op === 'gte' ? '≥' : op === 'lte' ? '≤' : '='}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {(editRuleField === 'artist' || editRuleField === 'album') && (
+                <View style={[styles.editRulePicker, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                  <Text style={[styles.editRulePickerLabel, { color: colors.textSecondary }]}>Operator</Text>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {(['eq', 'contains'] as const).map((op) => (
+                      <Pressable
+                        key={op}
+                        style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, (editRuleField === 'artist' ? editRuleArtistOp : editRuleAlbumOp) === op && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                        onPress={() => editRuleField === 'artist' ? setEditRuleArtistOp(op) : setEditRuleAlbumOp(op)}
+                      >
+                        <Text style={{ color: (editRuleField === 'artist' ? editRuleArtistOp : editRuleAlbumOp) === op ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>
+                          {op === 'eq' ? 'Equals' : 'Contains'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {(editRuleField === 'playCount' || editRuleField === 'artist' || editRuleField === 'album') && (
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.text, borderColor: colors.border }]}
+                  placeholder={editRuleField === 'playCount' ? 'Count' : 'Value'}
+                  placeholderTextColor={colors.textSecondary}
+                  value={editRuleValueText}
+                  onChangeText={setEditRuleValueText}
+                  keyboardType={editRuleField === 'playCount' ? 'numeric' : 'default'}
+                />
+              )}
+
+              {editRuleField === 'isFavorite' && (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editRuleValueBool && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={() => setEditRuleValueBool(true)}
+                  >
+                    <Text style={{ color: editRuleValueBool ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>Yes</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, !editRuleValueBool && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={() => setEditRuleValueBool(false)}
+                  >
+                    <Text style={{ color: !editRuleValueBool ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>No</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {editRuleField === 'source' && (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editRuleValueSource === 'local' && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={() => setEditRuleValueSource('local')}
+                  >
+                    <Text style={{ color: editRuleValueSource === 'local' ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>Local</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editRuleValueSource === 'navidrome' && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={() => setEditRuleValueSource('navidrome')}
+                  >
+                    <Text style={{ color: editRuleValueSource === 'navidrome' ? '#fff' : colors.text, fontSize: 13, fontWeight: '600' }}>Navidrome</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              <Pressable style={[styles.editAddRuleButton, { backgroundColor: colors.accent }]} onPress={handleEditAddRule}>
+                <Ionicons name="add" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Add Rule</Text>
+              </Pressable>
+
+              {editRules.length > 0 && (
+                <Text style={[styles.label, { color: colors.textSecondary, marginTop: 8, fontSize: 13 }]}>
+                  {editLiveMatchCount} {editLiveMatchCount === 1 ? 'track' : 'tracks'} match
+                </Text>
+              )}
+
+              <Text style={[styles.label, { color: colors.textSecondary, marginTop: 12 }]}>Sort</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
                 {(['title', 'playCount'] as const).map((field) => (
                   <Pressable
                     key={field}
-                    style={[styles.sortOption, { backgroundColor: editSortField === field ? colors.accent : colors.background, borderColor: colors.border }]}
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editSortField === field && { backgroundColor: colors.accent, borderColor: colors.accent }]}
                     onPress={() => setEditSortField(field)}
                   >
                     <Text style={{ color: editSortField === field ? '#fff' : colors.text, fontWeight: '600' }}>
                       {field === 'title' ? 'Title' : 'Plays'}
+                    </Text>
+                  </Pressable>
+                ))}
+                <View style={{ width: 1, backgroundColor: colors.border }} />
+                {(['asc', 'desc'] as const).map((dir) => (
+                  <Pressable
+                    key={dir}
+                    style={[styles.editRulePickerOption, { backgroundColor: colors.background, borderColor: colors.border }, editSortDirection === dir && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                    onPress={() => setEditSortDirection(dir)}
+                  >
+                    <Text style={{ color: editSortDirection === dir ? '#fff' : colors.text, fontWeight: '600' }}>
+                      {dir === 'asc' ? 'A→Z' : 'Z→A'}
                     </Text>
                   </Pressable>
                 ))}
@@ -551,5 +733,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 10,
+  },
+  editRulePicker: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  editRulePickerLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  editRulePickerOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  editAddRuleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 8,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -113,8 +113,11 @@ export function Playlists({
   const [smartPlaylistRules, setSmartPlaylistRules] = useState<SmartPlaylistRule[]>([]);
   const [smartPlaylistLimit, setSmartPlaylistLimit] = useState('50');
   const [smartPlaylistSortField, setSmartPlaylistSortField] = useState<'playCount' | 'title'>('title');
+  const [smartPlaylistSortDirection, setSmartPlaylistSortDirection] = useState<'asc' | 'desc'>('asc');
   const [ruleField, setRuleField] = useState<'playCount' | 'isFavorite' | 'artist' | 'album' | 'source'>('playCount');
   const [ruleOp, setRuleOp] = useState<'gte' | 'lte' | 'eq'>('gte');
+  const [ruleArtistOp, setRuleArtistOp] = useState<'eq' | 'contains'>('eq');
+  const [ruleAlbumOp, setRuleAlbumOp] = useState<'eq' | 'contains'>('eq');
   const [ruleValueText, setRuleValueText] = useState('');
   const [ruleValueBool, setRuleValueBool] = useState(true);
   const [ruleValueSource, setRuleValueSource] = useState<'local' | 'navidrome'>('local');
@@ -175,11 +178,11 @@ export function Playlists({
         break;
       case 'artist':
         if (!ruleValueText.trim()) return;
-        rule = { field: 'artist', op: 'eq', value: ruleValueText.trim() };
+        rule = { field: 'artist', op: ruleArtistOp, value: ruleValueText.trim() };
         break;
       case 'album':
         if (!ruleValueText.trim()) return;
-        rule = { field: 'album', op: 'eq', value: ruleValueText.trim() };
+        rule = { field: 'album', op: ruleAlbumOp, value: ruleValueText.trim() };
         break;
       case 'source':
         rule = { field: 'source', op: 'eq', value: ruleValueSource };
@@ -191,17 +194,32 @@ export function Playlists({
     }
   };
 
+  const liveMatchCount = useMemo(() => {
+    if (!library || smartPlaylistRules.length === 0) return 0;
+    const dummyPlaylist: SmartPlaylist = {
+      id: '',
+      name: '',
+      rules: smartPlaylistRules,
+      limit: parseInt(smartPlaylistLimit, 10) || 50,
+      sortField: smartPlaylistSortField,
+      sortDirection: smartPlaylistSortDirection,
+      createdAt: 0,
+    };
+    return evaluateSmartPlaylist(library, dummyPlaylist).length;
+  }, [library, smartPlaylistRules, smartPlaylistLimit, smartPlaylistSortField, smartPlaylistSortDirection]);
+
   const handleCreateSmartPlaylist = () => {
     if (smartPlaylistName.trim() && smartPlaylistRules.length > 0 && onCreateSmartPlaylist) {
       onCreateSmartPlaylist(smartPlaylistName.trim(), smartPlaylistRules, {
         limit: parseInt(smartPlaylistLimit, 10) || 50,
         sortField: smartPlaylistSortField,
-        sortDirection: 'desc',
+        sortDirection: smartPlaylistSortDirection,
       });
       setSmartPlaylistName('');
       setSmartPlaylistRules([]);
       setSmartPlaylistLimit('50');
       setSmartPlaylistSortField('title');
+      setSmartPlaylistSortDirection('asc');
       setShowCreateSmartModal(false);
     }
   };
@@ -460,8 +478,8 @@ export function Playlists({
                   <Text style={[styles.ruleText, { color: colors.text, flex: 1 }]}>
                     {rule.field === 'playCount' && `Play count ${rule.op === 'gte' ? '≥' : rule.op === 'lte' ? '≤' : '='} ${rule.value}`}
                     {rule.field === 'isFavorite' && (rule.value ? 'Is favorite' : 'Not favorite')}
-                    {rule.field === 'artist' && `Artist: ${rule.value}`}
-                    {rule.field === 'album' && `Album: ${rule.value}`}
+                    {rule.field === 'artist' && `Artist ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`}
+                    {rule.field === 'album' && `Album ${rule.op === 'contains' ? 'contains' : '='} "${rule.value}"`}
                     {rule.field === 'source' && `Source: ${rule.value}`}
                   </Text>
                   <Pressable onPress={() => setSmartPlaylistRules((prev) => prev.filter((_, j) => j !== i))}>
@@ -487,7 +505,7 @@ export function Playlists({
                   </ScrollView>
                 </View>
 
-                {(ruleField === 'playCount') && (
+                {ruleField === 'playCount' && (
                   <View style={[styles.rulePicker, { backgroundColor: colors.border }]}>
                     <Text style={[styles.rulePickerLabel, { color: colors.textSecondary }]}>Operator</Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -499,6 +517,25 @@ export function Playlists({
                         >
                           <Text style={[styles.rulePickerOptionText, { color: ruleOp === op ? '#fff' : colors.text }]}>
                             {op === 'gte' ? '≥' : op === 'lte' ? '≤' : '='}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {(ruleField === 'artist' || ruleField === 'album') && (
+                  <View style={[styles.rulePicker, { backgroundColor: colors.border }]}>
+                    <Text style={[styles.rulePickerLabel, { color: colors.textSecondary }]}>Operator</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {(['eq', 'contains'] as const).map((op) => (
+                        <Pressable
+                          key={op}
+                          style={[styles.rulePickerOption, (ruleField === 'artist' ? ruleArtistOp : ruleAlbumOp) === op && { backgroundColor: colors.accent }]}
+                          onPress={() => ruleField === 'artist' ? setRuleArtistOp(op) : setRuleAlbumOp(op)}
+                        >
+                          <Text style={[styles.rulePickerOptionText, { color: (ruleField === 'artist' ? ruleArtistOp : ruleAlbumOp) === op ? '#fff' : colors.text }]}>
+                            {op === 'eq' ? 'Equals' : 'Contains'}
                           </Text>
                         </Pressable>
                       ))}
@@ -557,6 +594,12 @@ export function Playlists({
                 </Pressable>
               </View>
 
+              {smartPlaylistRules.length > 0 && (
+                <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 12, fontSize: 13 }]}>
+                  {liveMatchCount} {liveMatchCount === 1 ? 'track' : 'tracks'} match{liveMatchCount !== 1 ? '' : ''}
+                </Text>
+              )}
+
               <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginTop: 12 }]}>Sort & Limit</Text>
               <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
                 <View style={{ flex: 1 }}>
@@ -573,6 +616,23 @@ export function Playlists({
                       onPress={() => setSmartPlaylistSortField('playCount')}
                     >
                       <Text style={[styles.rulePickerOptionText, { color: smartPlaylistSortField === 'playCount' ? '#fff' : colors.text }]}>Plays</Text>
+                    </Pressable>
+                  </View>
+                </View>
+                <View>
+                  <Text style={[styles.rulePickerLabel, { color: colors.textSecondary }]}>Direction</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable
+                      style={[styles.rulePickerOption, { backgroundColor: colors.border }, smartPlaylistSortDirection === 'asc' && { backgroundColor: colors.accent }]}
+                      onPress={() => setSmartPlaylistSortDirection('asc')}
+                    >
+                      <Text style={[styles.rulePickerOptionText, { color: smartPlaylistSortDirection === 'asc' ? '#fff' : colors.text }]}>A→Z</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.rulePickerOption, { backgroundColor: colors.border }, smartPlaylistSortDirection === 'desc' && { backgroundColor: colors.accent }]}
+                      onPress={() => setSmartPlaylistSortDirection('desc')}
+                    >
+                      <Text style={[styles.rulePickerOptionText, { color: smartPlaylistSortDirection === 'desc' ? '#fff' : colors.text }]}>Z→A</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -599,6 +659,7 @@ export function Playlists({
                   setSmartPlaylistRules([]);
                   setSmartPlaylistLimit('50');
                   setSmartPlaylistSortField('title');
+                  setSmartPlaylistSortDirection('asc');
                 }}
               >
                 <Text style={[styles.cancelButtonText, { color: colors.textSecondary }]}>Cancel</Text>

@@ -9,7 +9,7 @@ export function evaluateSmartPlaylist(
   );
 
   const sortField = playlist.sortField || 'title';
-  const sortDir = playlist.sortDirection || 'desc';
+  const sortDir = playlist.sortDirection || (sortField === 'playCount' ? 'desc' : 'asc');
 
   result.sort((a, b) => {
     let cmp = 0;
@@ -38,10 +38,18 @@ function evaluateRule(track: TrackMetadata, rule: SmartPlaylistRule): boolean {
     }
     case 'isFavorite':
       return (track.isFavorite || false) === rule.value;
-    case 'artist':
-      return (track.artist || '').toLowerCase() === rule.value.toLowerCase();
-    case 'album':
-      return (track.album || '').toLowerCase() === rule.value.toLowerCase();
+    case 'artist': {
+      const artist = (track.artist || '').toLowerCase();
+      const val = rule.value.toLowerCase();
+      if (rule.op === 'contains') return artist.includes(val);
+      return artist === val;
+    }
+    case 'album': {
+      const album = (track.album || '').toLowerCase();
+      const val = rule.value.toLowerCase();
+      if (rule.op === 'contains') return album.includes(val);
+      return album === val;
+    }
     case 'source':
       return track.source === rule.value;
     default:

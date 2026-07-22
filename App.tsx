@@ -20,6 +20,7 @@ import { Queue } from './src/components/Queue';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { TrackInfo } from './src/components/TrackInfo';
 import { AudioEffectsSection } from './src/components/AudioEffects';
+import { Equalizer } from './src/components/Equalizer';
 import { OfflineCacheService } from './src/services/OfflineCacheService';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
@@ -169,6 +170,7 @@ function PlayerScreen() {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+              <Equalizer />
               <AudioEffectsSection />
               <SleepTimerSection />
             </ScrollView>
@@ -298,6 +300,14 @@ function LibraryScreen() {
     setShowPlaylistModal(true);
   };
 
+  const handleBatchDownload = (tracks: TrackMetadata[]) => {
+    tracks.forEach(track => {
+      if (track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track)) {
+        downloadTrackForLibrary(track);
+      }
+    });
+  };
+
   const handleAddToPlaylist = (playlistId: string) => {
     if (batchUris) {
       batchUris.forEach(uri => {
@@ -350,6 +360,8 @@ function LibraryScreen() {
         onBatchFavorite={handleBatchFavorite}
         onBatchRemove={handleBatchRemove}
         onBatchAddToPlaylist={handleBatchAddToPlaylist}
+        onBatchDownload={handleBatchDownload}
+        onDownload={downloadTrackForLibrary}
       />
       <MiniPlayer />
       <Modal
@@ -532,7 +544,8 @@ function PlaylistDetailScreen({ route, navigation }: any) {
 }
 
 function SmartPlaylistDetailScreen({ route, navigation }: any) {
-  const { currentTrack, library, smartPlaylists, deleteSmartPlaylist, updateSmartPlaylist, removeFromLibrary, loadTrack, playFromLibrary } = useAudio();
+  const { currentTrack, library, smartPlaylists, deleteSmartPlaylist, updateSmartPlaylist, removeFromLibrary, downloadTrackForLibrary, loadTrack, playFromLibrary } = useAudio();
+  const { activeDownloads } = useDownloadProgress();
   const { smartPlaylistId } = route.params;
   const playlist = smartPlaylists.find((sp: SmartPlaylist) => sp.id === smartPlaylistId);
 
@@ -553,6 +566,8 @@ function SmartPlaylistDetailScreen({ route, navigation }: any) {
         navigation.goBack();
       }}
       onUpdate={updateSmartPlaylist}
+      onDownload={downloadTrackForLibrary}
+      activeDownloads={activeDownloads}
     />
   );
 }

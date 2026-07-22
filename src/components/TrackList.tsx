@@ -24,6 +24,7 @@ interface TrackListProps {
   onBatchAddToPlaylist?: (uris: string[]) => void;
   onBatchRemove?: (uris: string[]) => void;
   onBatchDownload?: (tracks: TrackMetadata[]) => void;
+  onDownload?: (track: TrackMetadata) => void;
 }
 
 const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite, downloadProgress, onCancelDownload, selectionMode, isSelected, onToggleSelection }: {
@@ -153,7 +154,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
   );
 });
 
-export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload }: TrackListProps) {
+export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload, onDownload }: TrackListProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addToLibrary, getNavidromeCredentials } = useAudio();
   const { activeDownloads, cancelDownload } = useDownloadProgress();
@@ -204,9 +205,13 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
 
   const handleTrackDownload = (track: TrackMetadata) => {
     if (isTrackDownloadable(track)) {
-      const creds = getNavidromeCredentials();
-      if (creds) {
-        OfflineCacheService.downloadTrackForOffline(creds, track).catch(() => {});
+      if (onDownload) {
+        onDownload(track);
+      } else {
+        const creds = getNavidromeCredentials();
+        if (creds) {
+          OfflineCacheService.downloadTrackForOffline(creds, track).catch(() => {});
+        }
       }
     }
   };

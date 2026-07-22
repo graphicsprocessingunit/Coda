@@ -9,6 +9,7 @@ import { StorageService } from '../services/StorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
+import * as AudioEQ from '../../modules/audio-eq/src/index';
 
 export interface TrackMetadata {
   title: string;
@@ -35,8 +36,8 @@ export interface Playlist {
 export type SmartPlaylistRule =
   | { field: 'playCount'; op: 'gte' | 'lte' | 'eq'; value: number }
   | { field: 'isFavorite'; op: 'eq'; value: boolean }
-  | { field: 'artist'; op: 'eq'; value: string }
-  | { field: 'album'; op: 'eq'; value: string }
+  | { field: 'artist'; op: 'eq' | 'contains'; value: string }
+  | { field: 'album'; op: 'eq' | 'contains'; value: string }
   | { field: 'source'; op: 'eq'; value: 'local' | 'navidrome' };
 
 export interface SmartPlaylist {
@@ -51,6 +52,19 @@ export interface SmartPlaylist {
 }
 
 export type AudioPreset = 'flat' | 'relaxed' | 'clear' | 'upbeat' | 'quiet';
+
+export type EqPresetName = 'flat' | 'bass-boost' | 'treble' | 'vocal' | 'rock' | 'pop';
+
+export const EQ_PRESETS: Record<EqPresetName, number[]> = {
+  flat: [0, 0, 0, 0, 0],
+  'bass-boost': [6, 4, 0, -1, -2],
+  treble: [-2, -1, 0, 4, 6],
+  vocal: [-2, 0, 3, 3, 0],
+  rock: [5, 3, -1, 2, 4],
+  pop: [-1, 2, 4, 2, -1],
+};
+
+export const EQ_BAND_LABELS = ['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz'];
 
 interface AudioContextType {
   currentTrack: TrackMetadata | null;
@@ -98,6 +112,12 @@ interface AudioContextType {
   setPlaybackRate: (rate: number) => Promise<void>;
   setVolume: (vol: number) => Promise<void>;
   setAudioPreset: (preset: AudioPreset) => void;
+  eqEnabled: boolean;
+  eqBands: number[];
+  eqPreset: EqPresetName | null;
+  setEqBandGain: (band: number, gain: number) => void;
+  setEqPreset: (preset: EqPresetName) => void;
+  setEqEnabled: (enabled: boolean) => void;
   setSleepTimer: (minutes: number) => void;
   cancelSleepTimer: () => void;
   navidromeConnected: boolean;
@@ -192,6 +212,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [playbackRate, setPlaybackRateState] = useState(1.0);
   const [volume, setVolumeState] = useState(1.0);
   const [audioPreset, setAudioPresetState] = useState<AudioPreset>('flat');
+  const [eqEnabled, setEqEnabledState] = useState(true);
+  const [eqBands, setEqBandsState] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [eqPreset, setEqPresetState] = useState<EqPresetName | null>('flat');
   const [sleepTimerEnd, setSleepTimerEnd] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState(0);
   const [crossfadeEnabled, setCrossfadeEnabledState] = useState(false);
@@ -468,6 +491,30 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           setCrossfadeDurationState(2);
           crossfadeDurationRef.current = 2;
         }
+      }
+
+      const savedEqEnabled = await AsyncStorage.getItem('@coda_eq_enabled');
+      const savedEqBands = await AsyncStorage.getItem('@coda_eq_bands');
+      const savedEqPreset = await AsyncStorage.getItem('@coda_eq_preset');
+      try {
+        await AudioEQ.initialize();
+        if (savedEqEnabled !== null) {
+          const enabled = savedEqEnabled === 'true';
+          setEqEnabledState(enabled);
+          await AudioEQ.setEnabled(enabled);
+        }
+        if (savedEqBands) {
+          const bands = JSON.parse(savedEqBands) as number[];
+          setEqBandsState(bands);
+          for (let i = 0; i < bands.length; i++) {
+            await AudioEQ.setBandGain(i, bands[i]);
+          }
+        }
+        if (savedEqPreset) {
+          setEqPresetState(savedEqPreset as EqPresetName);
+        }
+      } catch {
+        // Native EQ module not available (e.g. web)
       }
 
       isLoadedRef.current = true;
@@ -1233,6 +1280,35 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     applyPreset(preset);
   }, [applyPreset]);
 
+  const setEqBandGain = useCallback(async (band: number, gain: number) => {
+    setEqBandsState((prev) => {
+      const next = [...prev];
+      next[band] = gain;
+      AsyncStorage.setItem('@coda_eq_bands', JSON.stringify(next));
+      return next;
+    });
+    setEqPresetState(null);
+    AsyncStorage.removeItem('@coda_eq_preset');
+    try { await AudioEQ.setBandGain(band, gain); } catch {}
+  }, []);
+
+  const setEqPreset = useCallback(async (preset: EqPresetName) => {
+    const bands = EQ_PRESETS[preset];
+    setEqBandsState(bands);
+    setEqPresetState(preset);
+    AsyncStorage.setItem('@coda_eq_bands', JSON.stringify(bands));
+    AsyncStorage.setItem('@coda_eq_preset', preset);
+    for (let i = 0; i < bands.length; i++) {
+      try { await AudioEQ.setBandGain(i, bands[i]); } catch {}
+    }
+  }, []);
+
+  const setEqEnabled = useCallback(async (enabled: boolean) => {
+    setEqEnabledState(enabled);
+    AsyncStorage.setItem('@coda_eq_enabled', enabled.toString());
+    try { await AudioEQ.setEnabled(enabled); } catch {}
+  }, []);
+
   const setCrossfadeEnabled = useCallback((enabled: boolean) => {
     setCrossfadeEnabledState(enabled);
     crossfadeEnabledRef.current = enabled;
@@ -1368,6 +1444,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCrossfadeEnabledState(false);
     setCrossfadeDurationState(0);
     setSeamlessEnabledState(false);
+    setEqEnabledState(true);
+    setEqBandsState([0, 0, 0, 0, 0]);
+    setEqPresetState('flat');
     historyRef.current = [];
     historyIndexRef.current = -1;
     sourceTracksRef.current = [];
@@ -1381,6 +1460,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem('@coda_crossfade_enabled');
     await AsyncStorage.removeItem('@coda_crossfade_duration');
     await AsyncStorage.removeItem('@coda_seamless_enabled');
+    await AsyncStorage.removeItem('@coda_eq_enabled');
+    await AsyncStorage.removeItem('@coda_eq_bands');
+    await AsyncStorage.removeItem('@coda_eq_preset');
     await NavidromeService.clearCredentials();
     OfflineCacheService.clearCache();
     navidromeCredentialsRef.current = null;
@@ -1525,6 +1607,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setPlaybackRate,
     setVolume,
     setAudioPreset,
+    eqEnabled,
+    eqBands,
+    eqPreset,
+    setEqBandGain,
+    setEqPreset,
+    setEqEnabled,
     setSleepTimer,
     cancelSleepTimer,
     connectNavidrome,
@@ -1559,6 +1647,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     removeTrackFromPlaylist, reorderPlaylistTracks, deletePlaylist,
     renamePlaylist, playPlaylist, smartPlaylists, createSmartPlaylist, updateSmartPlaylist, deleteSmartPlaylist,
     setPlaybackRate, setVolume, setAudioPreset,
+    eqEnabled, eqBands, eqPreset, setEqBandGain, setEqPreset, setEqEnabled,
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
     getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
     setSeamlessEnabled, clearAllData,
