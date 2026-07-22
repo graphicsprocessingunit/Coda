@@ -88,7 +88,11 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           ) : typeof downloadProgress === 'number' ? (
             <ActivityIndicator size="small" color={colors.accent} />
           ) : item.source === 'navidrome' ? (
-            <Ionicons name="cloud-outline" size={16} color={colors.textSecondary} />
+            <Ionicons
+              name={OfflineCacheService.isTrackCached(item) ? 'checkmark-circle' : 'cloud-outline'}
+              size={16}
+              color={OfflineCacheService.isTrackCached(item) ? '#34C759' : colors.textSecondary}
+            />
           ) : (
             <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
               {isCurrentTrack ? (

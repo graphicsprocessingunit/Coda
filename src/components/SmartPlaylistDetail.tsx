@@ -101,6 +101,8 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           ) : (
             <Text style={{ fontSize: 11, color: colors.textSecondary }}>{Math.round(downloadProgress * 100)}%</Text>
           )
+        ) : item.source === 'navidrome' && OfflineCacheService.isTrackCached(item) ? (
+          <Ionicons name="checkmark-circle" size={18} color="#34C759" />
         ) : item.source === 'navidrome' && !OfflineCacheService.isTrackCached(item) ? (
           <Ionicons name="cloud-download-outline" size={18} color={colors.textSecondary} />
         ) : null}
