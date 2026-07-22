@@ -300,12 +300,15 @@ function LibraryScreen() {
     setShowPlaylistModal(true);
   };
 
-  const handleBatchDownload = (tracks: TrackMetadata[]) => {
-    tracks.forEach(track => {
-      if (track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track)) {
-        downloadTrackForLibrary(track);
+  const handleBatchDownload = async (tracks: TrackMetadata[]) => {
+    const queue = tracks.filter(t => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t));
+    const run = async () => {
+      while (queue.length > 0) {
+        const track = queue.shift()!;
+        await downloadTrackForLibrary(track);
       }
-    });
+    };
+    await Promise.all([run(), run(), run()]);
   };
 
   const handleAddToPlaylist = (playlistId: string) => {

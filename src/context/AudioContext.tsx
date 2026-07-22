@@ -994,7 +994,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         creds, track,
         (progress) => {
           const now = Date.now();
-          if (now - lastUpdate < 100 && progress < 1) return;
+          if (now - lastUpdate < 100 && progress !== 1 && progress > 0) return;
           lastUpdate = now;
           setActiveDownloads((prev) => new Map(prev).set(track.uri, progress));
         },

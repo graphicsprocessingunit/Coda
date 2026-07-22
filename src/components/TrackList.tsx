@@ -119,14 +119,20 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           </Text>
           {typeof downloadProgress === 'number' && (
             <View style={styles.downloadProgressContainer}>
-              <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
-                <View style={[styles.downloadProgressFill, {
-                  backgroundColor: colors.accent,
-                  width: `${Math.min(downloadProgress * 100, 100)}%`,
-                }]} />
-              </View>
+              {downloadProgress < 0 ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                  <View style={[styles.downloadProgressFill, {
+                    backgroundColor: colors.accent,
+                    width: `${Math.min(downloadProgress * 100, 100)}%`,
+                  }]} />
+                </View>
+              )}
               <Text style={[styles.downloadProgressText, { color: colors.textSecondary }]}>
-                {downloadProgress >= 1 ? 'Done' : `${Math.round(downloadProgress * 100)}%`}
+                {downloadProgress >= 1 ? 'Done' : downloadProgress < 0
+                  ? `${Math.round(-downloadProgress)} KB`
+                  : `${Math.round(downloadProgress * 100)}%`}
               </Text>
               {onCancelDownload && downloadProgress < 1 && (
                 <Pressable onPress={onCancelDownload} hitSlop={4} style={styles.cancelDownloadButton}>

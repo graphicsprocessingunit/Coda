@@ -50,9 +50,16 @@ export class OfflineCacheService {
     const destFile = new File(AUDIO_CACHE_DIR, `${track.navidromeId}.mp3`);
     if (destFile.exists) return destFile.uri;
 
+    const controller = new AbortController();
+    if (signal) {
+      signal.addEventListener('abort', () => controller.abort());
+    }
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+
     try {
       const url = NavidromeService.getStreamUrl(creds, track.navidromeId);
-      const response = await fetch(url, { signal });
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!response.ok) return null;
 
       const reader = response.body?.getReader();
@@ -73,7 +80,11 @@ export class OfflineCacheService {
         if (done) break;
         chunks.push(value);
         received += value.length;
-        onProgress?.(contentLength > 0 ? received / contentLength : 0);
+        if (contentLength > 0) {
+          onProgress?.(received / contentLength);
+        } else {
+          onProgress?.(-(received / 1024));
+        }
       }
 
       const total = new Uint8Array(received);
@@ -87,6 +98,7 @@ export class OfflineCacheService {
       onProgress?.(1);
       return destFile.uri;
     } catch (error: any) {
+      clearTimeout(timeoutId);
       if (error?.name === 'AbortError') throw error;
       console.error('Error downloading track:', error);
       return null;
@@ -149,12 +161,12 @@ export class OfflineCacheService {
     signal?: AbortSignal,
   ): Promise<TrackMetadata> {
     const cachedAudio = await OfflineCacheService.downloadTrack(creds, track, onProgress, signal);
-    let cachedArt = track.cachedArtwork;
 
+    let cachedArt = track.cachedArtwork;
     if (track.artwork && track.navidromeId) {
       const coverArtId = track.artwork.match(/id=([^&]+)/)?.[1];
       if (coverArtId) {
-        cachedArt = await OfflineCacheService.downloadArtwork(creds, coverArtId) || cachedArt;
+        OfflineCacheService.downloadArtwork(creds, coverArtId).catch(() => {});
       }
     }
 
