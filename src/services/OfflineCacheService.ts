@@ -151,8 +151,7 @@ export class OfflineCacheService {
       const response = await fetch(url);
       if (!response.ok) return null;
 
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
+      const arrayBuffer = await response.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
       destFile.write(uint8);
       return destFile.uri;
