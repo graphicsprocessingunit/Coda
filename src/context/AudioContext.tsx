@@ -396,7 +396,31 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const savedQueue = await StorageService.loadQueue();
       const savedSmartPlaylists = await StorageService.loadSmartPlaylists();
 
-      if (savedLibrary.length > 0) setLibrary(savedLibrary);
+      const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
+      let libraryUpdated = false;
+      const resolvedLibrary = savedLibrary.map((track) => {
+        if (track.source !== 'navidrome' || !track.navidromeId) return track;
+        let updated = track;
+        const cachedPath = cachedAudio.get(track.navidromeId);
+        if (cachedPath && (!track.cachedUri || !new File(track.cachedUri).exists)) {
+          updated = { ...updated, cachedUri: cachedPath };
+          libraryUpdated = true;
+        }
+        if (track.artwork && !track.cachedArtwork) {
+          const coverArtId = track.artwork.match(/id=([^&]+)/)?.[1];
+          if (coverArtId) {
+            const artPath = cachedArtwork.get(coverArtId);
+            if (artPath) {
+              updated = { ...updated, cachedArtwork: artPath };
+              libraryUpdated = true;
+            }
+          }
+        }
+        return updated;
+      });
+      if (libraryUpdated) StorageService.saveLibrary(resolvedLibrary);
+
+      if (resolvedLibrary.length > 0) setLibrary(resolvedLibrary);
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
       if (savedSmartPlaylists.length > 0) setSmartPlaylists(savedSmartPlaylists);

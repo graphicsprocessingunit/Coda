@@ -186,6 +186,29 @@ export class OfflineCacheService {
     return total;
   }
 
+  static scanCacheDirectory(): { audio: Map<string, string>; artwork: Map<string, string> } {
+    const audio = new Map<string, string>();
+    const artwork = new Map<string, string>();
+
+    if (AUDIO_CACHE_DIR.exists) {
+      for (const entry of AUDIO_CACHE_DIR.list()) {
+        if (entry instanceof File && entry.name.endsWith('.mp3')) {
+          const navidromeId = entry.name.replace('.mp3', '');
+          audio.set(navidromeId, entry.uri);
+        }
+      }
+    }
+    if (ARTWORK_CACHE_DIR.exists) {
+      for (const entry of ARTWORK_CACHE_DIR.list()) {
+        if (entry instanceof File && entry.name.endsWith('.jpg')) {
+          const artworkId = entry.name.replace('.jpg', '');
+          artwork.set(artworkId, entry.uri);
+        }
+      }
+    }
+    return { audio, artwork };
+  }
+
   static async downloadTrackForOffline(
     creds: NavidromeCredentials,
     track: TrackMetadata,
