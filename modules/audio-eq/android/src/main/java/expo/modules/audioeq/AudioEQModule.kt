@@ -28,7 +28,7 @@ class AudioEQModule : Module() {
       val eq = equalizer ?: return@AsyncFunction mapOf<String, Any>()
       if (band < 0 || band >= eq.numberOfBands) return@AsyncFunction mapOf<String, Any>()
 
-      val freqRange = eq.bandFreqRange(band.toShort())
+      val freqRange = eq.getBandFreqRange(band.toShort())
       val centerFreq = (freqRange[0] + freqRange[1]) / 2
       val minGain = eq.bandLevelRange[0].toDouble() / 100.0
       val maxGain = eq.bandLevelRange[1].toDouble() / 100.0
