@@ -11,19 +11,37 @@ const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345
 
 let cachedKey: Uint8Array | null = null;
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+export function bytesToBase64(bytes: Uint8Array): string {
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    result += B64_ALPHABET[a >> 2];
+    result += B64_ALPHABET[((a & 0x03) << 4) | (b >> 4)];
+    result += i + 1 < bytes.length ? B64_ALPHABET[((b & 0x0f) << 2) | (c >> 6)] : '=';
+    result += i + 2 < bytes.length ? B64_ALPHABET[c & 0x3f] : '=';
   }
-  return btoa(binary);
+  return result;
 }
 
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+export function base64ToBytes(base64: string): Uint8Array {
+  const clean = base64.replace(/=+$/, '');
+  const length = clean.length;
+  const byteLength = (length * 3) >> 2;
+  const bytes = new Uint8Array(byteLength);
+  let bits = 0;
+  let bitCount = 0;
+  let index = 0;
+  for (let i = 0; i < length; i++) {
+    const value = B64_ALPHABET.indexOf(clean[i]);
+    if (value < 0) throw new Error('Invalid base64 payload');
+    bits = (bits << 6) | value;
+    bitCount += 6;
+    if (bitCount >= 8) {
+      bitCount -= 8;
+      bytes[index++] = (bits >> bitCount) & 0xff;
+    }
   }
   return bytes;
 }

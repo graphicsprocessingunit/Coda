@@ -144,9 +144,14 @@ export class LastFmService {
         sessionKey: encSessionKey,
       };
       AppStorageService.writeJson(SETTINGS_FILE, settings);
+      console.log(`[LastFmService] Saved encrypted settings to ${SETTINGS_FILE}`);
+    } catch (error) {
+      console.error('Error saving Last.fm settings:', error);
+    }
+    try {
       await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(creds));
     } catch (error) {
-      console.error('Error saving Last.fm credentials:', error);
+      console.error('Error saving Last.fm credentials to SecureStore:', error);
     }
   }
 

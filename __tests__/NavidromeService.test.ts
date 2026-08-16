@@ -188,6 +188,55 @@ describe('NavidromeService', () => {
       expect(loaded).toEqual(legacy);
     });
 
+    it('writes an encrypted token+salt snapshot when restoring legacy SecureStore creds', async () => {
+      const legacy: NavidromeCredentials = {
+        url: 'http://legacy.com',
+        username: 'olduser',
+        token: 'oldtok',
+        salt: 'oldsalt',
+      };
+      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      const loaded = await NavidromeService.loadCredentials();
+      expect(loaded).toEqual(legacy);
+
+      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
+      expect(settings?.url).toBe('http://legacy.com');
+      expect(settings?.username).toBe('olduser');
+      expect(settings?.token).toMatch(/^v1:/);
+      expect(settings?.salt).toMatch(/^v1:/);
+      expect(settings?.password).toBeUndefined();
+      expect(settings.token).not.toContain('oldtok');
+      expect(settings.salt).not.toContain('oldsalt');
+    });
+
+    it('prefers the stored password over a token snapshot', async () => {
+      const legacy: NavidromeCredentials = {
+        url: 'http://legacy.com',
+        username: 'olduser',
+        token: 'oldtok',
+        salt: 'oldsalt',
+      };
+      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      await NavidromeService.loadCredentials();
+
+      const creds: NavidromeCredentials = {
+        url: 'http://legacy.com',
+        username: 'olduser',
+        token: 'newtok',
+        salt: 'newsalt',
+      };
+      await NavidromeService.saveCredentials(creds, 'hunter2');
+
+      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
+      expect(settings?.password).toMatch(/^v1:/);
+      expect(settings?.token).toBeUndefined();
+
+      const loaded = await NavidromeService.loadCredentials();
+      expect(loaded?.url).toBe('http://legacy.com');
+      expect(loaded?.username).toBe('olduser');
+      expect(loaded?.token).toMatch(/^[0-9a-f]{32}$/);
+    });
+
     it('clears credentials (SecureStore + settings JSON)', async () => {
       await NavidromeService.saveCredentials(mockCreds, 'hunter2');
       await NavidromeService.clearCredentials();

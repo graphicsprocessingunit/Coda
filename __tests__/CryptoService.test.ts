@@ -5,7 +5,27 @@ function getService() {
   return CryptoService as typeof import('../src/services/CryptoService').CryptoService;
 }
 
+function getBase64() {
+  const { bytesToBase64, base64ToBytes } = require('../src/services/CryptoService');
+  return { bytesToBase64, base64ToBytes };
+}
+
+const originalBtoa = (global as any).btoa;
+const originalAtob = (global as any).atob;
+
 describe('CryptoService', () => {
+  beforeAll(() => {
+    // Hermes / React Native do NOT provide btoa/atob globals — simulate that
+    // so a regression here fails loudly in CI instead of silently on device.
+    delete (global as any).btoa;
+    delete (global as any).atob;
+  });
+
+  afterAll(() => {
+    (global as any).btoa = originalBtoa;
+    (global as any).atob = originalAtob;
+  });
+
   beforeEach(() => {
     jest.resetModules();
     const secureStore = jest.requireMock('expo-secure-store') as any;
@@ -44,11 +64,12 @@ describe('CryptoService', () => {
   });
 
   it('rejects tampered ciphertext', async () => {
+    const { bytesToBase64, base64ToBytes } = getBase64();
     const payload = await getService().encrypt('trust me');
-    const [version, b64] = payload.split(':');
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const [, b64] = payload.split(':');
+    const bytes = base64ToBytes(b64);
     bytes[bytes.length - 1] ^= 0xff;
-    const tampered = version + ':' + btoa(String.fromCharCode(...bytes));
+    const tampered = 'v1:' + bytesToBase64(bytes);
     await expect(getService().decrypt(tampered)).rejects.toThrow();
   });
 
@@ -67,5 +88,35 @@ describe('CryptoService', () => {
     await svc.decrypt(await svc.encrypt('b'));
     const raw2 = await secureStore.getItemAsync('@coda_encryption_key');
     expect(raw2).toBe(raw);
+  });
+
+  it('base64 helpers round-trip arbitrary bytes without btoa/atob', () => {
+    const { bytesToBase64, base64ToBytes } = getBase64();
+    const inputs = [
+      new Uint8Array(0),
+      new Uint8Array([0]),
+      new Uint8Array([1, 2, 3]),
+      new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]),
+      new Uint8Array(64).map((_, i) => i),
+      new Uint8Array(255).map((_, i) => (i * 7) % 256),
+    ];
+    for (const input of inputs) {
+      expect(base64ToBytes(bytesToBase64(input))).toEqual(input);
+    }
+  });
+
+  it('base64 helpers match standard base64 for known inputs', () => {
+    const { bytesToBase64, base64ToBytes } = getBase64();
+    const text = 'hello world';
+    const bytes = new Uint8Array(text.length);
+    for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+    expect(bytesToBase64(bytes)).toBe('aGVsbG8gd29ybGQ=');
+    const decoded = base64ToBytes('aGVsbG8gd29ybGQ=');
+    expect(String.fromCharCode(...decoded)).toBe('hello world');
+  });
+
+  it('rejects invalid base64 input', () => {
+    const { base64ToBytes } = getBase64();
+    expect(() => base64ToBytes('not base64!!!')).toThrow();
   });
 });

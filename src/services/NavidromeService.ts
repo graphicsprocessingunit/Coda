@@ -21,7 +21,9 @@ export interface NavidromeCredentials {
 export interface NavidromeSettings {
   url: string;
   username: string;
-  password: string;
+  password?: string;
+  token?: string;
+  salt?: string;
 }
 
 export interface NavidromeArtist {
@@ -64,16 +66,19 @@ function generateSalt(): string {
 
 export class NavidromeService {
   static async saveCredentials(creds: NavidromeCredentials, password?: string): Promise<void> {
-    try {
-      if (password != null) {
+    if (password != null) {
+      try {
         const encryptedPassword = await CryptoService.encrypt(password);
         this.saveSettings({ url: creds.url, username: creds.username, password: encryptedPassword });
-        await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
-      } else {
-        await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+        console.log(`[NavidromeService] Saved encrypted settings to ${SETTINGS_FILE}`);
+      } catch (error) {
+        console.error('Error saving Navidrome settings:', error);
       }
+    }
+    try {
+      await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
     } catch (error) {
-      console.error('Error saving Navidrome credentials:', error);
+      console.error('Error saving Navidrome credentials to SecureStore:', error);
     }
   }
 
@@ -92,6 +97,19 @@ export class NavidromeService {
           console.error('Error decrypting Navidrome password:', error);
         }
       }
+      if (settings?.url && settings.username && settings.token && settings.salt) {
+        try {
+          const [token, salt] = await Promise.all([
+            CryptoService.decrypt(settings.token),
+            CryptoService.decrypt(settings.salt),
+          ]);
+          const creds: NavidromeCredentials = { url: settings.url, username: settings.username, token, salt };
+          await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+          return creds;
+        } catch (error) {
+          console.error('Error decrypting Navidrome token snapshot:', error);
+        }
+      }
       let data = await SecureStore.getItemAsync(STORAGE_KEYS.CREDENTIALS);
       if (!data) {
         data = await AsyncStorage.getItem(STORAGE_KEYS.CREDENTIALS);
@@ -100,7 +118,23 @@ export class NavidromeService {
           await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
         }
       }
-      return data ? JSON.parse(data) : null;
+      if (data) {
+        const creds = JSON.parse(data) as NavidromeCredentials;
+        if (!settings?.password && !settings?.token && creds.url && creds.username && creds.token && creds.salt) {
+          try {
+            const [token, salt] = await Promise.all([
+              CryptoService.encrypt(creds.token),
+              CryptoService.encrypt(creds.salt),
+            ]);
+            this.saveSettings({ url: creds.url, username: creds.username, token, salt });
+            console.log(`[NavidromeService] Wrote legacy token snapshot to ${SETTINGS_FILE}`);
+          } catch (error) {
+            console.error('Error writing legacy Navidrome snapshot:', error);
+          }
+        }
+        return creds;
+      }
+      return null;
     } catch (error) {
       console.error('Error loading Navidrome credentials:', error);
       return null;

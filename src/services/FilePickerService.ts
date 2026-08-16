@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { getAudioMetadata } from '@missingcore/audio-metadata';
 import { AppStorageService } from './AppStorageService';
+import { base64ToBytes } from './CryptoService';
 import { TrackMetadata } from '../context/AudioContext';
 
 export interface PickedFile {
@@ -32,12 +33,8 @@ function base64ToArtworkFile(base64Data: string, fileName: string): string {
     return artFile.uri;
   }
 
-  const raw = atob(base64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    bytes[i] = raw.charCodeAt(i);
-  }
-  artFile.write(bytes);
+  const raw = base64ToBytes(base64);
+  artFile.write(raw);
   return artFile.uri;
 }
 
