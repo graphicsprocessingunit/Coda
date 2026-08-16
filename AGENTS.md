@@ -6,8 +6,13 @@ This project uses Expo SDK **54** (installed: 54.0.35). Read the exact versioned
 
 - `npm start` — Expo dev server (use `npx expo start` if npm script fails)
 - `npm run ios` / `npm run android` — platform-specific launch
+- `npm run prebuild` — regenerate `ios/` and `android/` native projects from `app.json`
 - `npm test` — run unit tests (jest-expo)
 - `npx tsc --noEmit` — type checking
+
+## Native project regeneration
+
+The `ios/` and `android/` directories are generated (`gitignored`) and are NOT the source of truth — `app.json` is. Run `npm run prebuild` after ANY native-affecting change (edits to `app.json` `ios.infoPlist`/permissions/icons/plugins, or installing an npm package with native code) before building in Xcode/Android Studio or submitting an EAS build. JS/TS-only changes never need prebuild. Running `expo prebuild` may print `userInterfaceStyle` hints — resolved by `expo-system-ui` (already installed).
 
 ## Architecture
 

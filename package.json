@@ -9,8 +9,8 @@
     "@react-navigation/native": "^7.3.8",
     "@react-navigation/stack": "^7.10.11",
     "@testing-library/react-native": "^14.0.1",
-    "babel-preset-expo": "~54.0.10",
     "audio-eq": "file:modules/audio-eq",
+    "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.0",
     "expo-asset": "~12.0.13",
     "expo-audio": "~1.1.1",
@@ -20,6 +20,7 @@
     "expo-modules-core": "~3.0.30",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
+    "expo-system-ui": "~6.0.9",
     "jest-expo": "~54.0.17",
     "md5": "^2.3.0",
     "react": "19.1.0",
@@ -38,6 +39,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "prebuild": "expo prebuild",
     "test": "jest"
   },
   "private": true
