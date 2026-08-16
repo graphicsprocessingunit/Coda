@@ -11,6 +11,8 @@ interface ThemeColors {
   accent: string;
   border: string;
   tabBar: string;
+  danger: string;
+  success: string;
 }
 
 const themes: Record<Theme, ThemeColors> = {
@@ -22,6 +24,8 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#007AFF',
     border: '#1C1C1E',
     tabBar: '#000000',
+    danger: '#FF3B30',
+    success: '#34C759',
   },
   light: {
     background: '#F2F2F7',
@@ -31,6 +35,8 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#007AFF',
     border: '#C6C6C8',
     tabBar: '#F2F2F7',
+    danger: '#FF3B30',
+    success: '#34C759',
   },
   midnight: {
     background: '#0A0E27',
@@ -40,6 +46,8 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#6C5CE7',
     border: '#1A1F3A',
     tabBar: '#0A0E27',
+    danger: '#FF453A',
+    success: '#32D74B',
   },
   ocean: {
     background: '#0F172A',
@@ -49,6 +57,8 @@ const themes: Record<Theme, ThemeColors> = {
     accent: '#06B6D4',
     border: '#1E293B',
     tabBar: '#0F172A',
+    danger: '#FF453A',
+    success: '#32D74B',
   },
 };
 

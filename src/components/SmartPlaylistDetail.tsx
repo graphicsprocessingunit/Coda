@@ -348,7 +348,6 @@ export function SmartPlaylistDetail({
           style={styles.list}
           contentContainerStyle={styles.listContent}
           getItemLayout={(_, index) => ({ length: 72, offset: 72 * (index ?? 0), index: index ?? 0 })}
-          removeClippedSubviews
         />
       )}
 

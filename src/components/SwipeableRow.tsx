@@ -1,161 +1,149 @@
-import React, { useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet, View, Pressable } from 'react-native';
+import React from 'react';
+import { StyleSheet, View, Pressable } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  runOnJS,
+  clamp,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../context/ThemeContext';
 
 interface SwipeableRowProps {
   children: React.ReactNode;
   onDelete?: () => void;
-  deleteColor?: string;
   onDownload?: () => void;
-  downloadColor?: string;
 }
 
-export function SwipeableRow({ children, onDelete, deleteColor = '#FF3B30', onDownload, downloadColor = '#34C759' }: SwipeableRowProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const leftIconOpacity = useRef(new Animated.Value(0)).current;
-  const leftIconScale = useRef(new Animated.Value(0.5)).current;
-  const leftBgOpacity = useRef(new Animated.Value(0)).current;
-  const rightIconOpacity = useRef(new Animated.Value(0)).current;
-  const rightIconScale = useRef(new Animated.Value(0.5)).current;
-  const rightBgOpacity = useRef(new Animated.Value(0)).current;
-  const isOpenRef = useRef<'left' | 'right' | null>(null);
-  const lastOffset = useRef(0);
-  const [rowHeight, setRowHeight] = useState(0);
+const ACTION_WIDTH = 80;
+const THRESHOLD = ACTION_WIDTH * 0.5;
+const VELOCITY_THRESHOLD = 700;
+const SPRING_CONFIG = { damping: 20, stiffness: 240, mass: 0.6, overshootClamping: true };
 
-  const closeAll = (direction: 'left' | 'right' | null) => {
-    if (direction === 'left') {
-      Animated.parallel([
-        Animated.spring(translateX, { toValue: -80, useNativeDriver: true }),
-        Animated.spring(leftIconOpacity, { toValue: 1, useNativeDriver: true }),
-        Animated.spring(leftIconScale, { toValue: 1, useNativeDriver: true }),
-        Animated.spring(leftBgOpacity, { toValue: 1, useNativeDriver: true }),
-        Animated.timing(rightIconOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.spring(rightIconScale, { toValue: 0.5, useNativeDriver: true }),
-        Animated.timing(rightBgOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-      ]).start();
-    } else if (direction === 'right') {
-      Animated.parallel([
-        Animated.spring(translateX, { toValue: 80, useNativeDriver: true }),
-        Animated.spring(rightIconOpacity, { toValue: 1, useNativeDriver: true }),
-        Animated.spring(rightIconScale, { toValue: 1, useNativeDriver: true }),
-        Animated.spring(rightBgOpacity, { toValue: 1, useNativeDriver: true }),
-        Animated.timing(leftIconOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.spring(leftIconScale, { toValue: 0.5, useNativeDriver: true }),
-        Animated.timing(leftBgOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
-        Animated.timing(leftIconOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.spring(leftIconScale, { toValue: 0.5, useNativeDriver: true }),
-        Animated.timing(leftBgOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.timing(rightIconOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-        Animated.spring(rightIconScale, { toValue: 0.5, useNativeDriver: true }),
-        Animated.timing(rightBgOpacity, { toValue: 0, duration: 150, useNativeDriver: true }),
-      ]).start();
-    }
-    isOpenRef.current = direction;
-  };
+export function SwipeableRow({ children, onDelete, onDownload }: SwipeableRowProps) {
+  const { colors } = useTheme();
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < Math.abs(gestureState.dx);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        const clampedDx = Math.max(-100, Math.min(100, lastOffset.current + gestureState.dx));
-        translateX.setValue(clampedDx);
+  const translateX = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const settled = useSharedValue(false);
 
-        if (clampedDx < 0 && onDelete) {
-          const progress = Math.min(1, Math.abs(clampedDx) / 80);
-          leftIconOpacity.setValue(progress);
-          leftIconScale.setValue(0.5 + progress * 0.5);
-          leftBgOpacity.setValue(progress);
-          rightIconOpacity.setValue(0);
-          rightBgOpacity.setValue(0);
-        } else if (clampedDx > 0 && onDownload) {
-          const progress = Math.min(1, clampedDx / 80);
-          rightIconOpacity.setValue(progress);
-          rightIconScale.setValue(0.5 + progress * 0.5);
-          rightBgOpacity.setValue(progress);
-          leftIconOpacity.setValue(0);
-          leftBgOpacity.setValue(0);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        const newValue = lastOffset.current + gestureState.dx;
-
-        if (isOpenRef.current && Math.abs(gestureState.dx) < 10) {
-          return;
-        }
-
-        if (newValue < -60 && onDelete) {
-          closeAll('left');
-          lastOffset.current = -80;
-        } else if (newValue > 60 && onDownload) {
-          closeAll(null);
-          lastOffset.current = 0;
-          onDownload();
-          return;
-        } else {
-          closeAll(null);
-          lastOffset.current = 0;
-        }
-      },
+  const pan = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-10, 10])
+    .onBegin(() => {
+      settled.value = false;
+      startX.value = translateX.value;
     })
-  ).current;
+    .onUpdate((e) => {
+      translateX.value = clamp(startX.value + e.translationX, -ACTION_WIDTH, ACTION_WIDTH);
+    })
+    .onEnd((e) => {
+      settled.value = true;
+      const end = startX.value + e.translationX;
+      const vx = e.velocityX;
+      if (end < 0 && onDelete) {
+        const shouldOpen = end < -THRESHOLD || vx < -VELOCITY_THRESHOLD;
+        translateX.value = withSpring(shouldOpen ? -ACTION_WIDTH : 0, SPRING_CONFIG);
+      } else if (end > 0 && onDownload) {
+        translateX.value = withSpring(0, SPRING_CONFIG);
+        if (end > THRESHOLD || vx > VELOCITY_THRESHOLD) {
+          runOnJS(onDownload)();
+        }
+      } else {
+        translateX.value = withSpring(0, SPRING_CONFIG);
+      }
+    })
+    .onFinalize(() => {
+      if (!settled.value) {
+        const end = translateX.value;
+        translateX.value = withSpring(
+          end < -THRESHOLD && onDelete ? -ACTION_WIDTH : 0,
+          SPRING_CONFIG,
+        );
+      }
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const deleteBgStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-ACTION_WIDTH, 0], [1, 0], Extrapolation.CLAMP),
+  }));
+
+  const deleteIconStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      translateX.value,
+      [-ACTION_WIDTH, -ACTION_WIDTH * 0.4, 0],
+      [1, 0, 0],
+      Extrapolation.CLAMP,
+    ),
+    transform: [
+      {
+        scale: interpolate(translateX.value, [-ACTION_WIDTH, 0], [1, 0.5], Extrapolation.CLAMP),
+      },
+    ],
+  }));
+
+  const downloadBgStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, ACTION_WIDTH], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  const downloadIconStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      translateX.value,
+      [0, ACTION_WIDTH * 0.4, ACTION_WIDTH],
+      [0, 0, 1],
+      Extrapolation.CLAMP,
+    ),
+    transform: [
+      {
+        scale: interpolate(translateX.value, [0, ACTION_WIDTH], [0.5, 1], Extrapolation.CLAMP),
+      },
+    ],
+  }));
 
   const handleDelete = () => {
-    closeAll(null);
-    lastOffset.current = 0;
+    translateX.value = withSpring(0, SPRING_CONFIG);
     onDelete?.();
   };
 
   const handleDownload = () => {
-    closeAll(null);
-    lastOffset.current = 0;
+    translateX.value = withSpring(0, SPRING_CONFIG);
     onDownload?.();
   };
 
-  const handleLayout = (e: any) => {
-    setRowHeight(e.nativeEvent.layout.height);
-  };
-
-  const hasLeft = !!onDelete;
-  const hasRight = !!onDownload;
-
   return (
     <View style={styles.outerContainer}>
-      {hasLeft && (
+      {onDelete && (
         <Animated.View
-          style={[styles.deleteBackground, { backgroundColor: deleteColor, height: rowHeight || undefined, opacity: leftBgOpacity }]}
+          style={[styles.deleteBackground, { backgroundColor: colors.danger }, deleteBgStyle]}
         >
-          <Pressable style={styles.deleteButton} onPress={handleDelete}>
-            <Animated.View style={{ opacity: leftIconOpacity, transform: [{ scale: leftIconScale }] }}>
+          <Pressable style={styles.actionButton} onPress={handleDelete}>
+            <Animated.View style={deleteIconStyle}>
               <Ionicons name="trash" size={20} color="#fff" />
             </Animated.View>
           </Pressable>
         </Animated.View>
       )}
-      {hasRight && (
+      {onDownload && (
         <Animated.View
-          style={[styles.downloadBackground, { backgroundColor: downloadColor, height: rowHeight || undefined, opacity: rightBgOpacity }]}
+          style={[styles.downloadBackground, { backgroundColor: colors.success }, downloadBgStyle]}
         >
-          <Pressable style={styles.downloadButton} onPress={handleDownload}>
-            <Animated.View style={{ opacity: rightIconOpacity, transform: [{ scale: rightIconScale }] }}>
+          <Pressable style={styles.actionButton} onPress={handleDownload}>
+            <Animated.View style={downloadIconStyle}>
               <Ionicons name="cloud-download" size={20} color="#fff" />
             </Animated.View>
           </Pressable>
         </Animated.View>
       )}
-      <Animated.View
-        style={[styles.row, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
-      >
-        <View onLayout={handleLayout}>
-          {children}
-        </View>
-      </Animated.View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[styles.row, rowStyle]}>{children}</Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -169,13 +157,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    width: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteButton: {
-    width: '100%',
-    height: '100%',
+    width: ACTION_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -184,11 +166,11 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 80,
+    width: ACTION_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  downloadButton: {
+  actionButton: {
     width: '100%',
     height: '100%',
     alignItems: 'center',

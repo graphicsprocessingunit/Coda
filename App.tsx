@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
@@ -726,14 +727,16 @@ function ThemedStatusBar() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <AudioProvider>
-          <NavigationContainer>
-            <MainTabs />
-            <ThemedStatusBar />
-          </NavigationContainer>
-        </AudioProvider>
-      </ThemeProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <ThemeProvider>
+          <AudioProvider>
+            <NavigationContainer>
+              <MainTabs />
+              <ThemedStatusBar />
+            </NavigationContainer>
+          </AudioProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }

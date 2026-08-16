@@ -409,7 +409,6 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           style={styles.list}
           contentContainerStyle={styles.listContent}
           getItemLayout={getItemLayout}
-          removeClippedSubviews
         />
       )}
 
