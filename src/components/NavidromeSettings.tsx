@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -6,12 +6,22 @@ import { useAudio } from '../context/AudioContext';
 
 export function NavidromeSettingsSection() {
   const { colors } = useTheme();
-  const { navidromeConnected, navidromeServerUrl, connectNavidrome, disconnectNavidrome } = useAudio();
+  const { navidromeConnected, navidromeServerUrl, connectNavidrome, disconnectNavidrome, loadSavedNavidromeLogin } = useAudio();
   const [url, setUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadSavedNavidromeLogin().then((saved) => {
+      if (saved) {
+        setUrl(saved.url);
+        setUsername(saved.username);
+        setPassword(saved.password);
+      }
+    });
+  }, [loadSavedNavidromeLogin]);
 
   const handleConnect = async () => {
     if (!url.trim() || !username.trim() || !password.trim()) {

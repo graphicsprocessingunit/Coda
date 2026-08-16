@@ -126,6 +126,7 @@ interface AudioContextType {
   connectNavidrome: (url: string, username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectNavidrome: () => Promise<void>;
   getNavidromeCredentials: () => NavidromeCredentials | null;
+  loadSavedNavidromeLogin: () => Promise<{ url: string; username: string; password: string } | null>;
   crossfadeEnabled: boolean;
   crossfadeDuration: number;
   setCrossfadeEnabled: (enabled: boolean) => void;
@@ -136,6 +137,7 @@ interface AudioContextType {
   lastFmConnected: boolean;
   connectLastFm: (apiKey: string, sharedSecret: string, token: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectLastFm: () => Promise<void>;
+  loadSavedLastFmLogin: () => Promise<{ apiKey: string; sharedSecret: string; username: string } | null>;
   toggleFavorite: (uri: string) => void;
   batchToggleFavorite: (uris: string[]) => void;
   batchRemoveFromLibrary: (uris: string[]) => void;
@@ -390,9 +392,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const loadSavedData = async () => {
-      AppStorageService.ensureStructure();
-      AppStorageService.migrateLegacyCache();
-      const uriMap = AppStorageService.migrateImportedFiles();
+      let uriMap: Map<string, string> = new Map();
+      try {
+        AppStorageService.ensureStructure();
+        AppStorageService.migrateLegacyCache();
+        uriMap = AppStorageService.migrateImportedFiles();
+      } catch (error) {
+        console.error('Error running storage migrations:', error);
+      }
 
       let savedLibrary = await StorageService.loadLibrary();
       let savedPlaylists = await StorageService.loadPlaylists();
@@ -1565,7 +1572,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const connectNavidrome = useCallback(async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);
     if (result.ok && result.creds) {
-      await NavidromeService.saveCredentials(result.creds);
+      await NavidromeService.saveCredentials(result.creds, password);
       navidromeCredentialsRef.current = result.creds;
       setNavidromeConnected(true);
       setNavidromeServerUrl(url);
@@ -1582,6 +1589,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const getNavidromeCredentials = useCallback((): NavidromeCredentials | null => {
     return navidromeCredentialsRef.current;
+  }, []);
+
+  const loadSavedNavidromeLogin = useCallback(async () => {
+    return NavidromeService.loadSavedLogin();
   }, []);
 
   const connectLastFm = useCallback(async (apiKey: string, sharedSecret: string, token: string) => {
@@ -1608,6 +1619,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     lastFmCredsRef.current = null;
     lastFmConnectedRef.current = false;
     setLastFmConnected(false);
+  }, []);
+
+  const loadSavedLastFmLogin = useCallback(async () => {
+    return LastFmService.loadSavedLogin();
   }, []);
 
   const clearError = useCallback(() => setError(null), []);
@@ -1671,6 +1686,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     connectNavidrome,
     disconnectNavidrome,
     getNavidromeCredentials,
+    loadSavedNavidromeLogin,
     crossfadeEnabled,
     crossfadeDuration,
     setCrossfadeEnabled,
@@ -1681,6 +1697,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     lastFmConnected,
     connectLastFm,
     disconnectLastFm,
+    loadSavedLastFmLogin,
     toggleFavorite,
     batchToggleFavorite,
     batchRemoveFromLibrary,
@@ -1702,9 +1719,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setPlaybackRate, setVolume, setAudioPreset,
     eqEnabled, eqBands, eqPreset, setEqBandGain, setEqPreset, setEqEnabled,
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
-    getNavidromeCredentials, setCrossfadeEnabled, setCrossfadeDuration,
+    getNavidromeCredentials, loadSavedNavidromeLogin, setCrossfadeEnabled, setCrossfadeDuration,
     setSeamlessEnabled, clearAllData,
-    lastFmConnected, connectLastFm, disconnectLastFm, toggleFavorite,
+    lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, toggleFavorite,
     batchToggleFavorite, batchRemoveFromLibrary,
     error, clearError, isLoading,
   ]);

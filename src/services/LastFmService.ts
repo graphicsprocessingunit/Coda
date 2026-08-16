@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import md5 from 'md5';
 import { AppStorageService } from './AppStorageService';
+import { CryptoService } from './CryptoService';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEY = '@coda_lastfm_credentials';
@@ -15,6 +16,9 @@ export interface LastFmCredentials {
 
 export interface LastFmSettings {
   username: string;
+  apiKey: string;
+  sharedSecret: string;
+  sessionKey: string;
 }
 
 export class LastFmService {
@@ -128,8 +132,19 @@ export class LastFmService {
 
   static async saveCredentials(creds: LastFmCredentials): Promise<void> {
     try {
+      const [encApiKey, encSharedSecret, encSessionKey] = await Promise.all([
+        CryptoService.encrypt(creds.apiKey),
+        CryptoService.encrypt(creds.sharedSecret),
+        CryptoService.encrypt(creds.sessionKey),
+      ]);
+      const settings: LastFmSettings = {
+        username: creds.username,
+        apiKey: encApiKey,
+        sharedSecret: encSharedSecret,
+        sessionKey: encSessionKey,
+      };
+      AppStorageService.writeJson(SETTINGS_FILE, settings);
       await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(creds));
-      AppStorageService.writeJson(SETTINGS_FILE, { username: creds.username });
     } catch (error) {
       console.error('Error saving Last.fm credentials:', error);
     }
@@ -137,10 +152,40 @@ export class LastFmService {
 
   static async loadCredentials(): Promise<LastFmCredentials | null> {
     try {
+      const settings = AppStorageService.readJson<LastFmSettings>(SETTINGS_FILE);
+      if (settings?.apiKey && settings.sharedSecret && settings.sessionKey && settings.username) {
+        try {
+          const [apiKey, sharedSecret, sessionKey] = await Promise.all([
+            CryptoService.decrypt(settings.apiKey),
+            CryptoService.decrypt(settings.sharedSecret),
+            CryptoService.decrypt(settings.sessionKey),
+          ]);
+          const creds: LastFmCredentials = { apiKey, sharedSecret, sessionKey, username: settings.username };
+          await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(creds));
+          return creds;
+        } catch (error) {
+          console.error('Error decrypting Last.fm credentials:', error);
+        }
+      }
       const data = await SecureStore.getItemAsync(STORAGE_KEY);
       return data ? JSON.parse(data) : null;
     } catch (error) {
       console.error('Error loading Last.fm credentials:', error);
+      return null;
+    }
+  }
+
+  static async loadSavedLogin(): Promise<{ apiKey: string; sharedSecret: string; username: string } | null> {
+    const settings = AppStorageService.readJson<LastFmSettings>(SETTINGS_FILE);
+    if (!settings?.apiKey || !settings.sharedSecret || !settings.username) return null;
+    try {
+      const [apiKey, sharedSecret] = await Promise.all([
+        CryptoService.decrypt(settings.apiKey),
+        CryptoService.decrypt(settings.sharedSecret),
+      ]);
+      return { apiKey, sharedSecret, username: settings.username };
+    } catch (error) {
+      console.error('Error loading saved Last.fm login:', error);
       return null;
     }
   }

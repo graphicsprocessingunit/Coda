@@ -17,7 +17,7 @@ interface SettingsProps {
 
 export function Settings({ onClearData, onClearCache }: SettingsProps) {
   const { theme, colors, setTheme } = useTheme();
-  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm } = useAudio();
+  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
@@ -34,6 +34,15 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
   useEffect(() => {
     setCacheSize(OfflineCacheService.getCacheSize());
   }, []);
+
+  useEffect(() => {
+    loadSavedLastFmLogin().then((saved) => {
+      if (saved) {
+        setLastFmApiKey(saved.apiKey);
+        setLastFmSharedSecret(saved.sharedSecret);
+      }
+    });
+  }, [loadSavedLastFmLogin]);
 
   const themes: { key: Theme; name: string; icon: string }[] = [
     { key: 'dark', name: 'Dark', icon: 'moon' },

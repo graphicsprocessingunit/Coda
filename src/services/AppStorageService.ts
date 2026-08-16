@@ -113,12 +113,16 @@ export class AppStorageService {
       if (!(entry instanceof File)) continue;
       const ext = entry.extension.replace('.', '').toLowerCase();
       const oldUri = entry.uri;
-      if (AUDIO_EXTENSIONS.includes(ext)) {
-        entry.move(MUSIC_DIR);
-        uriMap.set(oldUri, entry.uri);
-      } else if (entry.name.replace(/\.\w+$/, '').endsWith('_artwork')) {
-        entry.move(ARTWORK_CACHE_DIR);
-        uriMap.set(oldUri, entry.uri);
+      try {
+        if (AUDIO_EXTENSIONS.includes(ext)) {
+          entry.move(MUSIC_DIR);
+          uriMap.set(oldUri, entry.uri);
+        } else if (entry.name.replace(/\.\w+$/, '').endsWith('_artwork')) {
+          entry.move(ARTWORK_CACHE_DIR);
+          uriMap.set(oldUri, entry.uri);
+        }
+      } catch (error) {
+        console.error(`Error migrating file ${oldUri}:`, error);
       }
     }
     return uriMap;

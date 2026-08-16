@@ -8,6 +8,22 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async (key) => { delete storage[key]; }),
 }));
 
+jest.mock('expo-crypto', () => {
+  let counter = 0;
+  const getRandomBytes = jest.fn((byteLength) => {
+    const bytes = new Uint8Array(byteLength);
+    for (let i = 0; i < byteLength; i++) {
+      bytes[i] = (counter + i) % 256;
+      counter++;
+    }
+    return bytes;
+  });
+  return {
+    getRandomBytes,
+    getRandomBytesAsync: jest.fn(async (byteLength) => getRandomBytes(byteLength)),
+  };
+});
+
 jest.mock('@react-native-async-storage/async-storage', () => {
   const asyncStorage = {};
   return {

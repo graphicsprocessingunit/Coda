@@ -1,4 +1,8 @@
+import * as SecureStore from 'expo-secure-store';
 import { NavidromeService, NavidromeCredentials } from '../src/services/NavidromeService';
+import { AppStorageService } from '../src/services/AppStorageService';
+
+const fs = require('expo-file-system') as any;
 
 const mockCreds: NavidromeCredentials = {
   url: 'http://navidrome.example.com',
@@ -113,6 +117,10 @@ describe('NavidromeService', () => {
   });
 
   describe('credential persistence', () => {
+    beforeEach(() => {
+      fs.__reset();
+    });
+
     it('saves and loads credentials via SecureStore', async () => {
       const creds: NavidromeCredentials = {
         url: 'http://test.com',
@@ -125,11 +133,67 @@ describe('NavidromeService', () => {
       expect(loaded).toEqual(creds);
     });
 
-    it('clears credentials', async () => {
-      await NavidromeService.saveCredentials(mockCreds);
+    it('saves an encrypted password to settings JSON', async () => {
+      const creds: NavidromeCredentials = {
+        url: 'http://test.com',
+        username: 'user',
+        token: 'tok',
+        salt: 'sa',
+      };
+      await NavidromeService.saveCredentials(creds, 'hunter2');
+      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
+      expect(settings).toEqual({
+        url: 'http://test.com',
+        username: 'user',
+        password: expect.stringMatching(/^v1:/),
+      });
+      expect(settings.password).not.toContain('hunter2');
+    });
+
+    it('loads credentials from encrypted settings JSON', async () => {
+      const creds: NavidromeCredentials = {
+        url: 'http://test.com',
+        username: 'user',
+        token: 'tok',
+        salt: 'sa',
+      };
+      await NavidromeService.saveCredentials(creds, 'hunter2');
+      const loaded = await NavidromeService.loadCredentials();
+      expect(loaded?.url).toBe('http://test.com');
+      expect(loaded?.username).toBe('user');
+      expect(loaded?.token).toMatch(/^[0-9a-f]{32}$/);
+    });
+
+    it('loadSavedLogin returns the decrypted password', async () => {
+      const creds: NavidromeCredentials = {
+        url: 'http://test.com',
+        username: 'user',
+        token: 'tok',
+        salt: 'sa',
+      };
+      await NavidromeService.saveCredentials(creds, 'hunter2');
+      const login = await NavidromeService.loadSavedLogin();
+      expect(login).toEqual({ url: 'http://test.com', username: 'user', password: 'hunter2' });
+    });
+
+    it('falls back to SecureStore when no settings exist', async () => {
+      const legacy: NavidromeCredentials = {
+        url: 'http://legacy.com',
+        username: 'olduser',
+        token: 'oldtok',
+        salt: 'oldsalt',
+      };
+      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      const loaded = await NavidromeService.loadCredentials();
+      expect(loaded).toEqual(legacy);
+    });
+
+    it('clears credentials (SecureStore + settings JSON)', async () => {
+      await NavidromeService.saveCredentials(mockCreds, 'hunter2');
       await NavidromeService.clearCredentials();
       const loaded = await NavidromeService.loadCredentials();
       expect(loaded).toBeNull();
+      expect(AppStorageService.readJson('navidrome-settings.json')).toBeNull();
     });
   });
 });

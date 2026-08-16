@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import md5 from 'md5';
 import { AppStorageService } from './AppStorageService';
+import { CryptoService } from './CryptoService';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEYS = {
@@ -20,6 +21,7 @@ export interface NavidromeCredentials {
 export interface NavidromeSettings {
   url: string;
   username: string;
+  password: string;
 }
 
 export interface NavidromeArtist {
@@ -61,10 +63,15 @@ function generateSalt(): string {
 }
 
 export class NavidromeService {
-  static async saveCredentials(creds: NavidromeCredentials): Promise<void> {
+  static async saveCredentials(creds: NavidromeCredentials, password?: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
-      this.saveSettings({ url: creds.url, username: creds.username });
+      if (password != null) {
+        const encryptedPassword = await CryptoService.encrypt(password);
+        this.saveSettings({ url: creds.url, username: creds.username, password: encryptedPassword });
+        await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+      } else {
+        await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+      }
     } catch (error) {
       console.error('Error saving Navidrome credentials:', error);
     }
@@ -72,6 +79,19 @@ export class NavidromeService {
 
   static async loadCredentials(): Promise<NavidromeCredentials | null> {
     try {
+      const settings = this.loadSettings();
+      if (settings?.url && settings.username && settings.password) {
+        try {
+          const password = await CryptoService.decrypt(settings.password);
+          const salt = generateSalt();
+          const token = NavidromeService.createToken(password, salt);
+          const creds: NavidromeCredentials = { url: settings.url, username: settings.username, token, salt };
+          await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+          return creds;
+        } catch (error) {
+          console.error('Error decrypting Navidrome password:', error);
+        }
+      }
       let data = await SecureStore.getItemAsync(STORAGE_KEYS.CREDENTIALS);
       if (!data) {
         data = await AsyncStorage.getItem(STORAGE_KEYS.CREDENTIALS);
@@ -83,6 +103,18 @@ export class NavidromeService {
       return data ? JSON.parse(data) : null;
     } catch (error) {
       console.error('Error loading Navidrome credentials:', error);
+      return null;
+    }
+  }
+
+  static async loadSavedLogin(): Promise<{ url: string; username: string; password: string } | null> {
+    const settings = this.loadSettings();
+    if (!settings?.url || !settings.username || !settings.password) return null;
+    try {
+      const password = await CryptoService.decrypt(settings.password);
+      return { url: settings.url, username: settings.username, password };
+    } catch (error) {
+      console.error('Error loading saved Navidrome login:', error);
       return null;
     }
   }
