@@ -6,7 +6,8 @@ import { CryptoService } from './CryptoService';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEYS = {
-  CREDENTIALS: '@coda_navidrome_credentials',
+  CREDENTIALS: 'coda_navidrome_credentials',
+  LEGACY_ASYNC_CREDENTIALS: '@coda_navidrome_credentials',
 };
 
 const SETTINGS_FILE = 'navidrome-settings.json';
@@ -112,10 +113,10 @@ export class NavidromeService {
       }
       let data = await SecureStore.getItemAsync(STORAGE_KEYS.CREDENTIALS);
       if (!data) {
-        data = await AsyncStorage.getItem(STORAGE_KEYS.CREDENTIALS);
+        data = await AsyncStorage.getItem(STORAGE_KEYS.LEGACY_ASYNC_CREDENTIALS);
         if (data) {
           await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, data);
-          await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+          await AsyncStorage.removeItem(STORAGE_KEYS.LEGACY_ASYNC_CREDENTIALS);
         }
       }
       if (data) {
@@ -156,7 +157,7 @@ export class NavidromeService {
   static async clearCredentials(): Promise<void> {
     try {
       await SecureStore.deleteItemAsync(STORAGE_KEYS.CREDENTIALS);
-      await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+      await AsyncStorage.removeItem(STORAGE_KEYS.LEGACY_ASYNC_CREDENTIALS);
       AppStorageService.removeJson(SETTINGS_FILE);
     } catch (error) {
       console.error('Error clearing Navidrome credentials:', error);

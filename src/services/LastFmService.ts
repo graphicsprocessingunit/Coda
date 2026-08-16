@@ -4,7 +4,7 @@ import { AppStorageService } from './AppStorageService';
 import { CryptoService } from './CryptoService';
 import { TrackMetadata } from '../context/AudioContext';
 
-const STORAGE_KEY = '@coda_lastfm_credentials';
+const STORAGE_KEY = 'coda_lastfm_credentials';
 const SETTINGS_FILE = 'lastfm-settings.json';
 
 export interface LastFmCredentials {

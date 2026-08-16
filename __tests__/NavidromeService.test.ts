@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavidromeService, NavidromeCredentials } from '../src/services/NavidromeService';
 import { AppStorageService } from '../src/services/AppStorageService';
 
@@ -119,6 +120,8 @@ describe('NavidromeService', () => {
   describe('credential persistence', () => {
     beforeEach(() => {
       fs.__reset();
+      (SecureStore as any).__reset();
+      (AsyncStorage as any).__reset();
     });
 
     it('saves and loads credentials via SecureStore', async () => {
@@ -183,21 +186,25 @@ describe('NavidromeService', () => {
         token: 'oldtok',
         salt: 'oldsalt',
       };
-      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      await SecureStore.setItemAsync('coda_navidrome_credentials', JSON.stringify(legacy));
       const loaded = await NavidromeService.loadCredentials();
       expect(loaded).toEqual(legacy);
     });
 
-    it('writes an encrypted token+salt snapshot when restoring legacy SecureStore creds', async () => {
+    it('writes an encrypted token+salt snapshot when restoring legacy AsyncStorage creds', async () => {
       const legacy: NavidromeCredentials = {
         url: 'http://legacy.com',
         username: 'olduser',
         token: 'oldtok',
         salt: 'oldsalt',
       };
-      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      await AsyncStorage.setItem('@coda_navidrome_credentials', JSON.stringify(legacy));
       const loaded = await NavidromeService.loadCredentials();
       expect(loaded).toEqual(legacy);
+
+      const promoted = await SecureStore.getItemAsync('coda_navidrome_credentials');
+      expect(JSON.parse(promoted!)).toEqual(legacy);
+      expect(await AsyncStorage.getItem('@coda_navidrome_credentials')).toBeNull();
 
       const settings = AppStorageService.readJson<any>('navidrome-settings.json');
       expect(settings?.url).toBe('http://legacy.com');
@@ -216,7 +223,7 @@ describe('NavidromeService', () => {
         token: 'oldtok',
         salt: 'oldsalt',
       };
-      await SecureStore.setItemAsync('@coda_navidrome_credentials', JSON.stringify(legacy));
+      await AsyncStorage.setItem('@coda_navidrome_credentials', JSON.stringify(legacy));
       await NavidromeService.loadCredentials();
 
       const creds: NavidromeCredentials = {

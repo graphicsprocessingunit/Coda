@@ -29,7 +29,7 @@ describe('CryptoService', () => {
   beforeEach(() => {
     jest.resetModules();
     const secureStore = jest.requireMock('expo-secure-store') as any;
-    secureStore.deleteItemAsync('@coda_encryption_key');
+    secureStore.deleteItemAsync('coda_encryption_key');
   });
 
   it('encrypts to the v1:base64 format', async () => {
@@ -83,10 +83,10 @@ describe('CryptoService', () => {
     const svc = getService();
     const secureStore = jest.requireMock('expo-secure-store') as any;
     await svc.encrypt('a');
-    const raw = await secureStore.getItemAsync('@coda_encryption_key');
+    const raw = await secureStore.getItemAsync('coda_encryption_key');
     expect(raw).toBeTruthy();
     await svc.decrypt(await svc.encrypt('b'));
-    const raw2 = await secureStore.getItemAsync('@coda_encryption_key');
+    const raw2 = await secureStore.getItemAsync('coda_encryption_key');
     expect(raw2).toBe(raw);
   });
 

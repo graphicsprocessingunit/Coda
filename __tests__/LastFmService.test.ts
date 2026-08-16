@@ -45,7 +45,7 @@ describe('LastFmService credential persistence', () => {
   });
 
   it('falls back to SecureStore when no settings JSON exists', async () => {
-    await SecureStore.setItemAsync('@coda_lastfm_credentials', JSON.stringify(mockCreds));
+    await SecureStore.setItemAsync('coda_lastfm_credentials', JSON.stringify(mockCreds));
     const loaded = await LastFmService.loadCredentials();
     expect(loaded).toEqual(mockCreds);
   });

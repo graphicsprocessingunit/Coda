@@ -2,11 +2,22 @@ global.__DEV__ = true;
 
 const storage = {};
 
-jest.mock('expo-secure-store', () => ({
-  setItemAsync: jest.fn(async (key, value) => { storage[key] = value; }),
-  getItemAsync: jest.fn(async (key) => storage[key] ?? null),
-  deleteItemAsync: jest.fn(async (key) => { delete storage[key]; }),
-}));
+jest.mock('expo-secure-store', () => {
+  function ensureValidKey(key) {
+    if (typeof key !== 'string' || !/^[\w.-]+$/.test(key)) {
+      throw new Error(
+        `Invalid key provided to SecureStore. Keys must not be empty and contain only alphanumeric characters, ".", "-", and "_".`
+      );
+    }
+  }
+
+  return {
+    setItemAsync: jest.fn(async (key, value) => { ensureValidKey(key); storage[key] = value; }),
+    getItemAsync: jest.fn(async (key) => { ensureValidKey(key); return storage[key] ?? null; }),
+    deleteItemAsync: jest.fn(async (key) => { ensureValidKey(key); delete storage[key]; }),
+    __reset: () => { Object.keys(storage).forEach((k) => delete storage[k]); },
+  };
+});
 
 jest.mock('expo-crypto', () => {
   let counter = 0;
@@ -34,6 +45,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
       removeItem: jest.fn(async (key) => { delete asyncStorage[key]; }),
       clear: jest.fn(async () => { Object.keys(asyncStorage).forEach(k => delete asyncStorage[k]); }),
       multiRemove: jest.fn(async (keys) => { keys.forEach(k => delete asyncStorage[k]); }),
+      __reset: () => { Object.keys(asyncStorage).forEach((k) => delete asyncStorage[k]); },
     },
   };
 });

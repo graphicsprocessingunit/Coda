@@ -2,7 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
 import { gcm } from '@noble/ciphers/aes.js';
 
-const KEY_STORE = '@coda_encryption_key';
+const KEY_STORE = 'coda_encryption_key';
 const VERSION = 'v1';
 const NONCE_LENGTH = 12;
 const TAG_LENGTH = 16;
