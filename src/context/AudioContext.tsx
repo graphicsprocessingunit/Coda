@@ -4,8 +4,9 @@ import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { StorageService } from '../services/StorageService';
+import { AppStorageService } from '../services/AppStorageService';
 import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
@@ -389,12 +390,37 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const loadSavedData = async () => {
-      const savedLibrary = await StorageService.loadLibrary();
-      const savedPlaylists = await StorageService.loadPlaylists();
-      const savedCurrentTrack = await StorageService.loadCurrentTrack();
+      AppStorageService.ensureStructure();
+      AppStorageService.migrateLegacyCache();
+      const uriMap = AppStorageService.migrateImportedFiles();
+
+      let savedLibrary = await StorageService.loadLibrary();
+      let savedPlaylists = await StorageService.loadPlaylists();
+      let savedCurrentTrack = await StorageService.loadCurrentTrack();
       const savedPlaybackPosition = await StorageService.loadPlaybackPosition();
-      const savedQueue = await StorageService.loadQueue();
-      const savedSmartPlaylists = await StorageService.loadSmartPlaylists();
+      let savedQueue = await StorageService.loadQueue();
+      let savedSmartPlaylists = await StorageService.loadSmartPlaylists();
+
+      if (uriMap.size > 0) {
+        const remapTrack = (track: TrackMetadata): TrackMetadata => {
+          let updated = track;
+          const newUri = uriMap.get(track.uri);
+          if (newUri) updated = { ...updated, uri: newUri };
+          if (track.artwork) {
+            const newArt = uriMap.get(track.artwork);
+            if (newArt) updated = { ...updated, artwork: newArt };
+          }
+          return updated;
+        };
+        savedLibrary = savedLibrary.map(remapTrack);
+        savedPlaylists = savedPlaylists.map((p) => ({ ...p, tracks: p.tracks.map(remapTrack) }));
+        savedQueue = savedQueue.map(remapTrack);
+        if (savedCurrentTrack) savedCurrentTrack = remapTrack(savedCurrentTrack);
+        StorageService.saveLibrary(savedLibrary);
+        StorageService.savePlaylists(savedPlaylists);
+        StorageService.saveQueue(savedQueue);
+        if (savedCurrentTrack) StorageService.saveCurrentTrack(savedCurrentTrack);
+      }
 
       const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
       let libraryUpdated = false;
@@ -459,6 +485,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         navidromeCredentialsRef.current = savedNavidromeCreds;
         setNavidromeConnected(true);
         setNavidromeServerUrl(savedNavidromeCreds.url);
+      } else {
+        const savedNavidromeSettings = NavidromeService.loadSettings();
+        if (savedNavidromeSettings?.url) setNavidromeServerUrl(savedNavidromeSettings.url);
       }
 
       const lastFmCreds = await LastFmService.loadCredentials();
@@ -1051,7 +1080,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       });
       OfflineCacheService.removeController(track.uri);
       if (err?.name === 'AbortError') {
-        const partial = new File(Paths.document, `cache/navidrome/audio/${track.navidromeId}.mp3`);
+        const partial = new File(AppStorageService.audioCacheDir, `${track.navidromeId}.mp3`);
         if (partial.exists) partial.delete();
         return null;
       }

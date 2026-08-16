@@ -20,7 +20,9 @@
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         },
-        "NSLocalNetworkUsageDescription": "Coda needs local network access to stream music from your Navidrome server."
+        "NSLocalNetworkUsageDescription": "Coda needs local network access to stream music from your Navidrome server.",
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
       },
       "bundleIdentifier": "com.codaplayer.app"
     },

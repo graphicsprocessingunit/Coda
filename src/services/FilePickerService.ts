@@ -1,6 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { getAudioMetadata } from '@missingcore/audio-metadata';
+import { AppStorageService } from './AppStorageService';
 import { TrackMetadata } from '../context/AudioContext';
 
 export interface PickedFile {
@@ -24,7 +25,8 @@ function base64ToArtworkFile(base64Data: string, fileName: string): string {
   const base64 = match[1];
   const ext = base64Data.match(/^data:image\/(\w+);/)?.[1] || 'jpg';
   const artFileName = `${sanitizeFileName(fileName.replace(/\.[^/.]+$/, ''))}_artwork.${ext}`;
-  const artFile = new File(Paths.document, artFileName);
+  AppStorageService.ensureStructure();
+  const artFile = new File(AppStorageService.artworkCacheDir, artFileName);
 
   if (artFile.exists) {
     return artFile.uri;
@@ -54,7 +56,8 @@ export class FilePickerService {
 
       const files: PickedFile[] = result.assets.map((asset) => {
         const safeName = sanitizeFileName(asset.name);
-        const destFile = new File(Paths.document, safeName);
+        AppStorageService.ensureStructure();
+        const destFile = new File(AppStorageService.musicDir, safeName);
         if (!destFile.exists) {
           const sourceFile = new File(asset.uri);
           sourceFile.copy(destFile);

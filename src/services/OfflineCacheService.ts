@@ -1,9 +1,10 @@
-import { File, Directory, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
+import { AppStorageService } from './AppStorageService';
 import { NavidromeCredentials, NavidromeService } from './NavidromeService';
 import { TrackMetadata } from '../context/AudioContext';
 
-const AUDIO_CACHE_DIR = new Directory(Paths.document, 'cache/navidrome/audio');
-const ARTWORK_CACHE_DIR = new Directory(Paths.document, 'cache/navidrome/artwork');
+const AUDIO_CACHE_DIR = AppStorageService.audioCacheDir;
+const ARTWORK_CACHE_DIR = AppStorageService.artworkCacheDir;
 
 function ensureDirs() {
   if (!AUDIO_CACHE_DIR.exists) AUDIO_CACHE_DIR.create({ intermediates: true });

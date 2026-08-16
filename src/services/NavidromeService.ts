@@ -1,17 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import md5 from 'md5';
+import { AppStorageService } from './AppStorageService';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEYS = {
   CREDENTIALS: '@coda_navidrome_credentials',
 };
 
+const SETTINGS_FILE = 'navidrome-settings.json';
+
 export interface NavidromeCredentials {
   url: string;
   username: string;
   token: string;
   salt: string;
+}
+
+export interface NavidromeSettings {
+  url: string;
+  username: string;
 }
 
 export interface NavidromeArtist {
@@ -56,6 +64,7 @@ export class NavidromeService {
   static async saveCredentials(creds: NavidromeCredentials): Promise<void> {
     try {
       await SecureStore.setItemAsync(STORAGE_KEYS.CREDENTIALS, JSON.stringify(creds));
+      this.saveSettings({ url: creds.url, username: creds.username });
     } catch (error) {
       console.error('Error saving Navidrome credentials:', error);
     }
@@ -82,9 +91,18 @@ export class NavidromeService {
     try {
       await SecureStore.deleteItemAsync(STORAGE_KEYS.CREDENTIALS);
       await AsyncStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
+      AppStorageService.removeJson(SETTINGS_FILE);
     } catch (error) {
       console.error('Error clearing Navidrome credentials:', error);
     }
+  }
+
+  static saveSettings(settings: NavidromeSettings): void {
+    AppStorageService.writeJson(SETTINGS_FILE, settings);
+  }
+
+  static loadSettings(): NavidromeSettings | null {
+    return AppStorageService.readJson<NavidromeSettings>(SETTINGS_FILE);
   }
 
   static createToken(password: string, salt: string): string {

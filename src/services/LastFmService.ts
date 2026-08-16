@@ -1,13 +1,19 @@
 import * as SecureStore from 'expo-secure-store';
 import md5 from 'md5';
+import { AppStorageService } from './AppStorageService';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEY = '@coda_lastfm_credentials';
+const SETTINGS_FILE = 'lastfm-settings.json';
 
 export interface LastFmCredentials {
   apiKey: string;
   sharedSecret: string;
   sessionKey: string;
+  username: string;
+}
+
+export interface LastFmSettings {
   username: string;
 }
 
@@ -123,6 +129,7 @@ export class LastFmService {
   static async saveCredentials(creds: LastFmCredentials): Promise<void> {
     try {
       await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(creds));
+      AppStorageService.writeJson(SETTINGS_FILE, { username: creds.username });
     } catch (error) {
       console.error('Error saving Last.fm credentials:', error);
     }
@@ -138,9 +145,14 @@ export class LastFmService {
     }
   }
 
+  static loadSettings(): LastFmSettings | null {
+    return AppStorageService.readJson<LastFmSettings>(SETTINGS_FILE);
+  }
+
   static async clearCredentials(): Promise<void> {
     try {
       await SecureStore.deleteItemAsync(STORAGE_KEY);
+      AppStorageService.removeJson(SETTINGS_FILE);
     } catch (error) {
       console.error('Error clearing Last.fm credentials:', error);
     }

@@ -24,6 +24,17 @@ This project uses Expo SDK **54** (installed: 54.0.35). Read the exact versioned
 - `TrackMetadata`: `{ title, artist, uri, duration?, artwork? }`
 - `Playlist`: `{ id, name, tracks: TrackMetadata[], createdAt }`
 
+## Storage layout
+
+All app files live under `Paths.document/Coda/` (user-browsable in iOS Files → On My iPhone, via `UIFileSharingEnabled`/`LSSupportsOpeningDocumentsInPlace`). Managed exclusively through `AppStorageService`:
+
+- `Coda/Downloads/audio` — offline Navidrome tracks (`OfflineCacheService`)
+- `Coda/Downloads/artwork` — cached Navidrome + extracted local artwork
+- `Coda/Music` — imported local audio files (`FilePickerService`)
+- `Coda/Settings` — non-sensitive settings JSON (`navidrome-settings.json`, `lastfm-settings.json`)
+
+**Never store credentials/secrets in the user-visible JSON.** Navidrome token/salt and Last.fm apiKey/sharedSecret/sessionKey live only in `expo-secure-store`; the JSON files hold non-sensitive display fields (server URL, username). `AudioContext.loadSavedData` runs `ensureStructure()` + migrations before `scanCacheDirectory()` revalidation so `cachedUri`/`cachedArtwork` self-heal after a layout change.
+
 ## Conventions
 
 - Components in `src/components/`, contexts in `src/context/`, services in `src/services/`. `src/screens/` exists but is empty — screens are defined inline in `App.tsx`.
