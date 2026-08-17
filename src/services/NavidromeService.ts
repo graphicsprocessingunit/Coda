@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
 import md5 from 'md5';
 import { AppStorageService } from './AppStorageService';
 import { CryptoService } from './CryptoService';
@@ -58,9 +59,10 @@ export interface NavidromeSong {
 
 function generateSalt(): string {
   const chars = 'abcdef0123456789';
+  const bytes = Crypto.getRandomBytes(16);
   let salt = '';
   for (let i = 0; i < 16; i++) {
-    salt += chars[Math.floor(Math.random() * chars.length)];
+    salt += chars[bytes[i] % chars.length];
   }
   return salt;
 }

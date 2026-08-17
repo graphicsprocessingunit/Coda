@@ -11,6 +11,10 @@ function ensureDirs() {
   if (!ARTWORK_CACHE_DIR.exists) ARTWORK_CACHE_DIR.create({ intermediates: true });
 }
 
+function sanitizeFileId(id: string): string {
+  return id.replace(/[/\\.\x00]/g, '');
+}
+
 export class DownloadError extends Error {
   constructor(message: string) {
     super(message);
@@ -55,7 +59,7 @@ export class OfflineCacheService {
     if (!track.navidromeId) throw new DownloadError('Invalid track');
 
     ensureDirs();
-    const destFile = new File(AUDIO_CACHE_DIR, `${track.navidromeId}.mp3`);
+    const destFile = new File(AUDIO_CACHE_DIR, `${sanitizeFileId(track.navidromeId)}.mp3`);
     if (destFile.exists) return destFile.uri;
 
     const controller = new AbortController();
@@ -144,7 +148,7 @@ export class OfflineCacheService {
     coverArtId: string,
   ): Promise<string | null> {
     ensureDirs();
-    const destFile = new File(ARTWORK_CACHE_DIR, `${coverArtId}.jpg`);
+    const destFile = new File(ARTWORK_CACHE_DIR, `${sanitizeFileId(coverArtId)}.jpg`);
     if (destFile.exists) return destFile.uri;
 
     try {
@@ -163,7 +167,7 @@ export class OfflineCacheService {
   }
 
   static async removeCachedTrack(navidromeId: string): Promise<void> {
-    const file = new File(AUDIO_CACHE_DIR, `${navidromeId}.mp3`);
+    const file = new File(AUDIO_CACHE_DIR, `${sanitizeFileId(navidromeId)}.mp3`);
     if (file.exists) file.delete();
   }
 

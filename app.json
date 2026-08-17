@@ -36,7 +36,6 @@
         "POST_NOTIFICATIONS",
         "WAKE_LOCK",
         "READ_EXTERNAL_STORAGE",
-        "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
