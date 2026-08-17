@@ -44,7 +44,7 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
   onToggleSelection?: () => void;
 }) {
   return (
-    <SwipeableRow onDelete={() => onDelete(index)}>
+    <SwipeableRow onDelete={() => onDelete(index)} onPress={!selectionMode ? () => onPress(item) : undefined}>
       <Animated.View
         style={[
           styles.trackItemRow,
@@ -59,8 +59,6 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
           onPress={() => {
             if (selectionMode && onToggleSelection) {
               onToggleSelection();
-            } else {
-              onPress(item);
             }
           }}
         >

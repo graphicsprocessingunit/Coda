@@ -17,6 +17,7 @@ interface SwipeableRowProps {
   children: React.ReactNode;
   onDelete?: () => void;
   onDownload?: () => void;
+  onPress?: () => void;
 }
 
 const ACTION_WIDTH = 80;
@@ -24,7 +25,7 @@ const THRESHOLD = ACTION_WIDTH * 0.5;
 const VELOCITY_THRESHOLD = 700;
 const SPRING_CONFIG = { damping: 20, stiffness: 240, mass: 0.6, overshootClamping: true };
 
-export function SwipeableRow({ children, onDelete, onDownload }: SwipeableRowProps) {
+export function SwipeableRow({ children, onDelete, onDownload, onPress }: SwipeableRowProps) {
   const { colors } = useTheme();
 
   const translateX = useSharedValue(0);
@@ -66,6 +67,17 @@ export function SwipeableRow({ children, onDelete, onDownload }: SwipeableRowPro
         );
       }
     });
+
+  const tap = Gesture.Tap()
+    .maxDistance(6)
+    .maxDuration(500)
+    .onEnd((_e, success) => {
+      if (success && onPress) {
+        runOnJS(onPress)();
+      }
+    });
+
+  const gesture = Gesture.Race(pan, tap);
 
   const rowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -141,7 +153,7 @@ export function SwipeableRow({ children, onDelete, onDownload }: SwipeableRowPro
           </Pressable>
         </Animated.View>
       )}
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.row, rowStyle]}>{children}</Animated.View>
       </GestureDetector>
     </View>

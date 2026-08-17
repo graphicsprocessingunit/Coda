@@ -196,8 +196,6 @@ export function PlaylistDetail({
                 else next.add(item.uri);
                 return next;
               });
-            } else {
-              onTrackPress(item);
             }
           }}
           onLongPress={!selectionMode ? () => handleTrackLongPress(item) : undefined}
@@ -266,7 +264,7 @@ export function PlaylistDetail({
 
     if (!selectionMode) {
       return (
-        <SwipeableRow onDelete={() => onRemoveTrack(item.uri)}>
+        <SwipeableRow onDelete={() => onRemoveTrack(item.uri)} onPress={() => onTrackPress(item)}>
           {trackRow}
         </SwipeableRow>
       );

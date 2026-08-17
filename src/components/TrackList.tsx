@@ -258,7 +258,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         index={index}
         isCurrentTrack={isCurrentTrack}
         colors={colors}
-        onPress={onTrackPress}
+        onPress={selectionMode ? onTrackPress : () => {}}
         onLongPress={handleTrackLongPress}
         onToggleFavorite={onToggleFavorite}
         downloadProgress={downloadProgress}
@@ -283,6 +283,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         <SwipeableRow
           onDelete={onRemoveTrack ? () => onRemoveTrack(item.uri) : undefined}
           onDownload={canDownload ? () => handleTrackDownload(item) : undefined}
+          onPress={() => onTrackPress(item)}
         >
           {trackContent}
         </SwipeableRow>

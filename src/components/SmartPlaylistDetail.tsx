@@ -294,13 +294,14 @@ export function SmartPlaylistDetail({
           ]);
         }}
         onDownload={isTrackDownloadable(item) ? () => handleTrackDownload(item) : undefined}
+        onPress={() => onTrackPress(item)}
       >
         <AnimatedTrackItem
           item={item}
           index={index}
           isCurrentTrack={isCurrentTrack}
           colors={colors}
-          onPress={() => onTrackPress(item)}
+          onPress={() => {}}
           downloadProgress={downloadProgress}
           downloadError={downloadError}
         />
