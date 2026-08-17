@@ -12,7 +12,7 @@ import { LastFmService } from '../services/LastFmService';
 
 interface SettingsProps {
   onClearData: () => void;
-  onClearCache?: () => void;
+  onClearCache?: (onSuccess?: () => void) => void;
 }
 
 export function Settings({ onClearData, onClearCache }: SettingsProps) {
@@ -148,8 +148,7 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
               <Pressable
                 style={styles.settingItem}
                 onPress={() => {
-                  onClearCache();
-                  setCacheSize(0);
+                  onClearCache?.(() => setCacheSize(0));
                 }}
               >
                 <View style={styles.settingLeft}>

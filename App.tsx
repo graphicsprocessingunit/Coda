@@ -624,7 +624,7 @@ function SettingsScreen() {
     );
   };
 
-  const handleClearCache = () => {
+  const handleClearCache = (onSuccess?: () => void) => {
     Alert.alert(
       'Clear Cache',
       'This will delete all cached Navidrome tracks and artwork.',
@@ -635,6 +635,7 @@ function SettingsScreen() {
           style: 'destructive',
           onPress: () => {
             OfflineCacheService.clearCache();
+            onSuccess?.();
             Alert.alert('Success', 'Cache cleared.');
           },
         },
