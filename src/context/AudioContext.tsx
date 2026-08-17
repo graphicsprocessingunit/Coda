@@ -303,7 +303,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const debouncedSavePosition = useCallback((position: number) => {
-    if (Math.abs(position - lastSavedPositionRef.current) < 1000) return;
+    if (Math.abs(position - lastSavedPositionRef.current) < 500) return;
     if (positionSaveTimerRef.current) {
       clearTimeout(positionSaveTimerRef.current);
     }
@@ -311,7 +311,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       StorageService.savePlaybackPosition(position);
       lastSavedPositionRef.current = position;
       positionSaveTimerRef.current = null;
-    }, 5000);
+    }, 2000);
   }, []);
 
   const savePositionImmediate = useCallback((position: number) => {
@@ -361,6 +361,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     return () => {
+      if (soundRef.current) {
+        const status = soundRef.current.currentStatus;
+        if (status?.isLoaded) {
+          savePositionImmediate((status.currentTime || 0) * 1000);
+        }
+      }
       destroyPlayer(soundRef.current);
       destroyPlayer(crossfadeSoundRef.current);
       if (preloadRef.current) {
@@ -384,6 +390,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
         checkSleepTimerExpiryRef.current();
+      } else if (nextState === 'inactive' || nextState === 'background') {
+        if (soundRef.current) {
+          const status = soundRef.current.currentStatus;
+          if (status?.isLoaded) {
+            savePositionImmediate((status.currentTime || 0) * 1000);
+          }
+        }
       }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
@@ -470,7 +483,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         try {
           const player = createAudioPlayer(
             { uri: savedCurrentTrack.uri },
-            { updateInterval: 500 }
+            { updateInterval: 100 }
           );
           player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
           soundRef.current = player;
@@ -650,7 +663,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const resolvedUri = metadata.cachedUri || trackUri;
     const player = createAudioPlayer(
       { uri: resolvedUri },
-      { updateInterval: 500 }
+      { updateInterval: 100 }
     );
 
     if (generation !== loadGenerationRef.current) {
@@ -778,20 +791,30 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       } else {
         newPlayer = createAudioPlayer(
           { uri: nextTrack.cachedUri || nextTrack.uri },
-          { updateInterval: 500 }
+          { updateInterval: 100 }
         );
       }
 
       if (!crossfadeActiveRef.current) {
         destroyPlayer(newPlayer);
+        crossfadeSoundRef.current = null;
         return;
       }
 
+      crossfadeSoundRef.current = newPlayer;
       newPlayer.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
       newPlayer.volume = 0;
       newPlayer.play();
 
       crossfadeTimerRef.current = setInterval(() => {
+        if (!crossfadeActiveRef.current) {
+          if (crossfadeTimerRef.current) {
+            clearInterval(crossfadeTimerRef.current);
+            crossfadeTimerRef.current = null;
+          }
+          return;
+        }
+
         step++;
         const oldVol = Math.max(0, currentVol * (1 - step / steps));
         const newVol = Math.min(currentVol, currentVol * (step / steps));
@@ -819,6 +842,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           } catch {}
 
           soundRef.current = newPlayer;
+          crossfadeSoundRef.current = null;
 
           const currentQueue = queueRef.current;
           if (currentQueue.length > 0) {
@@ -963,13 +987,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const seekTo = useCallback(async (position: number) => {
     if (soundRef.current) {
       try {
-        seekingRef.current = true;
         await soundRef.current.seekTo(position / 1000);
+        seekingRef.current = true;
         setPlaybackPosition(position);
         savePositionImmediate(position);
         setTimeout(() => {
           seekingRef.current = false;
-        }, 600);
+        }, 200);
       } catch (error) {
         seekingRef.current = false;
         console.error('Error seeking:', error);

@@ -17,19 +17,31 @@ interface LyricLine {
 
 function parseSyncedLyrics(raw: string): LyricLine[] {
   const lines: LyricLine[] = [];
-  const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]\s*(.*)/g;
+  const tsRegex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g;
+  const inputLines = raw.split('\n');
 
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(raw)) !== null) {
-    const minutes = parseInt(match[1], 10);
-    const seconds = parseInt(match[2], 10);
-    const frac = match[3].length === 2
-      ? parseInt(match[3], 10) * 10
-      : parseInt(match[3], 10);
-    const time = minutes * 60000 + seconds * 1000 + frac;
-    const text = match[4].trim();
-    if (text.length > 0) {
-      lines.push({ time, text });
+  for (const inputLine of inputLines) {
+    const timestamps: number[] = [];
+    let tsMatch: RegExpExecArray | null;
+    tsRegex.lastIndex = 0;
+    while ((tsMatch = tsRegex.exec(inputLine)) !== null) {
+      const minutes = parseInt(tsMatch[1], 10);
+      const seconds = parseInt(tsMatch[2], 10);
+      let frac = 0;
+      if (tsMatch[3]) {
+        frac = tsMatch[3].length === 2
+          ? parseInt(tsMatch[3], 10) * 10
+          : parseInt(tsMatch[3], 10);
+      }
+      timestamps.push(minutes * 60000 + seconds * 1000 + frac);
+    }
+
+    const text = inputLine.replace(tsRegex, '').trim();
+
+    if (timestamps.length > 0 && text.length > 0) {
+      for (const time of timestamps) {
+        lines.push({ time, text });
+      }
     }
   }
   return lines;
