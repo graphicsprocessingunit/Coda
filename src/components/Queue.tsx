@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, TextInput, Modal } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Animated, TextInput, Modal } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -73,7 +74,7 @@ const QueueTrackItem = React.memo(function QueueTrackItem({
             <Text style={[styles.trackNumber, { color: colors.textSecondary }]}>{index + 1}</Text>
           )}
           {item.artwork ? (
-            <Image source={{ uri: item.artwork }} style={styles.artwork} />
+            <Image source={{ uri: item.artwork }} style={styles.artwork} cachePolicy="memory-disk" />
           ) : (
             <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
               <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
@@ -225,7 +226,7 @@ export function Queue({ onClose }: QueueProps) {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Now Playing</Text>
           <View style={[styles.nowPlaying, { backgroundColor: colors.card }]}>
             {currentTrack.artwork ? (
-              <Image source={{ uri: currentTrack.artwork }} style={styles.nowPlayingArt} />
+              <Image source={{ uri: currentTrack.artwork }} style={styles.nowPlayingArt} cachePolicy="memory-disk" />
             ) : (
               <View style={[styles.nowPlayingArtPlaceholder, { backgroundColor: colors.border }]}>
                 <Ionicons name="musical-note" size={22} color={colors.textSecondary} />
@@ -272,6 +273,9 @@ export function Queue({ onClose }: QueueProps) {
             renderItem={renderQueueTrack}
             contentContainerStyle={styles.listContent}
             getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * (index ?? 0), index: index ?? 0 })}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={11}
           />
         )}
       </View>
@@ -309,6 +313,9 @@ export function Queue({ onClose }: QueueProps) {
                 <FlatList
                   data={filteredLibrary}
                   keyExtractor={(item) => `add-${item.uri}`}
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
                   renderItem={({ item }) => (
                     <Pressable
                       style={[styles.libraryTrackItem, { borderBottomColor: colors.border }]}
@@ -318,7 +325,7 @@ export function Queue({ onClose }: QueueProps) {
                       }}
                     >
                       {item.artwork ? (
-                        <Image source={{ uri: item.artwork }} style={styles.libraryTrackArtwork} />
+                        <Image source={{ uri: item.artwork }} style={styles.libraryTrackArtwork} cachePolicy="memory-disk" />
                       ) : (
                         <View style={[styles.libraryTrackArtworkPlaceholder, { backgroundColor: colors.border }]}>
                           <Ionicons name="musical-note" size={20} color={colors.textSecondary} />

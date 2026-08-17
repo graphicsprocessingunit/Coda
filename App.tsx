@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
+import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, useIsPlaying, useSleepTimer, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Player } from './src/components/Player';
 import { TrackList } from './src/components/TrackList';
@@ -52,7 +52,6 @@ function AnimatedTabIcon({ name, color, size, focused }: { name: string; color: 
 function PlayerScreen() {
   const {
     currentTrack,
-    isPlaying,
     loadTrack,
     play,
     pause,
@@ -64,9 +63,10 @@ function PlayerScreen() {
     toggleShuffle,
     toggleRepeat,
     toggleFavorite,
-    sleepTimerRemaining,
   } = useAudio();
   const { playbackPosition, duration } = usePlaybackPosition();
+  const { isPlaying } = useIsPlaying();
+  const { sleepTimerRemaining } = useSleepTimer();
   const { colors } = useTheme();
   const [showEffects, setShowEffects] = useState(false);
   const [showQueue, setShowQueue] = useState(false);

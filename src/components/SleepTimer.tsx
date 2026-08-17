@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Text, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio } from '../context/AudioContext';
+import { useAudio, useSleepTimer } from '../context/AudioContext';
 
 const TIMER_OPTIONS = [
   { label: '15 min', minutes: 15 },
@@ -21,7 +21,8 @@ function formatTimer(seconds: number): string {
 
 export function SleepTimerSection() {
   const { colors } = useTheme();
-  const { sleepTimerEnd, sleepTimerRemaining, setSleepTimer, cancelSleepTimer } = useAudio();
+  const { setSleepTimer, cancelSleepTimer } = useAudio();
+  const { sleepTimerEnd, sleepTimerRemaining } = useSleepTimer();
 
   const isActive = sleepTimerEnd !== null;
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text, Pressable, Image, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -130,6 +131,7 @@ export function Player({
               source={{ uri: currentTrack.artwork }}
               style={styles.albumArt}
               resizeMode="cover"
+              cachePolicy="memory-disk"
             />
           ) : (
             <View style={styles.albumArtPlaceholder}>

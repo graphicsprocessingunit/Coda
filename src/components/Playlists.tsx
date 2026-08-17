@@ -248,6 +248,16 @@ export function Playlists({
 
   type SectionItem = { id: string; type: 'header'; title: string; icon: string } | { id: string; type: 'smart'; data: SmartPlaylist } | { id: string; type: 'playlist'; data: Playlist };
 
+  const smartPlaylistCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    if (library.length > 0) {
+      for (const sp of smartPlaylists) {
+        counts.set(sp.id, evaluateSmartPlaylist(library, sp).length);
+      }
+    }
+    return counts;
+  }, [library, smartPlaylists]);
+
   const playlistSections = React.useMemo(() => {
     const sections: { title: string; icon: string; data: SectionItem[] }[] = [];
 
@@ -294,7 +304,7 @@ export function Playlists({
   };
 
   const renderSmartPlaylistItem = ({ item }: { item: SmartPlaylist }) => {
-    const trackCount = library.length > 0 ? evaluateSmartPlaylist(library, item).length : 0;
+    const trackCount = smartPlaylistCounts.get(item.id) ?? 0;
 
     return (
       <Pressable

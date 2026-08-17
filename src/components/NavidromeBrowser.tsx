@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Text, Pressable, FlatList, Image, TextInput, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, Pressable, FlatList, TextInput, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
@@ -151,7 +152,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     <Pressable style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={() => loadArtistAlbums(item)}>
       <View style={styles.listItemImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="person" size={24} color={colors.textSecondary} />
@@ -170,7 +171,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     <Pressable style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={() => loadAlbumSongs(item)}>
       <View style={styles.listItemImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="disc" size={24} color={colors.textSecondary} />
@@ -194,7 +195,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
       </View>
       <View style={styles.songImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.songImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.songImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
@@ -219,7 +220,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     <Pressable style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={() => loadArtistAlbums(item)}>
       <View style={styles.listItemImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="person" size={24} color={colors.textSecondary} />
@@ -237,7 +238,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     <Pressable style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={() => loadAlbumSongs(item)}>
       <View style={styles.listItemImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="disc" size={24} color={colors.textSecondary} />
@@ -255,7 +256,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     <Pressable style={[styles.listItem, { borderBottomColor: colors.border }]} onPress={() => handlePlaySong(item, searchResults?.songs || [])}>
       <View style={styles.listItemImage}>
         {item.coverArt ? (
-          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} />
+          <Image source={{ uri: getCoverUrl(item.coverArt) }} style={styles.listItemImage} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.placeholderImage, { backgroundColor: colors.card }]}>
             <Ionicons name="musical-note" size={24} color={colors.textSecondary} />

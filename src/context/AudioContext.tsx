@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { unstable_batchedUpdates } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import type { AudioPlayer } from 'expo-audio';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import { StorageService } from '../services/StorageService';
@@ -69,7 +69,6 @@ export const EQ_BAND_LABELS = ['60 Hz', '230 Hz', '910 Hz', '3.6 kHz', '14 kHz']
 
 interface AudioContextType {
   currentTrack: TrackMetadata | null;
-  isPlaying: boolean;
   queue: TrackMetadata[];
   library: TrackMetadata[];
   playlists: Playlist[];
@@ -78,8 +77,6 @@ interface AudioContextType {
   playbackRate: number;
   volume: number;
   audioPreset: AudioPreset;
-  sleepTimerEnd: number | null;
-  sleepTimerRemaining: number;
   loadTrack: (trackUri: string, metadata: TrackMetadata, autoPlay?: boolean) => Promise<void>;
   play: () => Promise<void>;
   pause: () => Promise<void>;
@@ -171,6 +168,27 @@ const DownloadProgressCtx = createContext<DownloadProgressType>({
 
 export function useDownloadProgress() {
   return useContext(DownloadProgressCtx);
+}
+
+interface IsPlayingType {
+  isPlaying: boolean;
+}
+
+const IsPlayingCtx = createContext<IsPlayingType>({ isPlaying: false });
+
+export function useIsPlaying() {
+  return useContext(IsPlayingCtx);
+}
+
+interface SleepTimerType {
+  sleepTimerEnd: number | null;
+  sleepTimerRemaining: number;
+}
+
+const SleepTimerCtx = createContext<SleepTimerType>({ sleepTimerEnd: null, sleepTimerRemaining: 0 });
+
+export function useSleepTimer() {
+  return useContext(SleepTimerCtx);
 }
 
 function shuffleArray<T>(array: T[]): T[] {
@@ -444,34 +462,40 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         if (savedCurrentTrack) StorageService.saveCurrentTrack(savedCurrentTrack);
       }
 
-      const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
-      let libraryUpdated = false;
-      const resolvedLibrary = savedLibrary.map((track) => {
-        if (track.source !== 'navidrome' || !track.navidromeId) return track;
-        let updated = track;
-        const cachedPath = cachedAudio.get(track.navidromeId);
-        if (cachedPath && (!track.cachedUri || !new File(track.cachedUri).exists)) {
-          updated = { ...updated, cachedUri: cachedPath };
-          libraryUpdated = true;
-        }
-        if (track.artwork && !track.cachedArtwork) {
-          const coverArtId = track.artwork.match(/id=([^&]+)/)?.[1];
-          if (coverArtId) {
-            const artPath = cachedArtwork.get(coverArtId);
-            if (artPath) {
-              updated = { ...updated, cachedArtwork: artPath };
-              libraryUpdated = true;
-            }
-          }
-        }
-        return updated;
-      });
-      if (libraryUpdated) StorageService.saveLibrary(resolvedLibrary);
-
-      if (resolvedLibrary.length > 0) setLibrary(resolvedLibrary);
+      if (savedLibrary.length > 0) setLibrary(savedLibrary);
       if (savedPlaylists.length > 0) setPlaylists(savedPlaylists);
       if (savedQueue.length > 0) setQueue(savedQueue);
       if (savedSmartPlaylists.length > 0) setSmartPlaylists(savedSmartPlaylists);
+
+      // Defer cache scan to after UI is interactive
+      InteractionManager.runAfterInteractions(() => {
+        const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
+        let libraryUpdated = false;
+        const resolvedLibrary = savedLibrary.map((track) => {
+          if (track.source !== 'navidrome' || !track.navidromeId) return track;
+          let updated = track;
+          const cachedPath = cachedAudio.get(track.navidromeId);
+          if (cachedPath && (!track.cachedUri || !new File(track.cachedUri).exists)) {
+            updated = { ...updated, cachedUri: cachedPath };
+            libraryUpdated = true;
+          }
+          if (track.artwork && !track.cachedArtwork) {
+            const coverArtId = track.artwork.match(/id=([^&]+)/)?.[1];
+            if (coverArtId) {
+              const artPath = cachedArtwork.get(coverArtId);
+              if (artPath) {
+                updated = { ...updated, cachedArtwork: artPath };
+                libraryUpdated = true;
+              }
+            }
+          }
+          return updated;
+        });
+        if (libraryUpdated) {
+          StorageService.saveLibrary(resolvedLibrary);
+          setLibrary(resolvedLibrary);
+        }
+      });
 
       await setAudioModeAsync({
         playsInSilentMode: true,
@@ -1672,7 +1696,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const value: AudioContextType = useMemo(() => ({
     currentTrack,
-    isPlaying,
     queue,
     library,
     playlists,
@@ -1681,8 +1704,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     playbackRate,
     volume,
     audioPreset,
-    sleepTimerEnd,
-    sleepTimerRemaining,
     navidromeConnected,
     navidromeServerUrl,
     loadTrack,
@@ -1748,9 +1769,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     clearError,
     isLoading,
   }), [
-    currentTrack, isPlaying, queue, library, playlists,
+    currentTrack, queue, library, playlists,
     shuffleEnabled, repeatEnabled,
-    playbackRate, volume, audioPreset, sleepTimerEnd, sleepTimerRemaining,
+    playbackRate, volume, audioPreset,
     navidromeConnected, navidromeServerUrl, crossfadeEnabled, crossfadeDuration,
     seamlessEnabled,
     loadTrack, play, pause, seekTo, skipNext, skipPrevious,
@@ -1777,11 +1798,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     activeDownloads, cancelDownload,
   }), [activeDownloads, cancelDownload]);
 
+  const isPlayingValue: IsPlayingType = useMemo(() => ({
+    isPlaying,
+  }), [isPlaying]);
+
+  const sleepTimerValue: SleepTimerType = useMemo(() => ({
+    sleepTimerEnd, sleepTimerRemaining,
+  }), [sleepTimerEnd, sleepTimerRemaining]);
+
   return (
     <AudioCtx.Provider value={value}>
       <PlaybackPositionCtx.Provider value={positionValue}>
         <DownloadProgressCtx.Provider value={downloadProgressValue}>
-          {children}
+          <IsPlayingCtx.Provider value={isPlayingValue}>
+            <SleepTimerCtx.Provider value={sleepTimerValue}>
+              {children}
+            </SleepTimerCtx.Provider>
+          </IsPlayingCtx.Provider>
         </DownloadProgressCtx.Provider>
       </PlaybackPositionCtx.Provider>
     </AudioCtx.Provider>

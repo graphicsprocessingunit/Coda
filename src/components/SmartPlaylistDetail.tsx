@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Animated, Alert, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Animated, Alert, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -68,7 +69,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
         </View>
 
         {item.artwork ? (
-          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
             <Ionicons name="musical-note" size={24} color={colors.textSecondary} />

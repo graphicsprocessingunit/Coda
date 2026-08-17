@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Image, Modal, TextInput, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Modal, TextInput, Animated, Easing } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
@@ -69,7 +70,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
         </View>
 
         {item.artwork ? (
-          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
             <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
@@ -102,7 +103,7 @@ function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | un
   return (
     <Animated.View style={[styles.collageItem, { opacity }]}>
       {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.collageImage} />
+        <Image source={{ uri: artwork }} style={styles.collageImage} cachePolicy="memory-disk" />
       ) : (
         <View style={[styles.collagePlaceholder, { backgroundColor: colors.border }]}>
           <Ionicons name="musical-note" size={32} color={colors.textSecondary} />
@@ -219,7 +220,7 @@ export function PlaylistDetail({
           </View>
 
           {item.artwork ? (
-            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} />
+            <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" />
           ) : (
             <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
               <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
@@ -427,7 +428,7 @@ export function PlaylistDetail({
                       onPress={() => handleAddTrack(item)}
                     >
                       {item.artwork ? (
-                        <Image source={{ uri: item.artwork }} style={styles.libraryTrackArtwork} />
+                        <Image source={{ uri: item.artwork }} style={styles.libraryTrackArtwork} cachePolicy="memory-disk" />
                       ) : (
                         <View style={[styles.libraryTrackArtworkPlaceholder, { backgroundColor: colors.border }]}>
                           <Ionicons name="musical-note" size={24} color={colors.textSecondary} />

@@ -1,12 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, Pressable, Image, Animated } from 'react-native';
+import { View, StyleSheet, Text, Pressable, Animated } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio } from '../context/AudioContext';
+import { useAudio, useIsPlaying } from '../context/AudioContext';
 
 export const MiniPlayer = React.memo(function MiniPlayer() {
-  const { currentTrack, isPlaying, play, pause, skipNext, skipPrevious } = useAudio();
+  const { currentTrack, play, pause, skipNext, skipPrevious } = useAudio();
+  const { isPlaying } = useIsPlaying();
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
 
@@ -41,7 +43,7 @@ export const MiniPlayer = React.memo(function MiniPlayer() {
     <Animated.View style={[styles.container, { backgroundColor: colors.card, borderTopColor: colors.border }, { opacity, transform: [{ translateY: slideY }] }]}>
       <Pressable style={styles.content} onPress={() => navigation.navigate('Player')}>
         {currentTrack.artwork ? (
-          <Image source={{ uri: currentTrack.artwork }} style={styles.artwork} />
+           <Image source={{ uri: currentTrack.artwork }} style={styles.artwork} cachePolicy="memory-disk" />
         ) : (
           <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
             <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
