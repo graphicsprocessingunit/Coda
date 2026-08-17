@@ -50,8 +50,7 @@
     "plugins": [
       "expo-audio",
       "expo-asset",
-      "expo-secure-store",
-      "expo-image"
+      "expo-secure-store"
     ],
     "owner": "aaron656"
   }
