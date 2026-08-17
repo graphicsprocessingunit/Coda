@@ -197,6 +197,7 @@ function updateLockScreen(player: AudioPlayer, track: TrackMetadata) {
 function destroyPlayer(player: AudioPlayer | null) {
   if (!player) return;
   try {
+    player.pause();
     player.clearLockScreenControls();
     player.remove();
   } catch {}
@@ -253,6 +254,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const positionSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPositionRef = useRef(0);
   const loadGenerationRef = useRef(0);
+  const currentPlayerIdRef = useRef<number | null>(null);
   const crossfadeSoundRef = useRef<AudioPlayer | null>(null);
   const crossfadeActiveRef = useRef(false);
   const crossfadeStartedRef = useRef(false);
@@ -314,12 +316,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }, 2000);
   }, []);
 
-  const savePositionImmediate = useCallback((position: number) => {
+  const savePositionImmediate = useCallback(async (position: number) => {
     if (positionSaveTimerRef.current) {
       clearTimeout(positionSaveTimerRef.current);
       positionSaveTimerRef.current = null;
     }
-    StorageService.savePlaybackPosition(position);
+    await StorageService.savePlaybackPosition(position);
     lastSavedPositionRef.current = position;
   }, []);
 
@@ -477,14 +479,19 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         interruptionMode: 'doNotMix',
       });
 
-      if (savedCurrentTrack && savedCurrentTrack.source !== 'navidrome') {
+      if (savedCurrentTrack && (savedCurrentTrack.source !== 'navidrome' || savedCurrentTrack.cachedUri)) {
         const libMatch = libraryRef.current.find(t => t.uri === savedCurrentTrack.uri);
         setCurrentTrack({ ...savedCurrentTrack, isFavorite: libMatch?.isFavorite ?? savedCurrentTrack.isFavorite ?? false });
+        setPlaybackPosition(savedPlaybackPosition > 0 ? savedPlaybackPosition : 0);
+        setDuration(0);
+        setIsPlaying(false);
         try {
+          const restoreUri = savedCurrentTrack.cachedUri || savedCurrentTrack.uri;
           const player = createAudioPlayer(
-            { uri: savedCurrentTrack.uri },
+            { uri: restoreUri },
             { updateInterval: 100 }
           );
+          currentPlayerIdRef.current = player.id;
           player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
           soundRef.current = player;
           if (savedPlaybackPosition > 0) {
@@ -637,6 +644,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (crossfadeSoundRef.current) {
         const cfPlayer = crossfadeSoundRef.current;
         crossfadeSoundRef.current = null;
+        try { cfPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
         destroyPlayer(cfPlayer);
       }
     }
@@ -645,8 +653,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const prevPlayer = soundRef.current;
       const prevStatus = playbackStatusRef.current;
       if (prevStatus?.isLoaded) {
-        savePositionImmediate((prevStatus.currentTime || 0) * 1000);
+        await savePositionImmediate((prevStatus.currentTime || 0) * 1000);
       }
+      try { prevPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
       destroyPlayer(prevPlayer);
       soundRef.current = null;
     }
@@ -660,6 +669,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       preloadedUriRef.current = null;
     }
 
+    unstable_batchedUpdates(() => {
+      setPlaybackPosition(0);
+      setDuration(0);
+      setIsPlaying(false);
+    });
+
     const resolvedUri = metadata.cachedUri || trackUri;
     const player = createAudioPlayer(
       { uri: resolvedUri },
@@ -671,6 +686,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    currentPlayerIdRef.current = player.id;
     player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
     soundRef.current = player;
 
@@ -679,7 +695,6 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const libMatch = libraryRef.current.find(t => t.uri === metadata.uri);
     unstable_batchedUpdates(() => {
       setCurrentTrack({ ...metadata, isFavorite: libMatch?.isFavorite ?? metadata.isFavorite ?? false });
-      setPlaybackPosition(0);
       const status = player.currentStatus;
       if (status.isLoaded) {
         setDuration((status.duration || 0) * 1000);
@@ -837,10 +852,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
               if (oldStatus.isLoaded) {
                 savePositionImmediate((oldStatus.currentTime || 0) * 1000);
               }
+              try { oldPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
               destroyPlayer(oldPlayer);
             }
           } catch {}
 
+          currentPlayerIdRef.current = newPlayer.id;
           soundRef.current = newPlayer;
           crossfadeSoundRef.current = null;
 
@@ -891,6 +908,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, [getNextTrack, savePositionImmediate]);
 
   const onPlaybackStatusUpdate = useCallback((status: any) => {
+    if (status.id !== currentPlayerIdRef.current) return;
     playbackStatusRef.current = status;
     if (status.isLoaded) {
       const positionMs = (status.currentTime || 0) * 1000;
@@ -975,7 +993,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying(false);
         const status = soundRef.current.currentStatus;
         if (status.isLoaded) {
-          savePositionImmediate((status.currentTime || 0) * 1000);
+          await savePositionImmediate((status.currentTime || 0) * 1000);
         }
       } catch (error) {
         console.error('Error pausing:', error);
@@ -990,7 +1008,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         await soundRef.current.seekTo(position / 1000);
         seekingRef.current = true;
         setPlaybackPosition(position);
-        savePositionImmediate(position);
+        await savePositionImmediate(position);
         setTimeout(() => {
           seekingRef.current = false;
         }, 200);
@@ -1506,6 +1524,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       preloadRef.current = null;
     }
     preloadedUriRef.current = null;
+    currentPlayerIdRef.current = null;
     crossfadeActiveRef.current = false;
     crossfadeStartedRef.current = false;
     if (crossfadeTimerRef.current) {
