@@ -74,7 +74,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 
 ### Android
 
-[![Download APK](https://img.shields.io/badge/Download-v1.0.0%20APK-00C853?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.0.0/Coda-v1.0.0.apk)
+[![Download APK](https://img.shields.io/badge/Download-v1.0.0%20APK-00C853?style=for-the-badge)](https://github.com/graphicsprocessingunit/coda-issues/releases/download/v1.0.0/Coda-v1.0.0.apk)
 
 1. Download the `.apk` file from the link above
 2. Open the file on your Android device
@@ -83,7 +83,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 
 ### iOS
 
-[![Download IPA](https://img.shields.io/badge/Download-v1.0.0%20IPA-007AFF?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.0.0/Coda-v1.0.0.ipa)
+[![Download IPA](https://img.shields.io/badge/Download-v1.0.0%20IPA-007AFF?style=for-the-badge)](https://github.com/graphicsprocessingunit/coda-issues/releases/download/v1.0.0/Coda-v1.0.0.ipa)
 
 Install using [AltStore](https://altstore.io), [SideStore](https://sidestore.io), or any IPA signing tool.
 
