@@ -7,9 +7,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import { StorageService } from '../services/StorageService';
 import { AppStorageService } from '../services/AppStorageService';
-import { NavidromeService, NavidromeCredentials } from '../services/NavidromeService';
+import { NavidromeService, NavidromeCredentials, ServerConfig } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
+import { migrateToMultiServer } from '../services/MigrationService';
 import * as AudioEQ from 'audio-eq';
 
 export interface TrackMetadata {
@@ -120,10 +121,16 @@ interface AudioContextType {
   cancelSleepTimer: () => void;
   navidromeConnected: boolean;
   navidromeServerUrl: string;
+  serverConfigs: ServerConfig[];
+  activeServerConfig: ServerConfig | null;
   connectNavidrome: (url: string, username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectNavidrome: () => Promise<void>;
   getNavidromeCredentials: () => NavidromeCredentials | null;
-  loadSavedNavidromeLogin: () => Promise<{ url: string; username: string; password: string } | null>;
+  loadSavedNavidromeLogin: (configId?: string) => Promise<{ url: string; username: string; password: string } | null>;
+  switchServer: (configId: string) => Promise<void>;
+  addServer: (name: string, url: string, username: string, password: string) => Promise<ServerConfig>;
+  updateServer: (id: string, changes: { name?: string; url?: string; username?: string; password?: string }) => Promise<void>;
+  deleteServer: (configId: string) => Promise<void>;
   crossfadeEnabled: boolean;
   crossfadeDuration: number;
   setCrossfadeEnabled: (enabled: boolean) => void;
@@ -244,6 +251,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [seamlessEnabled, setSeamlessEnabledState] = useState(false);
   const [navidromeConnected, setNavidromeConnected] = useState(false);
   const [navidromeServerUrl, setNavidromeServerUrl] = useState('');
+  const [serverConfigs, setServerConfigs] = useState<ServerConfig[]>([]);
+  const [activeServerConfig, setActiveServerConfigState] = useState<ServerConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDownloads, setActiveDownloads] = useState<Map<string, number>>(new Map());
@@ -434,6 +443,23 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         console.error('Error running storage migrations:', error);
       }
 
+      try {
+        await migrateToMultiServer();
+      } catch (error) {
+        console.error('Error migrating to multi-server:', error);
+      }
+
+      const allConfigs = NavidromeService.listConfigs();
+      setServerConfigs(allConfigs.configs);
+      const activeConfig = allConfigs.configs.find((c) => c.id === allConfigs.activeConfigId) || null;
+      setActiveServerConfigState(activeConfig);
+
+      if (activeConfig) {
+        StorageService.setActiveConfig(activeConfig.id);
+        OfflineCacheService.setActiveConfig(activeConfig.id);
+        AppStorageService.ensureStructure(activeConfig.id);
+      }
+
       let savedLibrary = await StorageService.loadLibrary();
       let savedPlaylists = await StorageService.loadPlaylists();
       let savedCurrentTrack = await StorageService.loadCurrentTrack();
@@ -536,9 +562,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         navidromeCredentialsRef.current = savedNavidromeCreds;
         setNavidromeConnected(true);
         setNavidromeServerUrl(savedNavidromeCreds.url);
-      } else {
-        const savedNavidromeSettings = NavidromeService.loadSettings();
-        if (savedNavidromeSettings?.url) setNavidromeServerUrl(savedNavidromeSettings.url);
+      } else if (activeConfig) {
+        setNavidromeServerUrl(activeConfig.url);
       }
 
       const lastFmCreds = await LastFmService.loadCredentials();
@@ -1590,11 +1615,19 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem('@coda_eq_enabled');
     await AsyncStorage.removeItem('@coda_eq_bands');
     await AsyncStorage.removeItem('@coda_eq_preset');
-    await NavidromeService.clearCredentials();
+    const allConfigs = NavidromeService.listConfigs();
+    for (const config of allConfigs.configs) {
+      await NavidromeService.clearCredentials(config.id);
+    }
+    AppStorageService.writeJson('navidrome-settings.json', { version: 2, activeConfigId: '', configs: [] });
     OfflineCacheService.clearCache();
+    StorageService.setActiveConfig('');
+    OfflineCacheService.setActiveConfig('');
     navidromeCredentialsRef.current = null;
     setNavidromeConnected(false);
     setNavidromeServerUrl('');
+    setServerConfigs([]);
+    setActiveServerConfigState(null);
     LastFmService.clearCredentials().catch(() => {});
     lastFmCredsRef.current = null;
     lastFmConnectedRef.current = false;
@@ -1639,27 +1672,189 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const connectNavidrome = useCallback(async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);
     if (result.ok && result.creds) {
-      await NavidromeService.saveCredentials(result.creds, password);
-      navidromeCredentialsRef.current = result.creds;
-      setNavidromeConnected(true);
-      setNavidromeServerUrl(url);
+      const existingConfigs = NavidromeService.listConfigs();
+      const existingConfig = existingConfigs.configs.find(
+        (c) => c.url === url && c.username === username,
+      );
+      if (existingConfig) {
+        await NavidromeService.saveCredentials(existingConfig.id, result.creds, password);
+        navidromeCredentialsRef.current = result.creds;
+        setNavidromeConnected(true);
+        setNavidromeServerUrl(url);
+      } else {
+        try {
+          const { config, creds } = await NavidromeService.addConfig(
+            username || 'My Server',
+            url,
+            username,
+            password,
+          );
+          navidromeCredentialsRef.current = creds;
+          setNavidromeConnected(true);
+          setNavidromeServerUrl(url);
+          const refreshed = NavidromeService.listConfigs();
+          setServerConfigs(refreshed.configs);
+          setActiveServerConfigState(config);
+          StorageService.setActiveConfig(config.id);
+          OfflineCacheService.setActiveConfig(config.id);
+          AppStorageService.ensureStructure(config.id);
+        } catch (error: any) {
+          return { ok: false, error: error.message || 'Failed to add server' };
+        }
+      }
     }
     return result;
   }, []);
 
   const disconnectNavidrome = useCallback(async () => {
-    await NavidromeService.clearCredentials();
+    const active = NavidromeService.getActiveConfig();
+    if (active) {
+      await NavidromeService.deleteConfig(active.id);
+    }
     navidromeCredentialsRef.current = null;
     setNavidromeConnected(false);
     setNavidromeServerUrl('');
+    const refreshed = NavidromeService.listConfigs();
+    setServerConfigs(refreshed.configs);
+    const next = refreshed.configs.length > 0 ? refreshed.configs[0] : null;
+    setActiveServerConfigState(next);
+    if (next) {
+      StorageService.setActiveConfig(next.id);
+      OfflineCacheService.setActiveConfig(next.id);
+    }
   }, []);
+
+  const switchServer = useCallback(async (configId: string) => {
+    if (soundRef.current) {
+      destroyPlayer(soundRef.current);
+      soundRef.current = null;
+    }
+    if (crossfadeSoundRef.current) {
+      destroyPlayer(crossfadeSoundRef.current);
+      crossfadeSoundRef.current = null;
+    }
+    if (preloadRef.current) {
+      destroyPlayer(preloadRef.current);
+      preloadRef.current = null;
+    }
+
+    await NavidromeService.switchToConfig(configId);
+    const config = NavidromeService.getConfigById(configId);
+    if (!config) return;
+
+    StorageService.setActiveConfig(configId);
+    OfflineCacheService.setActiveConfig(configId);
+    AppStorageService.ensureStructure(configId);
+
+    setActiveServerConfigState(config);
+    setCurrentTrack(null);
+    setIsPlaying(false);
+    setQueue([]);
+    setLibrary([]);
+    setPlaylists([]);
+    setSmartPlaylists([]);
+    setPlaybackPosition(0);
+    setDuration(0);
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    sourceTracksRef.current = [];
+    queueRef.current = [];
+
+    const creds = await NavidromeService.loadCredentials(configId);
+    if (creds) {
+      navidromeCredentialsRef.current = creds;
+      setNavidromeConnected(true);
+      setNavidromeServerUrl(creds.url);
+    } else {
+      navidromeCredentialsRef.current = null;
+      setNavidromeConnected(false);
+      setNavidromeServerUrl(config.url);
+    }
+
+    const newLibrary = await StorageService.loadLibrary();
+    const newPlaylists = await StorageService.loadPlaylists();
+    const newSmartPlaylists = await StorageService.loadSmartPlaylists();
+    if (newLibrary.length > 0) setLibrary(newLibrary);
+    if (newPlaylists.length > 0) setPlaylists(newPlaylists);
+    if (newSmartPlaylists.length > 0) setSmartPlaylists(newSmartPlaylists);
+
+    InteractionManager.runAfterInteractions(() => {
+      const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
+      let libraryUpdated = false;
+      const resolvedLibrary = newLibrary.map((track) => {
+        if (track.source !== 'navidrome' || !track.navidromeId) return track;
+        let updated = track;
+        const cachedPath = cachedAudio.get(track.navidromeId);
+        if (cachedPath && (!track.cachedUri || !new File(track.cachedUri).exists)) {
+          updated = { ...updated, cachedUri: cachedPath };
+          libraryUpdated = true;
+        }
+        if (track.artwork && !track.cachedArtwork) {
+          const coverArtId = track.artwork.match(/id=([^&]+)/)?.[1];
+          if (coverArtId) {
+            const artPath = cachedArtwork.get(coverArtId);
+            if (artPath) {
+              updated = { ...updated, cachedArtwork: artPath };
+              libraryUpdated = true;
+            }
+          }
+        }
+        return updated;
+      });
+      if (libraryUpdated) {
+        StorageService.saveLibrary(resolvedLibrary);
+        setLibrary(resolvedLibrary);
+      }
+    });
+  }, []);
+
+  const addServer = useCallback(async (name: string, url: string, username: string, password: string): Promise<ServerConfig> => {
+    const { config } = await NavidromeService.addConfig(name, url, username, password);
+    const refreshed = NavidromeService.listConfigs();
+    setServerConfigs(refreshed.configs);
+    await switchServer(config.id);
+    return config;
+  }, [switchServer]);
+
+  const updateServer = useCallback(async (id: string, changes: { name?: string; url?: string; username?: string; password?: string }) => {
+    await NavidromeService.updateConfig(id, changes);
+    const refreshed = NavidromeService.listConfigs();
+    setServerConfigs(refreshed.configs);
+    const active = refreshed.configs.find((c) => c.id === refreshed.activeConfigId) || null;
+    setActiveServerConfigState(active);
+    if (active && active.id === id) {
+      const creds = await NavidromeService.loadCredentials(id);
+      if (creds) {
+        navidromeCredentialsRef.current = creds;
+        setNavidromeConnected(true);
+        setNavidromeServerUrl(creds.url);
+      }
+    }
+  }, []);
+
+  const deleteServer = useCallback(async (configId: string) => {
+    await NavidromeService.deleteConfig(configId);
+    const refreshed = NavidromeService.listConfigs();
+    setServerConfigs(refreshed.configs);
+    const activeConfig = refreshed.configs.find((c) => c.id === refreshed.activeConfigId) || null;
+    setActiveServerConfigState(activeConfig);
+    if (activeConfig) {
+      await switchServer(activeConfig.id);
+    } else {
+      StorageService.setActiveConfig('');
+      OfflineCacheService.setActiveConfig('');
+      navidromeCredentialsRef.current = null;
+      setNavidromeConnected(false);
+      setNavidromeServerUrl('');
+    }
+  }, [switchServer]);
 
   const getNavidromeCredentials = useCallback((): NavidromeCredentials | null => {
     return navidromeCredentialsRef.current;
   }, []);
 
-  const loadSavedNavidromeLogin = useCallback(async () => {
-    return NavidromeService.loadSavedLogin();
+  const loadSavedNavidromeLogin = useCallback(async (configId?: string) => {
+    return NavidromeService.loadSavedLogin(configId);
   }, []);
 
   const connectLastFm = useCallback(async (apiKey: string, sharedSecret: string, token: string) => {
@@ -1706,6 +1901,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     audioPreset,
     navidromeConnected,
     navidromeServerUrl,
+    serverConfigs,
+    activeServerConfig,
     loadTrack,
     play,
     pause,
@@ -1751,6 +1948,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     disconnectNavidrome,
     getNavidromeCredentials,
     loadSavedNavidromeLogin,
+    switchServer,
+    addServer,
+    updateServer,
+    deleteServer,
     crossfadeEnabled,
     crossfadeDuration,
     setCrossfadeEnabled,
@@ -1772,7 +1973,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     currentTrack, queue, library, playlists,
     shuffleEnabled, repeatEnabled,
     playbackRate, volume, audioPreset,
-    navidromeConnected, navidromeServerUrl, crossfadeEnabled, crossfadeDuration,
+    navidromeConnected, navidromeServerUrl, serverConfigs, activeServerConfig, crossfadeEnabled, crossfadeDuration,
     seamlessEnabled,
     loadTrack, play, pause, seekTo, skipNext, skipPrevious,
     removeFromQueue, addToQueue, playNextInQueue, reorderQueue, shuffleQueue, setQueue,
@@ -1783,7 +1984,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setPlaybackRate, setVolume, setAudioPreset,
     eqEnabled, eqBands, eqPreset, setEqBandGain, setEqPreset, setEqEnabled,
     setSleepTimer, cancelSleepTimer, connectNavidrome, disconnectNavidrome,
-    getNavidromeCredentials, loadSavedNavidromeLogin, setCrossfadeEnabled, setCrossfadeDuration,
+    getNavidromeCredentials, loadSavedNavidromeLogin,
+    switchServer, addServer, updateServer, deleteServer,
+    setCrossfadeEnabled, setCrossfadeDuration,
     setSeamlessEnabled, clearAllData,
     lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, toggleFavorite,
     batchToggleFavorite, batchRemoveFromLibrary,

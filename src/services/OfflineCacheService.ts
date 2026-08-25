@@ -1,15 +1,9 @@
-import { File } from 'expo-file-system';
+import { File, Directory } from 'expo-file-system';
 import { AppStorageService } from './AppStorageService';
 import { NavidromeCredentials, NavidromeService } from './NavidromeService';
 import { TrackMetadata } from '../context/AudioContext';
 
-const AUDIO_CACHE_DIR = AppStorageService.audioCacheDir;
-const ARTWORK_CACHE_DIR = AppStorageService.artworkCacheDir;
-
-function ensureDirs() {
-  if (!AUDIO_CACHE_DIR.exists) AUDIO_CACHE_DIR.create({ intermediates: true });
-  if (!ARTWORK_CACHE_DIR.exists) ARTWORK_CACHE_DIR.create({ intermediates: true });
-}
+let activeConfigId: string | null = null;
 
 function sanitizeFileId(id: string): string {
   return id.replace(/[/\\.\x00]/g, '');
@@ -24,6 +18,28 @@ export class DownloadError extends Error {
 
 export class OfflineCacheService {
   private static activeControllers = new Map<string, AbortController>();
+
+  static setActiveConfig(configId: string | null): void {
+    activeConfigId = configId;
+  }
+
+  static getActiveConfigId(): string | null {
+    return activeConfigId;
+  }
+
+  private static getAudioDir(): Directory {
+    if (!activeConfigId) throw new Error('No active server config');
+    const dir = AppStorageService.getAudioCacheDir(activeConfigId);
+    if (!dir.exists) dir.create({ intermediates: true });
+    return dir;
+  }
+
+  private static getArtworkDir(): Directory {
+    if (!activeConfigId) throw new Error('No active server config');
+    const dir = AppStorageService.getArtworkCacheDir(activeConfigId);
+    if (!dir.exists) dir.create({ intermediates: true });
+    return dir;
+  }
 
   static getAbortController(uri: string): AbortController {
     const existing = this.activeControllers.get(uri);
@@ -58,8 +74,8 @@ export class OfflineCacheService {
   ): Promise<string> {
     if (!track.navidromeId) throw new DownloadError('Invalid track');
 
-    ensureDirs();
-    const destFile = new File(AUDIO_CACHE_DIR, `${sanitizeFileId(track.navidromeId)}.mp3`);
+    const audioDir = this.getAudioDir();
+    const destFile = new File(audioDir, `${sanitizeFileId(track.navidromeId)}.mp3`);
     if (destFile.exists) return destFile.uri;
 
     const controller = new AbortController();
@@ -147,8 +163,8 @@ export class OfflineCacheService {
     creds: NavidromeCredentials,
     coverArtId: string,
   ): Promise<string | null> {
-    ensureDirs();
-    const destFile = new File(ARTWORK_CACHE_DIR, `${sanitizeFileId(coverArtId)}.jpg`);
+    const artworkDir = this.getArtworkDir();
+    const destFile = new File(artworkDir, `${sanitizeFileId(coverArtId)}.jpg`);
     if (destFile.exists) return destFile.uri;
 
     try {
@@ -167,51 +183,111 @@ export class OfflineCacheService {
   }
 
   static async removeCachedTrack(navidromeId: string): Promise<void> {
-    const file = new File(AUDIO_CACHE_DIR, `${sanitizeFileId(navidromeId)}.mp3`);
-    if (file.exists) file.delete();
+    try {
+      const audioDir = this.getAudioDir();
+      const file = new File(audioDir, `${sanitizeFileId(navidromeId)}.mp3`);
+      if (file.exists) file.delete();
+    } catch {}
   }
 
   static clearCache(): void {
-    if (AUDIO_CACHE_DIR.exists) AUDIO_CACHE_DIR.delete();
-    if (ARTWORK_CACHE_DIR.exists) ARTWORK_CACHE_DIR.delete();
+    if (!activeConfigId) return;
+    try {
+      const audioDir = AppStorageService.getAudioCacheDir(activeConfigId);
+      const artworkDir = AppStorageService.getArtworkCacheDir(activeConfigId);
+      if (audioDir.exists) audioDir.delete();
+      if (artworkDir.exists) artworkDir.delete();
+    } catch {}
   }
 
   static getCacheSize(): number {
+    if (!activeConfigId) return 0;
     let total = 0;
-    if (AUDIO_CACHE_DIR.exists) {
-      for (const entry of AUDIO_CACHE_DIR.list()) {
-        if (entry instanceof File) total += entry.size;
+    try {
+      const audioDir = AppStorageService.getAudioCacheDir(activeConfigId);
+      const artworkDir = AppStorageService.getArtworkCacheDir(activeConfigId);
+      if (audioDir.exists) {
+        for (const entry of audioDir.list()) {
+          if (entry instanceof File) total += entry.size;
+        }
       }
-    }
-    if (ARTWORK_CACHE_DIR.exists) {
-      for (const entry of ARTWORK_CACHE_DIR.list()) {
-        if (entry instanceof File) total += entry.size;
+      if (artworkDir.exists) {
+        for (const entry of artworkDir.list()) {
+          if (entry instanceof File) total += entry.size;
+        }
       }
-    }
+    } catch {}
     return total;
   }
 
   static scanCacheDirectory(): { audio: Map<string, string>; artwork: Map<string, string> } {
     const audio = new Map<string, string>();
     const artwork = new Map<string, string>();
+    if (!activeConfigId) return { audio, artwork };
 
-    if (AUDIO_CACHE_DIR.exists) {
-      for (const entry of AUDIO_CACHE_DIR.list()) {
-        if (entry instanceof File && entry.name.endsWith('.mp3')) {
-          const navidromeId = entry.name.replace('.mp3', '');
-          audio.set(navidromeId, entry.uri);
+    try {
+      const audioDir = AppStorageService.getAudioCacheDir(activeConfigId);
+      const artworkDir = AppStorageService.getArtworkCacheDir(activeConfigId);
+
+      if (audioDir.exists) {
+        for (const entry of audioDir.list()) {
+          if (entry instanceof File && entry.name.endsWith('.mp3')) {
+            const navidromeId = entry.name.replace('.mp3', '');
+            audio.set(navidromeId, entry.uri);
+          }
         }
       }
-    }
-    if (ARTWORK_CACHE_DIR.exists) {
-      for (const entry of ARTWORK_CACHE_DIR.list()) {
-        if (entry instanceof File && entry.name.endsWith('.jpg')) {
-          const artworkId = entry.name.replace('.jpg', '');
-          artwork.set(artworkId, entry.uri);
+      if (artworkDir.exists) {
+        for (const entry of artworkDir.list()) {
+          if (entry instanceof File && entry.name.endsWith('.jpg')) {
+            const artworkId = entry.name.replace('.jpg', '');
+            artwork.set(artworkId, entry.uri);
+          }
         }
       }
+    } catch (error) {
+      console.error('Error scanning cache directory:', error);
     }
     return { audio, artwork };
+  }
+
+  static async migrateDownloads(configId: string): Promise<void> {
+    const { Paths } = require('expo-file-system');
+    const legacyAudio = new Directory(Paths.document, 'Coda', 'Downloads', 'audio');
+    const legacyArtwork = new Directory(Paths.document, 'Coda', 'Downloads', 'artwork');
+    const targetAudio = AppStorageService.getAudioCacheDir(configId);
+    const targetArtwork = AppStorageService.getArtworkCacheDir(configId);
+
+    if (!targetAudio.exists) targetAudio.create({ intermediates: true });
+    if (!targetArtwork.exists) targetArtwork.create({ intermediates: true });
+
+    if (legacyAudio.exists) {
+      try {
+        for (const entry of legacyAudio.list()) {
+          if (entry instanceof File) {
+            const dest = new File(targetAudio, entry.name);
+            if (!dest.exists) entry.move(targetAudio);
+          }
+        }
+        legacyAudio.delete();
+      } catch (error) {
+        console.error('[Migration] Error moving audio cache:', error);
+      }
+    }
+
+    if (legacyArtwork.exists) {
+      try {
+        for (const entry of legacyArtwork.list()) {
+          if (entry instanceof File) {
+            const dest = new File(targetArtwork, entry.name);
+            if (!dest.exists) entry.move(targetArtwork);
+          }
+        }
+        legacyArtwork.delete();
+      } catch (error) {
+        console.error('[Migration] Error moving artwork cache:', error);
+      }
+    }
   }
 
   static async downloadTrackForOffline(

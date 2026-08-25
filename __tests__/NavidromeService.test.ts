@@ -12,6 +12,16 @@ const mockCreds: NavidromeCredentials = {
   salt: 'deadbeef',
 };
 
+const TEST_CONFIG_ID = NavidromeService.generateConfigId('http://test.com', 'user');
+
+function setupTestConfig() {
+  AppStorageService.writeJson('navidrome-settings.json', {
+    version: 2,
+    activeConfigId: TEST_CONFIG_ID,
+    configs: [{ id: TEST_CONFIG_ID, name: 'Test', url: 'http://test.com', username: 'user', createdAt: Date.now(), lastUsedAt: Date.now() }],
+  });
+}
+
 describe('NavidromeService', () => {
   describe('createToken', () => {
     it('returns a 32-char hex string', () => {
@@ -117,11 +127,40 @@ describe('NavidromeService', () => {
     });
   });
 
+  describe('config CRUD', () => {
+    beforeEach(() => {
+      fs.__reset();
+      (SecureStore as any).__reset();
+      (AsyncStorage as any).__reset();
+    });
+
+    it('generates deterministic config IDs', () => {
+      const id1 = NavidromeService.generateConfigId('http://test.com', 'user');
+      const id2 = NavidromeService.generateConfigId('http://test.com', 'user');
+      expect(id1).toBe(id2);
+      expect(id1.length).toBeLessThanOrEqual(16);
+      expect(id1.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('generates different IDs for different servers', () => {
+      const id1 = NavidromeService.generateConfigId('http://server1.com', 'user1');
+      const id2 = NavidromeService.generateConfigId('http://server2.com', 'user2');
+      expect(id1).not.toBe(id2);
+    });
+
+    it('lists empty configs by default', () => {
+      const settings = NavidromeService.listConfigs();
+      expect(settings.configs).toEqual([]);
+      expect(settings.activeConfigId).toBe('');
+    });
+  });
+
   describe('credential persistence', () => {
     beforeEach(() => {
       fs.__reset();
       (SecureStore as any).__reset();
       (AsyncStorage as any).__reset();
+      setupTestConfig();
     });
 
     it('saves and loads credentials via SecureStore', async () => {
@@ -131,37 +170,37 @@ describe('NavidromeService', () => {
         token: 'tok',
         salt: 'sa',
       };
-      await NavidromeService.saveCredentials(creds);
-      const loaded = await NavidromeService.loadCredentials();
+      await NavidromeService.saveCredentials(TEST_CONFIG_ID, creds);
+      const loaded = await NavidromeService.loadCredentials(TEST_CONFIG_ID);
       expect(loaded).toEqual(creds);
     });
 
-    it('saves an encrypted password to settings JSON', async () => {
+    it('saves an encrypted password to config settings JSON', async () => {
       const creds: NavidromeCredentials = {
         url: 'http://test.com',
         username: 'user',
         token: 'tok',
         salt: 'sa',
       };
-      await NavidromeService.saveCredentials(creds, 'hunter2');
-      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
+      await NavidromeService.saveCredentials(TEST_CONFIG_ID, creds, 'hunter2');
+      const settings = NavidromeService.loadSettingsForConfig(TEST_CONFIG_ID);
       expect(settings).toEqual({
         url: 'http://test.com',
         username: 'user',
         password: expect.stringMatching(/^v1:/),
       });
-      expect(settings.password).not.toContain('hunter2');
+      expect(settings!.password).not.toContain('hunter2');
     });
 
-    it('loads credentials from encrypted settings JSON', async () => {
+    it('loads credentials from encrypted config settings JSON', async () => {
       const creds: NavidromeCredentials = {
         url: 'http://test.com',
         username: 'user',
         token: 'tok',
         salt: 'sa',
       };
-      await NavidromeService.saveCredentials(creds, 'hunter2');
-      const loaded = await NavidromeService.loadCredentials();
+      await NavidromeService.saveCredentials(TEST_CONFIG_ID, creds, 'hunter2');
+      const loaded = await NavidromeService.loadCredentials(TEST_CONFIG_ID);
       expect(loaded?.url).toBe('http://test.com');
       expect(loaded?.username).toBe('user');
       expect(loaded?.token).toMatch(/^[0-9a-f]{32}$/);
@@ -174,82 +213,35 @@ describe('NavidromeService', () => {
         token: 'tok',
         salt: 'sa',
       };
-      await NavidromeService.saveCredentials(creds, 'hunter2');
-      const login = await NavidromeService.loadSavedLogin();
+      await NavidromeService.saveCredentials(TEST_CONFIG_ID, creds, 'hunter2');
+      const login = await NavidromeService.loadSavedLogin(TEST_CONFIG_ID);
       expect(login).toEqual({ url: 'http://test.com', username: 'user', password: 'hunter2' });
     });
 
-    it('falls back to SecureStore when no settings exist', async () => {
+    it('falls back to SecureStore when no config settings exist', async () => {
       const legacy: NavidromeCredentials = {
-        url: 'http://legacy.com',
-        username: 'olduser',
+        url: 'http://test.com',
+        username: 'user',
         token: 'oldtok',
         salt: 'oldsalt',
       };
-      await SecureStore.setItemAsync('coda_navidrome_credentials', JSON.stringify(legacy));
-      const loaded = await NavidromeService.loadCredentials();
+      await SecureStore.setItemAsync(NavidromeService.secureStoreKey(TEST_CONFIG_ID), JSON.stringify(legacy));
+      const loaded = await NavidromeService.loadCredentials(TEST_CONFIG_ID);
       expect(loaded).toEqual(legacy);
     });
 
-    it('writes an encrypted token+salt snapshot when restoring legacy AsyncStorage creds', async () => {
-      const legacy: NavidromeCredentials = {
-        url: 'http://legacy.com',
-        username: 'olduser',
-        token: 'oldtok',
-        salt: 'oldsalt',
-      };
-      await AsyncStorage.setItem('@coda_navidrome_credentials', JSON.stringify(legacy));
-      const loaded = await NavidromeService.loadCredentials();
-      expect(loaded).toEqual(legacy);
-
-      const promoted = await SecureStore.getItemAsync('coda_navidrome_credentials');
-      expect(JSON.parse(promoted!)).toEqual(legacy);
-      expect(await AsyncStorage.getItem('@coda_navidrome_credentials')).toBeNull();
-
-      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
-      expect(settings?.url).toBe('http://legacy.com');
-      expect(settings?.username).toBe('olduser');
-      expect(settings?.token).toMatch(/^v1:/);
-      expect(settings?.salt).toMatch(/^v1:/);
-      expect(settings?.password).toBeUndefined();
-      expect(settings.token).not.toContain('oldtok');
-      expect(settings.salt).not.toContain('oldsalt');
-    });
-
-    it('prefers the stored password over a token snapshot', async () => {
-      const legacy: NavidromeCredentials = {
-        url: 'http://legacy.com',
-        username: 'olduser',
-        token: 'oldtok',
-        salt: 'oldsalt',
-      };
-      await AsyncStorage.setItem('@coda_navidrome_credentials', JSON.stringify(legacy));
-      await NavidromeService.loadCredentials();
-
+    it('clears credentials (SecureStore + config settings JSON)', async () => {
       const creds: NavidromeCredentials = {
-        url: 'http://legacy.com',
-        username: 'olduser',
-        token: 'newtok',
-        salt: 'newsalt',
+        url: 'http://test.com',
+        username: 'user',
+        token: 'tok',
+        salt: 'sa',
       };
-      await NavidromeService.saveCredentials(creds, 'hunter2');
-
-      const settings = AppStorageService.readJson<any>('navidrome-settings.json');
-      expect(settings?.password).toMatch(/^v1:/);
-      expect(settings?.token).toBeUndefined();
-
-      const loaded = await NavidromeService.loadCredentials();
-      expect(loaded?.url).toBe('http://legacy.com');
-      expect(loaded?.username).toBe('olduser');
-      expect(loaded?.token).toMatch(/^[0-9a-f]{32}$/);
-    });
-
-    it('clears credentials (SecureStore + settings JSON)', async () => {
-      await NavidromeService.saveCredentials(mockCreds, 'hunter2');
-      await NavidromeService.clearCredentials();
-      const loaded = await NavidromeService.loadCredentials();
+      await NavidromeService.saveCredentials(TEST_CONFIG_ID, creds, 'hunter2');
+      await NavidromeService.clearCredentials(TEST_CONFIG_ID);
+      const loaded = await NavidromeService.loadCredentials(TEST_CONFIG_ID);
       expect(loaded).toBeNull();
-      expect(AppStorageService.readJson('navidrome-settings.json')).toBeNull();
+      expect(NavidromeService.loadSettingsForConfig(TEST_CONFIG_ID)).toBeNull();
     });
   });
 });

@@ -2,6 +2,7 @@ import { File, Directory, Paths } from 'expo-file-system';
 
 const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'wav', 'flac', 'aac', 'ogg', 'aif', 'aiff', 'opus'];
 
+const DOWNLOADS_ROOT = new Directory(Paths.document, 'Coda', 'Downloads');
 const AUDIO_CACHE_DIR = new Directory(Paths.document, 'Coda', 'Downloads', 'audio');
 const ARTWORK_CACHE_DIR = new Directory(Paths.document, 'Coda', 'Downloads', 'artwork');
 const MUSIC_DIR = new Directory(Paths.document, 'Coda', 'Music');
@@ -60,11 +61,24 @@ export class AppStorageService {
     return SETTINGS_DIR;
   }
 
-  static ensureStructure(): void {
-    ensureDir(AUDIO_CACHE_DIR);
-    ensureDir(ARTWORK_CACHE_DIR);
+  static getAudioCacheDir(configId: string): Directory {
+    return new Directory(DOWNLOADS_ROOT, configId, 'audio');
+  }
+
+  static getArtworkCacheDir(configId: string): Directory {
+    return new Directory(DOWNLOADS_ROOT, configId, 'artwork');
+  }
+
+  static ensureStructure(configId?: string): void {
     ensureDir(MUSIC_DIR);
     ensureDir(SETTINGS_DIR);
+    if (configId) {
+      ensureDir(this.getAudioCacheDir(configId));
+      ensureDir(this.getArtworkCacheDir(configId));
+    } else {
+      ensureDir(AUDIO_CACHE_DIR);
+      ensureDir(ARTWORK_CACHE_DIR);
+    }
   }
 
   static readJson<T>(fileName: string): T | null {
