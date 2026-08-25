@@ -201,6 +201,12 @@ Copyright (c) 2025 Graphicsprocessingunit. All Rights Reserved. See the [LICENSE
 
 ---
 
+## Built with AI
+
+This project was built almost entirely with AI assistance. Every feature — audio engine, gesture system, encrypted storage, native equalizer — was developed through natural-language collaboration with a large language model. It was created as a hands-on exploration of what AI-assisted engineering looks like on a real, shipping app.
+
+---
+
 <div align="center">
 
 **Built with care by [Graphicsprocessingunit](https://github.com/Graphicsprocessingunit)**
