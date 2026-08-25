@@ -6,7 +6,7 @@
 
 **Your music. Your way.**
 
-A beautifully crafted music player for iOS and Android with local library management, Navidrome streaming, crossfade, synced lyrics, and full theming support.
+A beautifully crafted music player for iOS and Android with local library management, multi-server Navidrome streaming, crossfade, synced lyrics, and full theming support.
 
 ![Expo](https://img.shields.io/badge/Expo_SDK-54-000020?style=for-the-badge&logo=expo)
 ![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react)
@@ -25,7 +25,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 | | Feature | Description |
 |---|---------|-------------|
 | 🎵 | **Local Library** | Import audio files with automatic metadata and artwork extraction |
-| 🔗 | **Navidrome Streaming** | Connect to any Subsonic-compatible server to stream your collection |
+| 🔗 | **Navidrome Streaming** | Connect to multiple Subsonic-compatible servers and switch between them |
 | 🎧 | **Crossfade** | Smooth transitions between tracks with configurable duration |
 | 🎶 | **Gapless Playback** | Seamless transitions with next-track pre-buffering |
 | 📱 | **Lock Screen Controls** | Full playback controls in Control Center and on the lock screen |
@@ -64,7 +64,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 | Native EQ | expo-modules | AVAudioEngine (iOS) / Equalizer (Android) |
 | State | React Context | AudioContext + ThemeContext |
 | Persistence | AsyncStorage | Library, playlists, queue, settings |
-| Secure Storage | expo-secure-store | Navidrome & Last.fm credentials |
+| Secure Storage | expo-secure-store | Per-server Navidrome & Last.fm credentials |
 | Navigation | React Navigation | Bottom tabs + stack navigator |
 | Lyrics | LRCLIB API | Synced lyrics search and caching |
 | Scrobbling | Last.fm API | Track scrobbling and now-playing updates |
