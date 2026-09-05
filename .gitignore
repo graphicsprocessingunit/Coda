@@ -50,6 +50,3 @@ coverage/
 # env
 .env
 .env.local
-website/node_modules/
-website/.next/
-website/out/
