@@ -12,9 +12,9 @@ A beautifully crafted music player for iOS and Android with local library manage
 ![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript)
 ![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-blue?style=for-the-badge)
-![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge)
 
-[Installation](#installation) &nbsp;&bull;&nbsp; [Features](#features) &nbsp;&bull;&nbsp; [Tech Stack](#tech-stack) &nbsp;&bull;&nbsp; [For Developers](#for-developers) &nbsp;&bull;&nbsp; [Architecture](#architecture) &nbsp;&bull;&nbsp; [License](#license)
+[Installation](#installation) &nbsp;&bull;&nbsp; [Features](#features) &nbsp;&bull;&nbsp; [Tech Stack](#tech-stack) &nbsp;&bull;&nbsp; [For Developers](#for-developers) &nbsp;&bull;&nbsp; [Architecture](#architecture) &nbsp;&bull;&nbsp; [Contributing](#contributing) &nbsp;&bull;&nbsp; [Security](#security) &nbsp;&bull;&nbsp; [License](#license)
 
 </div>
 
@@ -74,7 +74,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 
 ### Android
 
-[![Download APK](https://img.shields.io/badge/Download-v1.1.0%20APK-00C853?style=for-the-badge)](https://github.com/graphicsprocessingunit/coda-issues/releases/download/v1.1.0/Coda-v1.1.0.apk)
+[![Download APK](https://img.shields.io/badge/Download-v1.1.0%20APK-00C853?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.1.0/Coda-v1.1.0.apk)
 
 1. Download the `.apk` file from the link above
 2. Open the file on your Android device
@@ -83,7 +83,7 @@ A beautifully crafted music player for iOS and Android with local library manage
 
 ### iOS
 
-[![Download IPA](https://img.shields.io/badge/Download-v1.1.0%20IPA-007AFF?style=for-the-badge)](https://github.com/graphicsprocessingunit/coda-issues/releases/download/v1.1.0/Coda-v1.1.0.ipa)
+[![Download IPA](https://img.shields.io/badge/Download-v1.1.0%20IPA-007AFF?style=for-the-badge)](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.1.0/Coda-v1.1.0.ipa)
 
 Install using [AltStore](https://altstore.io), [SideStore](https://sidestore.io), or any IPA signing tool.
 
@@ -193,11 +193,35 @@ App.tsx                          # Root navigator, tab screens
 
 ## Contributing
 
-This is a proprietary project. Contribution inquiries should be directed to the maintainer.
+Contributions are welcome. Before opening a PR:
+
+1. Open an issue first describing the change.
+2. Keep it focused — one issue, one PR.
+3. Run `npx tsc --noEmit` and `npm test` before submitting.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full details.
+
+### How to Get in Touch
+
+1. Go to the [Issues](https://github.com/graphicsprocessingunit/Coda/issues) tab
+2. Click **New Issue** — pick **Bug Report**, **Feature Request**, or **Contact / Other**
+3. Fill in the fields and submit
+
+### Before You File a Bug
+
+- You're running the [latest version](https://github.com/graphicsprocessingunit/Coda/releases/latest)
+- You've restarted the app
+- You've searched [existing issues](https://github.com/graphicsprocessingunit/Coda/issues) to avoid duplicates
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report vulnerabilities responsibly.
 
 ## License
 
-Copyright (c) 2025 Graphicsprocessingunit. All Rights Reserved. See the [LICENSE](LICENSE) file for details.
+Coda is licensed under the [GNU General Public License v3.0](LICENSE).
+
+Copyright (C) 2026 Graphicsprocessingunit. See the [LICENSE](LICENSE) file for the full text.
 
 ---
 
