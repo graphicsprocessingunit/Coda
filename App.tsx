@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, useIsPlaying, useSleepTimer, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Player } from './src/components/Player';
@@ -26,6 +26,9 @@ import { OfflineCacheService } from './src/services/OfflineCacheService';
 import { SleepTimerSection } from './src/components/SleepTimer';
 import { FilePickerService } from './src/services/FilePickerService';
 import { Toast } from './src/components/Toast';
+import { Sidebar } from './src/components/Sidebar';
+import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
+import { navigationRef } from './src/navigation/navigationRef';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -652,6 +655,7 @@ function SettingsScreen() {
 }
 
 function MainTabs() {
+  const { isTablet } = useResponsiveLayout();
   const { colors } = useTheme();
   const { error, clearError, isLoading } = useAudio();
 
@@ -665,20 +669,22 @@ function MainTabs() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {error && <Toast message={error} type="error" onDismiss={clearError} />}
-      <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: colors.tabBar,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-        },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textSecondary,
-      }}
-    >
+    <View style={{ flex: 1, flexDirection: isTablet ? 'row' : 'column' }}>
+      <Sidebar />
+      <View style={{ flex: 1 }}>
+        {error && <Toast message={error} type="error" onDismiss={clearError} />}
+        <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: isTablet
+            ? { display: 'none' }
+            : {
+                backgroundColor: colors.tabBar,
+                borderTopColor: colors.border,
+                borderTopWidth: 1,
+              },
+        }}
+      >
       <Tab.Screen
         name="Player"
         component={PlayerScreen}
@@ -716,6 +722,7 @@ function MainTabs() {
         }}
       />
     </Tab.Navigator>
+      </View>
     </View>
   );
 }
@@ -729,14 +736,16 @@ export default function App() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ThemeProvider>
-          <AudioProvider>
-            <NavigationContainer>
-              <MainTabs />
-              <ThemedStatusBar />
-            </NavigationContainer>
-          </AudioProvider>
-        </ThemeProvider>
+        <SafeAreaProvider>
+          <ThemeProvider>
+            <AudioProvider>
+              <NavigationContainer ref={navigationRef}>
+                <MainTabs />
+                <ThemedStatusBar />
+              </NavigationContainer>
+            </AudioProvider>
+          </ThemeProvider>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
