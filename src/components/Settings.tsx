@@ -184,7 +184,7 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
                 <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
                 <Text style={[styles.settingText, { color: colors.text }]}>Version</Text>
               </View>
-              <Text style={[styles.settingValue, { color: colors.textSecondary }]}>1.1.0</Text>
+              <Text style={[styles.settingValue, { color: colors.textSecondary }]}>1.2.0</Text>
             </View>
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>

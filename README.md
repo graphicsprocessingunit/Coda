@@ -24,9 +24,9 @@ A mobile music player for iOS and Android with local library management, multi-s
 
 ## Download
 
-**Android** — [Download APK v1.1.0](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.1.0/Coda-v1.1.0.apk)
+**Android** — [Download APK v1.2.0](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.2.0/Coda-v1.2.0.apk)
 
-**iOS** — [Download IPA v1.1.0](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.1.0/Coda-v1.1.0.ipa), install via [AltStore](https://altstore.io) or [SideStore](https://sidestore.io).
+**iOS** — [Download IPA v1.2.0](https://github.com/graphicsprocessingunit/Coda/releases/download/v1.2.0/Coda-v1.2.0.ipa), install via [AltStore](https://altstore.io) or [SideStore](https://sidestore.io).
 
 > Notes signed with a free Apple ID expire after 7 days and must be refreshed.
 
