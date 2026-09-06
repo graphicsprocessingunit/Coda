@@ -15,13 +15,14 @@ import {
 } from '../../services/NavidromeService';
 import { OfflineCacheService } from '../../services/OfflineCacheService';
 import { evaluateSmartPlaylist } from '../../services/SmartPlaylistEngine';
-import { HIGHLIGHT_COLORS, SCREEN_BG_COLORS, SCREEN_TEXT_COLORS, WHEEL_PRESETS } from './ipodTheme';
+import { IPOD_FINISHES } from './ipodTheme';
 
 export type AudioApi = ReturnType<typeof useAudio>;
 
 export type SettingsSection =
   | 'root'
   | 'appearance'
+  | 'finish'
   | 'audio'
   | 'navidrome'
   | 'lastfm'
@@ -35,8 +36,6 @@ export type SettingsSection =
 
 export const EMBED_SECTIONS: SettingsSection[] = ['eq', 'audiofx', 'sleep', 'crossfade', 'navidromeSettings', 'lastfmPanel'];
 
-export type PaletteTarget = 'wheelColor' | 'screenBg' | 'screenText' | 'highlight';
-
 export interface IpodScreen {
   type: string;
   highlight: number;
@@ -47,7 +46,6 @@ export interface IpodScreen {
   query?: string;
   track?: TrackMetadata;
   section?: SettingsSection;
-  target?: PaletteTarget;
   view?: 'artists' | 'albums' | 'songs';
   key?: string;
   artist?: NavidromeArtist;
@@ -78,8 +76,8 @@ export interface RowsCtx {
   layout: AppLayout;
   setTheme: (t: Theme) => void;
   setLayout: (l: AppLayout) => void;
-  setIpodPalette: (patch: Partial<Record<PaletteTarget, string>>) => void;
-  resetIpodPalette: () => void;
+  setIpodFinish: (finishId: string) => void;
+  resetIpodFinish: () => void;
   batches: Map<string, BatchDownload>;
   startBatchDownload: (tracks: TrackMetadata[], label: string, key: string) => void;
   navidromeData: Record<string, NavidromeArtist[] | NavidromeAlbum[] | NavidromeSong[]>;
@@ -396,8 +394,6 @@ export function buildRows(screen: IpodScreen, ctx: RowsCtx): IpodRow[] {
     }
     case 'settings':
       return buildSettings(screen.section ?? 'root', ctx);
-    case 'palette':
-      return buildPalette(screen.target ?? 'wheelColor', ctx);
     case 'navidrome':
       return buildNavidrome(screen, ctx);
     default:
@@ -485,28 +481,24 @@ function buildSettings(section: SettingsSection, ctx: RowsCtx): IpodRow[] {
             right: ctx.theme === s.theme ? '●' : '',
           })
         ),
-        ...([
-          { label: 'Wheel Color', target: 'wheelColor' as PaletteTarget },
-          { label: 'Screen Background', target: 'screenBg' as PaletteTarget },
-          { label: 'Screen Text', target: 'screenText' as PaletteTarget },
-          { label: 'Highlight', target: 'highlight' as PaletteTarget },
-        ].map((o) =>
-          createNavRow(o.label, () => ctx.nav.push({ type: 'palette', target: o.target, highlight: 0 }), {
-            swatchColor:
-              o.target === 'wheelColor'
-                ? ctx.ipod.wheelColor
-                : o.target === 'screenBg'
-                ? ctx.ipod.screenBg
-                : o.target === 'screenText'
-                ? ctx.ipod.screenText
-                : ctx.ipod.highlight,
-          })
-        )),
-        createNavRow('Reset iPod Colors', () => {
-          ctx.resetIpodPalette();
-          ctx.toast('iPod colors reset', 'info');
+        createNavRow('iPod Finish', () => ctx.nav.push({ type: 'settings', section: 'finish', highlight: 0 }), {
+          sub: finishLabel(ctx.ipod.finishId),
+          swatchColor: ctx.ipod.faceplate,
+        }),
+        createNavRow('Reset iPod Finish', () => {
+          ctx.resetIpodFinish();
+          ctx.toast('iPod finish reset', 'info');
         }),
       ];
+    case 'finish':
+      return IPOD_FINISHES.map((f) =>
+        createNavRow(f.label, () => {
+          ctx.setIpodFinish(f.id);
+        }, {
+          swatchColor: f.faceplate,
+          right: ctx.ipod.finishId === f.id ? '●' : '',
+        })
+      );
     case 'audio':
       return [
         createNavRow('Equalizer', () => ctx.nav.push({ type: 'settings', section: 'eq', highlight: 0 })),
@@ -555,22 +547,8 @@ function buildSettings(section: SettingsSection, ctx: RowsCtx): IpodRow[] {
   }
 }
 
-function buildPalette(target: PaletteTarget, ctx: RowsCtx): IpodRow[] {
-  const sets =
-    target === 'wheelColor'
-      ? WHEEL_PRESETS
-      : target === 'screenBg'
-      ? SCREEN_BG_COLORS
-      : target === 'screenText'
-      ? SCREEN_TEXT_COLORS
-      : HIGHLIGHT_COLORS;
-  const current = ctx.ipod[target];
-  return sets.map((o) =>
-    createNavRow(o.name, () => {
-      ctx.setIpodPalette({ [target]: o.color });
-      ctx.nav.pop();
-    }, { swatchColor: o.color, right: o.color === current ? '●' : '' })
-  );
+function finishLabel(id: string): string {
+  return IPOD_FINISHES.find((f) => f.id === id)?.label ?? IPOD_FINISHES[0].label;
 }
 
 function navidromeTrackToMetadata(ctx: RowsCtx, song: NavidromeSong): TrackMetadata | null {
@@ -666,8 +644,6 @@ export function screenTitle(screen: IpodScreen): string {
       return 'Add to Playlist';
     case 'settings':
       return `${screen.section === 'root' ? 'iPod' : screen.section!.charAt(0).toUpperCase() + screen.section!.slice(1)} Settings`;
-    case 'palette':
-      return paletteLabel(screen.target ?? 'wheelColor');
     case 'navidrome':
       return screen.view === 'artists'
         ? 'Navidrome'
@@ -676,18 +652,5 @@ export function screenTitle(screen: IpodScreen): string {
         : (screen.album?.name ?? 'Songs');
     default:
       return 'iPod';
-  }
-}
-
-function paletteLabel(target: PaletteTarget): string {
-  switch (target) {
-    case 'wheelColor':
-      return 'Wheel Color';
-    case 'screenBg':
-      return 'Screen Background';
-    case 'screenText':
-      return 'Screen Text';
-    case 'highlight':
-      return 'Highlight';
   }
 }

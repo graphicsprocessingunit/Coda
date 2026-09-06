@@ -3,6 +3,8 @@ import {
   unwrapAngleDelta,
   clampTickThreshold,
   advanceWheelTick,
+  capTicks,
+  MAX_TICKS_PER_SAMPLE,
 } from '../src/components/ipod/wheelMath';
 
 describe('unwrapAngleDelta', () => {
@@ -19,6 +21,26 @@ describe('unwrapAngleDelta', () => {
   });
   it('treats a full circle around as ~0 net', () => {
     expect(Math.abs(unwrapAngleDelta(0, 359))).toBeLessThanOrEqual(1);
+  });
+  it('returns zero for non-finite input', () => {
+    expect(unwrapAngleDelta(NaN, 90)).toBe(0);
+    expect(unwrapAngleDelta(90, NaN)).toBe(0);
+    expect(unwrapAngleDelta(90, Infinity)).toBe(0);
+    expect(unwrapAngleDelta(-Infinity, 90)).toBe(0);
+  });
+});
+
+describe('capTicks', () => {
+  it('caps at MAX_TICKS_PER_SAMPLE in both directions', () => {
+    expect(capTicks(MAX_TICKS_PER_SAMPLE)).toBe(MAX_TICKS_PER_SAMPLE);
+    expect(capTicks(100)).toBe(MAX_TICKS_PER_SAMPLE);
+    expect(capTicks(-100)).toBe(-MAX_TICKS_PER_SAMPLE);
+    expect(capTicks(0)).toBe(0);
+  });
+  it('neutralizes non-finite input', () => {
+    expect(capTicks(NaN)).toBe(0);
+    expect(capTicks(Infinity)).toBe(0);
+    expect(capTicks(-Infinity)).toBe(0);
   });
 });
 
@@ -70,5 +92,29 @@ describe('advanceWheelTick', () => {
     advanceWheelTick(s2, 0);
     advanceWheelTick(s2, 30);
     expect(s1.accumulator).toBe(s2.accumulator);
+  });
+  it('ignores non-finite angles without corrupting state', () => {
+    const state = createWheelTickState();
+    advanceWheelTick(state, 0);
+    advanceWheelTick(state, NaN);
+    advanceWheelTick(state, Infinity);
+    advanceWheelTick(state, 0);
+    const ticks = advanceWheelTick(state, 60);
+    expect(ticks).toBeGreaterThan(0);
+  });
+  it('resets a poisoned accumulator', () => {
+    const state = createWheelTickState();
+    state.accumulator = NaN;
+    expect(advanceWheelTick(state, 30)).toBe(0);
+    expect(state.accumulator).toBe(0);
+  });
+  it('caps runaway jumps to MAX_TICKS_PER_SAMPLE', () => {
+    const clamped = createWheelTickState();
+    advanceWheelTick(clamped, 0);
+    const ticks = advanceWheelTick(clamped, -600);
+    expect(Math.abs(ticks)).toBeLessThanOrEqual(MAX_TICKS_PER_SAMPLE);
+    const spin = createWheelTickState();
+    advanceWheelTick(spin, 0);
+    expect(Math.abs(advanceWheelTick(spin, 10000))).toBeLessThanOrEqual(MAX_TICKS_PER_SAMPLE);
   });
 });

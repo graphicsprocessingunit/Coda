@@ -1,6 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  IPOD_FINISHES,
+  IPOD_SCREEN,
+  DEFAULT_FINISH_ID,
+  finishFor,
+  nearestFinish,
+} from '../components/ipod/ipodTheme';
+
 export type Theme = 'dark' | 'light' | 'midnight' | 'ocean';
 export type AppLayout = 'standard' | 'ipod';
 
@@ -66,10 +74,16 @@ const themes: Record<Theme, ThemeColors> = {
 };
 
 export interface IpodPalette {
+  finishId: string;
   wheelColor: string;
+  wheelLabel: string;
+  centerFace: string;
+  faceplate: string;
+  faceplateEdge: string;
   screenBg: string;
   screenText: string;
   highlight: string;
+  highlightBottom: string;
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -94,15 +108,6 @@ function shade(hex: string, amount: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-function defaultIpodPalette(themeColors: ThemeColors): IpodPalette {
-  return {
-    wheelColor: themeColors.text === '#FFFFFF' ? '#1C1C1E' : '#F0F0F0',
-    screenBg: themeColors.background,
-    screenText: themeColors.text,
-    highlight: themeColors.accent,
-  };
-}
-
 function ipodColors(p: IpodPalette): ThemeColors {
   return {
     background: p.screenBg,
@@ -117,19 +122,20 @@ function ipodColors(p: IpodPalette): ThemeColors {
   };
 }
 
-export function effectiveIpodPalette(theme: Theme, stored: IpodPalette | null): IpodPalette {
-  return stored ?? defaultIpodPalette(themes[theme]);
-}
-
-function isHex(value: string): boolean {
-  return /^#[0-9a-fA-F]{6}$/.test(value);
-}
-
-interface PalettePatch {
-  wheelColor?: string;
-  screenBg?: string;
-  screenText?: string;
-  highlight?: string;
+function ipodFromFinish(finishId: string): IpodPalette {
+  const f = finishFor(finishId);
+  return {
+    finishId: f.id,
+    wheelColor: f.wheelFace,
+    wheelLabel: f.wheelLabel,
+    centerFace: f.centerFace,
+    faceplate: f.faceplate,
+    faceplateEdge: f.faceplateEdge,
+    screenBg: IPOD_SCREEN.bg,
+    screenText: IPOD_SCREEN.text,
+    highlight: IPOD_SCREEN.highlightTop,
+    highlightBottom: IPOD_SCREEN.highlightBottom,
+  };
 }
 
 interface ThemeContextType {
@@ -140,8 +146,8 @@ interface ThemeContextType {
   layout: AppLayout;
   setLayout: (layout: AppLayout) => void;
   ipod: IpodPalette;
-  setIpodPalette: (patch: PalettePatch) => void;
-  resetIpodPalette: () => void;
+  setIpodFinish: (finishId: string) => void;
+  resetIpodFinish: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -149,11 +155,12 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_KEY = '@coda_theme';
 const LAYOUT_KEY = '@coda_layout';
 const IPOD_KEY = '@coda_ipod_palette';
+const FINISH_KEY = '@coda_ipod_finish';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
   const [layout, setLayoutState] = useState<AppLayout>('standard');
-  const [ipodStored, setIpodStored] = useState<IpodPalette | null>(null);
+  const [finish, setFinishState] = useState<string>(DEFAULT_FINISH_ID);
 
   useEffect(() => {
     loadAppearance();
@@ -161,9 +168,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const loadAppearance = async () => {
     try {
-      const [savedTheme, savedLayout, savedIpod] = await Promise.all([
+      const [savedTheme, savedLayout, savedFinish, legacyPalette] = await Promise.all([
         AsyncStorage.getItem(THEME_KEY),
         AsyncStorage.getItem(LAYOUT_KEY),
+        AsyncStorage.getItem(FINISH_KEY),
         AsyncStorage.getItem(IPOD_KEY),
       ]);
       if (savedTheme && themes[savedTheme as Theme]) {
@@ -172,19 +180,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (savedLayout === 'standard' || savedLayout === 'ipod') {
         setLayoutState(savedLayout);
       }
-      if (savedIpod) {
+      const hasFinish = IPOD_FINISHES.some((f) => f.id === savedFinish);
+      if (hasFinish) {
+        setFinishState(savedFinish as string);
+      } else if (legacyPalette) {
         try {
-          const parsed = JSON.parse(savedIpod) as Partial<IpodPalette>;
-          if (
-            parsed &&
-            isHex(String(parsed.wheelColor ?? '')) &&
-            isHex(String(parsed.screenBg ?? '')) &&
-            isHex(String(parsed.screenText ?? '')) &&
-            isHex(String(parsed.highlight ?? ''))
-          ) {
-            setIpodStored(parsed as IpodPalette);
-          }
-        } catch {}
+          const parsed = JSON.parse(legacyPalette) as Partial<IpodPalette>;
+          setFinishState(nearestFinish(String(parsed.wheelColor ?? '')));
+        } catch {
+          setFinishState(DEFAULT_FINISH_ID);
+        }
       }
     } catch (error) {
       console.error('Error loading appearance:', error);
@@ -209,28 +214,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setIpodPalette = async (patch: PalettePatch) => {
-    const next = { ...effectiveIpodPalette(theme, ipodStored), ...patch };
+  const setIpodFinish = async (finishId: string) => {
     try {
-      await AsyncStorage.setItem(IPOD_KEY, JSON.stringify(next));
-      setIpodStored(next);
+      await AsyncStorage.setItem(FINISH_KEY, finishId);
+      setFinishState(finishId);
     } catch (error) {
-      console.error('Error saving iPod palette:', error);
+      console.error('Error saving iPod finish:', error);
     }
   };
 
-  const resetIpodPalette = async () => {
+  const resetIpodFinish = async () => {
     try {
+      await AsyncStorage.removeItem(FINISH_KEY);
       await AsyncStorage.removeItem(IPOD_KEY);
-      setIpodStored(null);
+      setFinishState(DEFAULT_FINISH_ID);
     } catch (error) {
-      console.error('Error resetting iPod palette:', error);
+      console.error('Error resetting iPod finish:', error);
     }
   };
 
   const isDark = theme !== 'light';
 
-  const ipod = effectiveIpodPalette(theme, ipodStored);
+  const ipod = useMemo(() => ipodFromFinish(finish), [finish]);
 
   const colors: ThemeColors = useMemo(
     () => (layout === 'ipod' ? ipodColors(ipod) : themes[theme]),
@@ -238,7 +243,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value: ThemeContextType = useMemo(
-    () => ({ theme, colors, setTheme, isDark, layout, setLayout, ipod, setIpodPalette, resetIpodPalette }),
+    () => ({ theme, colors, setTheme, isDark, layout, setLayout, ipod, setIpodFinish, resetIpodFinish }),
     [theme, colors, isDark, layout, ipod]
   );
 

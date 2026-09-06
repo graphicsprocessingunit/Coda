@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -21,6 +22,7 @@ import type { NavidromeArtist, NavidromeAlbum, NavidromeSong } from '../../servi
 import { ClickWheel } from './ClickWheel';
 import { IpodRowList } from './IpodRowList';
 import { IpodNowPlaying } from './IpodNowPlaying';
+import { IpodStatusBar } from './IpodStatusBar';
 import { IpodEmbedSection } from './IpodSettingsScreens';
 import {
   EMBED_SECTIONS,
@@ -30,8 +32,10 @@ import {
   type IpodScreen,
   type RowsCtx,
 } from './menus';
+import { IPOD_SCREEN, WHEEL_DIAMETER } from './ipodTheme';
 
 const MAX_WIDTH = 430;
+const TRANSITION_MS = 165;
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -41,8 +45,18 @@ type NavIdCache = {
   songs?: NavidromeSong[];
 };
 
+function luminance(hex: string): number {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
 export function IpodApp() {
-  const { colors, ipod, theme, layout, setTheme, setLayout, setIpodPalette, resetIpodPalette } = useTheme();
+  const { colors, ipod, theme, layout, setTheme, setLayout, setIpodFinish, resetIpodFinish } = useTheme();
   const audio = useAudio();
   const { isPlaying } = useIsPlaying();
   const { playbackPosition, duration } = usePlaybackPosition();
@@ -61,6 +75,26 @@ export function IpodApp() {
   } | null>(null);
 
   const top = stack[stack.length - 1];
+
+  // Slide-transition machinery (legacy Animated: kept off the worklets runtime).
+  const slideX = useRef(new Animated.Value(0)).current;
+  const prevStackLen = useRef(stack.length);
+  const screenWidthRef = useRef(0);
+
+  useEffect(() => {
+    const prevLen = prevStackLen.current;
+    const dir = stack.length > prevLen ? 1 : stack.length < prevLen ? -1 : 0;
+    prevStackLen.current = stack.length;
+    if (dir === 0) return;
+    const w = screenWidthRef.current || 280;
+    slideX.setValue(dir * w);
+    Animated.timing(slideX, {
+      toValue: 0,
+      duration: TRANSITION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [stack.length, slideX]);
 
   const topRef = useRef(top);
   topRef.current = top;
@@ -96,28 +130,59 @@ export function IpodApp() {
     setPromptState({ title, initial, onSubmit });
   }, []);
 
-  const ctx: RowsCtx = {
-    audio,
-    colors,
-    ipod,
-    theme,
-    layout,
-    setTheme,
-    setLayout,
-    setIpodPalette,
-    resetIpodPalette,
-    batches,
-    startBatchDownload,
-    navidromeData: Object.fromEntries(
-      Object.entries(navidromeData).map(([k, v]) => [k, v.artists ?? v.albums ?? v.songs ?? []])
-    ),
-    nav: { push, pop, replace },
-    toast: showToast,
-    prompt,
-  };
+  const navidromeListData = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(navidromeData).map(([k, v]) => [k, v.artists ?? v.albums ?? v.songs ?? []])
+      ),
+    [navidromeData]
+  );
+
+  const ctx: RowsCtx = useMemo(
+    () => ({
+      audio,
+      colors,
+      ipod,
+      theme,
+      layout,
+      setTheme,
+      setLayout,
+      setIpodFinish,
+      resetIpodFinish,
+      batches,
+      startBatchDownload,
+      navidromeData: navidromeListData,
+      nav: { push, pop, replace },
+      toast: showToast,
+      prompt,
+    }),
+    [
+      audio,
+      colors,
+      ipod,
+      theme,
+      layout,
+      setTheme,
+      setLayout,
+      setIpodFinish,
+      resetIpodFinish,
+      batches,
+      startBatchDownload,
+      navidromeListData,
+      push,
+      pop,
+      replace,
+      showToast,
+      prompt,
+    ]
+  );
   ctxRef.current = ctx;
 
-  const rows = buildRows(top, ctx);
+  const rows = useMemo(
+    () => buildRows(top, ctx),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [top.type, top.section, top.tracks, top.playlistId, top.from, top.query, top.view, top.key, top.artist, top.album, top.title, ctx]
+  );
 
   const commitScreen = useCallback((s: IpodScreen) => {
     setStack((st) => [...st.slice(0, st.length - 1), s]);
@@ -253,61 +318,58 @@ export function IpodApp() {
   const topIsSearch = top.type === 'search';
   const navidromeLoading = top.type === 'navidrome' && loadingKeys.has(top.key!);
 
+  const safeHighlight = clampIndex(top.highlight, rows.length);
+
+  const darkRim = luminance(ipod.faceplate) < 0.5 ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.16)';
+
+  const slideStyle = { transform: [{ translateX: slideX }] };
+
   return (
-    <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={styles.root}>
       <SafeAreaView style={styles.safe}>
         <View style={[styles.col, { width: colWidth }]}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-            <View style={styles.topBar}>
-              <Pressable onPress={() => setLayout('standard')} hitSlop={8} style={styles.modeSwitch}>
-                <Text style={[styles.modeSwitchText, { color: colors.textSecondary }]}>Standard ▸</Text>
-              </Pressable>
-              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                {screenTitle(top)}
-              </Text>
-              <View style={styles.topRight}>
-                {navidromeLoading ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+          <View
+            style={[styles.device, { backgroundColor: ipod.faceplate, borderColor: ipod.faceplateEdge }]}
+            onLayout={(e) => {
+              screenWidthRef.current = e.nativeEvent.layout.width - 28;
+            }}
+          >
+            <View style={[styles.bezel, { backgroundColor: darkRim, borderColor: ipod.faceplateEdge }]}>
+              <View style={styles.screen}>
+                <IpodStatusBar title={screenTitle(top)} loading={navidromeLoading} />
+                <Animated.View style={[styles.flex, slideStyle]}>
+                  {topIsNowPlaying ? (
+                    <IpodNowPlaying
+                      volumeMode={!!np.volumeMode}
+                      lyricsOpen={!!np.lyricsOpen}
+                      onToggleVolume={() => commitScreen({ ...top, volumeMode: !np.volumeMode, lyricsOpen: false })}
+                      onToggleLyrics={() => commitScreen({ ...top, lyricsOpen: !np.lyricsOpen })}
+                    />
+                  ) : topIsEmbedSettings ? (
+                    <View style={styles.flex}>
+                      <IpodEmbedSection section={top.section!} />
+                    </View>
+                  ) : (
+                    <View style={styles.flex}>
+                      {topIsSearch ? (
+                        <TextInput
+                          value={top.query || ''}
+                          onChangeText={(text) => commitScreen({ ...top, query: text, highlight: 0 })}
+                          placeholder="Search library…"
+                          placeholderTextColor={IPOD_SCREEN.secondary}
+                          style={styles.searchInput}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                        />
+                      ) : null}
+                      <IpodRowList rows={rows} highlight={safeHighlight} onSelect={handleSelect} colors={colors} ipod={ipod} />
+                    </View>
+                  )}
+                </Animated.View>
               </View>
             </View>
 
-            <View style={[styles.screen, { backgroundColor: colors.background, borderColor: colors.border }]}>
-              {topIsNowPlaying ? (
-                <IpodNowPlaying
-                  volumeMode={!!np.volumeMode}
-                  lyricsOpen={!!np.lyricsOpen}
-                  onToggleVolume={() => commitScreen({ ...top, volumeMode: !np.volumeMode, lyricsOpen: false })}
-                  onToggleLyrics={() => commitScreen({ ...top, lyricsOpen: !np.lyricsOpen })}
-                />
-              ) : topIsEmbedSettings ? (
-                <View style={styles.flex}>
-                  <IpodEmbedSection section={top.section!} />
-                </View>
-              ) : (
-                <View style={styles.flex}>
-                  {topIsSearch ? (
-                    <TextInput
-                      value={top.query || ''}
-                      onChangeText={(text) => commitScreen({ ...top, query: text, highlight: 0 })}
-                      placeholder="Search library…"
-                      placeholderTextColor={colors.textSecondary}
-                      style={[
-                        styles.searchInput,
-                        {
-                          backgroundColor: colors.card,
-                          color: colors.text,
-                          borderColor: colors.border,
-                        },
-                      ]}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                    />
-                  ) : null}
-                  <IpodRowList rows={rows} highlight={top.highlight} onSelect={handleSelect} colors={colors} ipod={ipod} />
-                </View>
-              )}
-            </View>
-
-            <View style={styles.wheelArea}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wheelArea}>
               <ClickWheel
                 isPlaying={isPlaying}
                 onMenu={handleMenu}
@@ -317,8 +379,8 @@ export function IpodApp() {
                 onSelect={() => handleSelect()}
                 onTicks={handleTicks}
               />
-            </View>
-          </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -404,6 +466,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     alignItems: 'center',
+    backgroundColor: '#101014',
   },
   safe: {
     flex: 1,
@@ -417,57 +480,55 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 14,
-    paddingBottom: 8,
+    paddingVertical: 10,
   },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 36,
-    paddingHorizontal: 12,
-  },
-  modeSwitch: {
-    width: 74,
-  },
-  modeSwitchText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  title: {
+  device: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '700',
+    borderRadius: 46,
+    borderWidth: 1.5,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
   },
-  topRight: {
-    width: 74,
-    alignItems: 'flex-end',
+  bezel: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 3,
   },
   screen: {
     flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
+    borderRadius: 11,
+    backgroundColor: IPOD_SCREEN.bg,
     overflow: 'hidden',
   },
   wheelArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 14,
-    paddingBottom: 6,
+    height: WHEEL_DIAMETER + 20,
+    paddingTop: 18,
+    paddingBottom: 2,
   },
   searchInput: {
     margin: 10,
     marginBottom: 4,
     borderRadius: 8,
     borderWidth: 1,
+    borderColor: IPOD_SCREEN.divider,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 7,
     fontSize: 14,
+    color: IPOD_SCREEN.text,
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   toastWrap: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 150,
+    paddingBottom: 120,
   },
   toast: {
     borderRadius: 18,
