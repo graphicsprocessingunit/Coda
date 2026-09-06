@@ -1,6 +1,6 @@
 {
   "name": "coda-app",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "main": "index.ts",
   "dependencies": {
     "@missingcore/audio-metadata": "^1.3.0",
