@@ -29,6 +29,7 @@ import { Toast } from './src/components/Toast';
 import { Sidebar } from './src/components/Sidebar';
 import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
 import { navigationRef } from './src/navigation/navigationRef';
+import { IpodApp } from './src/components/ipod/IpodApp';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -751,15 +752,30 @@ export default function App() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AudioProvider>
-              <NavigationContainer ref={navigationRef}>
-                <MainTabs />
-                <ThemedStatusBar />
-              </NavigationContainer>
+              <RootLayout />
             </AudioProvider>
           </ThemeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
+  );
+}
+
+function RootLayout() {
+  const { layout } = useTheme();
+  if (layout === 'ipod') {
+    return (
+      <>
+        <IpodApp />
+        <ThemedStatusBar />
+      </>
+    );
+  }
+  return (
+    <NavigationContainer ref={navigationRef}>
+      <MainTabs />
+      <ThemedStatusBar />
+    </NavigationContainer>
   );
 }
 

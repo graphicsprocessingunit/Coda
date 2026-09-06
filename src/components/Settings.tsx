@@ -16,7 +16,7 @@ interface SettingsProps {
 }
 
 export function Settings({ onClearData, onClearCache }: SettingsProps) {
-  const { theme, colors, setTheme } = useTheme();
+  const { theme, colors, setTheme, layout, setLayout } = useTheme();
   const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
@@ -213,6 +213,27 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
               </Pressable>
             </View>
             <View style={modalStyles.body}>
+              <Pressable
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                onPress={() => setLayout('standard')}
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="albums" size={24} color={colors.textSecondary} />
+                  <Text style={[modalStyles.themeName, { color: colors.text }]}>Layout: Standard</Text>
+                </View>
+                {layout === 'standard' && <Ionicons name="checkmark-circle" size={24} color={colors.accent} />}
+              </Pressable>
+              <Pressable
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }]}
+                onPress={() => setLayout('ipod')}
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="disc" size={24} color={colors.textSecondary} />
+                  <Text style={[modalStyles.themeName, { color: colors.text }]}>Layout: iPod Classic</Text>
+                </View>
+                {layout === 'ipod' && <Ionicons name="checkmark-circle" size={24} color={colors.accent} />}
+              </Pressable>
+              <Text style={[modalStyles.sectionNote, { color: colors.textSecondary }]}>Theme</Text>
               {themes.map((t) => (
                 <Pressable
                   key={t.key}
@@ -688,6 +709,15 @@ const modalStyles = StyleSheet.create({
   themeName: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  sectionNote: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
+    marginLeft: 2,
+    marginBottom: 2,
   },
   durationChip: {
     paddingHorizontal: 16,
