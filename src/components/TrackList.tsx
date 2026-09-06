@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio, useDownloadProgress, TrackMetadata } from '../context/AudioContext';
+import { useAudio, useDownloadProgress, useBatchDownloads, TrackMetadata } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 import { EmptyState } from './EmptyState';
@@ -178,6 +178,8 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
   const { colors } = useTheme();
   const { navidromeConnected, addToLibrary, getNavidromeCredentials } = useAudio();
   const { activeDownloads, cancelDownload } = useDownloadProgress();
+  const { batches, cancelBatch } = useBatchDownloads();
+  const selectionBatch = batches.get('library-selection') ?? null;
   const [searchQuery, setSearchQuery] = useState('');
   const [showNavidrome, setShowNavidrome] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -419,32 +421,51 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
 
       {selectedUris.size > 0 && (
         <View style={[styles.batchBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
-          <Text style={[styles.batchCount, { color: colors.text }]}>{selectedUris.size} selected</Text>
-          <View style={styles.batchActions}>
-            {onBatchFavorite && (
-              <Pressable style={styles.batchButton} onPress={() => onBatchFavorite([...selectedUris])}>
-                <Ionicons name="heart" size={20} color={colors.accent} />
+          {selectionBatch && selectionBatch.running ? (
+            <View style={styles.batchProgress}>
+              <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                <View style={[styles.downloadProgressFill, {
+                  backgroundColor: colors.accent,
+                  width: selectionBatch.total > 0 ? `${Math.min((selectionBatch.completed / selectionBatch.total) * 100, 100)}%` : '100%',
+                }]} />
+              </View>
+              <Text style={[styles.batchCount, { color: colors.text }]}>
+                {selectionBatch.completed}/{selectionBatch.total} downloaded{selectionBatch.skipped > 0 ? ` · ${selectionBatch.skipped} already offline` : ''}
+              </Text>
+              <Pressable style={styles.batchButton} onPress={() => cancelBatch('library-selection')} hitSlop={8}>
+                <Ionicons name="close-circle" size={22} color={colors.danger} />
               </Pressable>
-            )}
-            {onBatchAddToPlaylist && (
-              <Pressable style={styles.batchButton} onPress={() => onBatchAddToPlaylist([...selectedUris])}>
-                <Ionicons name="list" size={20} color={colors.accent} />
-              </Pressable>
-            )}
-            {onBatchDownload && (
-              <Pressable style={styles.batchButton} onPress={() => {
-                const tracks = filteredTracks.filter(t => selectedUris.has(t.uri));
-                onBatchDownload(tracks);
-              }}>
-                <Ionicons name="download" size={20} color={colors.accent} />
-              </Pressable>
-            )}
-            {onBatchRemove && (
-              <Pressable style={styles.batchButton} onPress={() => onBatchRemove([...selectedUris])}>
-                <Ionicons name="trash" size={20} color="#FF3B30" />
-              </Pressable>
-            )}
-          </View>
+            </View>
+          ) : (
+            <>
+              <Text style={[styles.batchCount, { color: colors.text }]}>{selectedUris.size} selected</Text>
+              <View style={styles.batchActions}>
+                {onBatchFavorite && (
+                  <Pressable style={styles.batchButton} onPress={() => onBatchFavorite([...selectedUris])}>
+                    <Ionicons name="heart" size={20} color={colors.accent} />
+                  </Pressable>
+                )}
+                {onBatchAddToPlaylist && (
+                  <Pressable style={styles.batchButton} onPress={() => onBatchAddToPlaylist([...selectedUris])}>
+                    <Ionicons name="list" size={20} color={colors.accent} />
+                  </Pressable>
+                )}
+                {onBatchDownload && (
+                  <Pressable style={styles.batchButton} onPress={() => {
+                    const tracks = filteredTracks.filter(t => selectedUris.has(t.uri));
+                    onBatchDownload(tracks);
+                  }}>
+                    <Ionicons name="download" size={20} color={colors.accent} />
+                  </Pressable>
+                )}
+                {onBatchRemove && (
+                  <Pressable style={styles.batchButton} onPress={() => onBatchRemove([...selectedUris])}>
+                    <Ionicons name="trash" size={20} color="#FF3B30" />
+                  </Pressable>
+                )}
+              </View>
+            </>
+          )}
         </View>
       )}
 
@@ -643,6 +664,12 @@ const styles = StyleSheet.create({
   batchCount: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  batchProgress: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   batchActions: {
     flexDirection: 'row',

@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
-import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, useIsPlaying, useSleepTimer, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
+import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, useBatchDownloads, useIsPlaying, useSleepTimer, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Player } from './src/components/Player';
 import { TrackList } from './src/components/TrackList';
@@ -220,6 +220,7 @@ function PlayerScreen() {
 function LibraryScreen() {
   const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, downloadTrackForLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite, batchToggleFavorite, batchRemoveFromLibrary } = useAudio();
   const { activeDownloads, cancelDownload } = useDownloadProgress();
+  const { batches, startBatchDownload, cancelBatch } = useBatchDownloads();
   const { colors } = useTheme();
   const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -227,6 +228,32 @@ function LibraryScreen() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [batchUris, setBatchUris] = useState<string[] | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [batchToast, setBatchToast] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
+  const lastSelectionBatchRef = useRef<any>(null);
+
+  const selectionBatch = batches.get('library-selection');
+
+  useEffect(() => {
+    if (!selectionBatch || selectionBatch.running) return;
+    if (lastSelectionBatchRef.current === selectionBatch) return;
+    lastSelectionBatchRef.current = selectionBatch;
+    if (selectionBatch.cancelled) {
+      if (selectionBatch.completed > 0) {
+        setBatchToast({ message: `Download cancelled — ${selectionBatch.completed} track${selectionBatch.completed > 1 ? 's' : ''} downloaded.`, type: 'info' });
+      }
+      return;
+    }
+    if (selectionBatch.failed.length > 0) {
+      setBatchToast({ message: `${selectionBatch.completed} downloaded, ${selectionBatch.failed.length} failed. Reselect and tap download to retry.`, type: 'error' });
+    } else if (selectionBatch.completed > 0 || selectionBatch.skipped > 0) {
+      setBatchToast({
+        message: selectionBatch.completed > 0
+          ? `Downloaded ${selectionBatch.completed} track${selectionBatch.completed > 1 ? 's' : ''}${selectionBatch.skipped > 0 ? ` (${selectionBatch.skipped} already offline)` : ''}.`
+          : `All ${selectionBatch.skipped} track${selectionBatch.skipped > 1 ? 's' : ''} already offline.`,
+        type: 'success',
+      });
+    }
+  }, [selectionBatch]);
 
   const handleAddTracks = async () => {
     const files = await FilePickerService.pickAudioFiles();
@@ -307,24 +334,8 @@ function LibraryScreen() {
     setShowPlaylistModal(true);
   };
 
-  const handleBatchDownload = async (tracks: TrackMetadata[]) => {
-    const queue = tracks.filter(t => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t));
-    let failed = 0;
-    let lastError = '';
-    const run = async () => {
-      while (queue.length > 0) {
-        const track = queue.shift()!;
-        const error = await downloadTrackForLibrary(track);
-        if (error) {
-          failed++;
-          lastError = error;
-        }
-      }
-    };
-    await Promise.all([run(), run(), run()]);
-    if (failed > 0) {
-      setDownloadError(`${failed} download${failed > 1 ? 's' : ''} failed — ${lastError}`);
-    }
+  const handleBatchDownload = (tracks: TrackMetadata[]) => {
+    startBatchDownload(tracks, 'Download selection', 'library-selection');
   };
 
   const handleAddToPlaylist = (playlistId: string) => {
@@ -479,6 +490,7 @@ function LibraryScreen() {
         </Pressable>
       </Modal>
       {downloadError && <Toast message={downloadError} type="error" onDismiss={() => setDownloadError(null)} />}
+      {batchToast && <Toast message={batchToast.message} type={batchToast.type} onDismiss={() => setBatchToast(null)} />}
     </View>
   );
 }

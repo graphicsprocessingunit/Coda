@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Modal, TextInput, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Modal, TextInput, Animated, Easing, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio, TrackMetadata, Playlist } from '../context/AudioContext';
+import { useAudio, useDownloadProgress, useBatchDownloads, TrackMetadata, Playlist } from '../context/AudioContext';
 import { SwipeableRow } from './SwipeableRow';
 import { NavidromeBrowser } from './NavidromeBrowser';
 import { EmptyState } from './EmptyState';
 import { PanResponderView } from './PanResponderView';
+import { OfflineCacheService } from '../services/OfflineCacheService';
 
 interface PlaylistDetailProps {
   playlist: Playlist;
@@ -24,74 +25,6 @@ interface PlaylistDetailProps {
   onBatchRemoveFromPlaylist?: (uris: string[]) => void;
   onBatchPlaySelected?: (tracks: TrackMetadata[]) => void;
 }
-
-const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress }: {
-  item: TrackMetadata;
-  index: number;
-  isCurrentTrack: boolean;
-  colors: any;
-  onPress: (item: TrackMetadata) => void;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const translateY = useRef(new Animated.Value(20)).current;
-  const pressScale = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 50 }),
-    ]).start();
-  }, []);
-
-  const handlePressIn = () => {
-    Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 200 }).start();
-  };
-
-  return (
-    <Animated.View style={{ opacity, transform: [{ translateY }, { scale: pressScale }] }}>
-      <Pressable
-        style={[styles.trackItem, { backgroundColor: colors.background }, isCurrentTrack && { backgroundColor: colors.card }]}
-        onPress={() => onPress(item)}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      >
-        <View style={styles.trackNumber}>
-          <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
-            {isCurrentTrack ? (
-              <Ionicons name="musical-notes" size={16} color={colors.accent} />
-            ) : (
-              index + 1
-            )}
-          </Text>
-        </View>
-
-        {item.artwork ? (
-          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" />
-        ) : (
-          <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
-            <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
-          </View>
-        )}
-
-        <View style={styles.trackInfo}>
-          <Text
-            style={[styles.trackTitle, { color: colors.text }, isCurrentTrack && { color: colors.accent }]}
-            numberOfLines={1}
-          >
-            {item.title}
-          </Text>
-          <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.artist}
-          </Text>
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-});
 
 function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | undefined; index: number; colors: any }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -129,6 +62,8 @@ export function PlaylistDetail({
 }: PlaylistDetailProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addTrackToPlaylist } = useAudio();
+  const { activeDownloads, cancelDownload } = useDownloadProgress();
+  const { batches, startBatchDownload, cancelBatch, retryBatch, dismissBatch } = useBatchDownloads();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showNavidromeModal, setShowNavidromeModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -165,6 +100,17 @@ export function PlaylistDetail({
     }
   };
 
+  const batch = batches.get(playlist.id);
+
+  const downloadableCount = useMemo(
+    () => playlist.tracks.filter((t) => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t)).length,
+    [playlist.tracks]
+  );
+
+  const handleDownloadAll = () => {
+    startBatchDownload(playlist.tracks, playlist.name, playlist.id);
+  };
+
   const handleTrackLongPress = (track: TrackMetadata) => {
     setSelectionMode(true);
     setSelectedUris(new Set([track.uri]));
@@ -175,6 +121,8 @@ export function PlaylistDetail({
     const isDragging = draggingIndex === index;
     const isOver = dragOverIndex === index && draggingIndex !== null && draggingIndex !== index;
     const isSelected = selectedUris.has(item.uri);
+    const downloadProgress = activeDownloads?.get(item.uri);
+    const isCached = item.source === 'navidrome' && OfflineCacheService.isTrackCached(item);
 
     const trackRow = (
       <Animated.View
@@ -208,6 +156,14 @@ export function PlaylistDetail({
                 size={22}
                 color={isSelected ? colors.accent : colors.textSecondary}
               />
+            ) : typeof downloadProgress === 'number' ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : item.source === 'navidrome' ? (
+              <Ionicons
+                name={isCached ? 'checkmark-circle' : 'cloud-outline'}
+                size={16}
+                color={isCached ? colors.success : colors.textSecondary}
+              />
             ) : (
               <Text style={[styles.trackNumberText, { color: colors.textSecondary }, isCurrentTrack && { color: colors.accent }]}>
                 {isCurrentTrack ? (
@@ -237,6 +193,30 @@ export function PlaylistDetail({
             <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
               {item.artist}
             </Text>
+            {typeof downloadProgress === 'number' && (
+              <View style={styles.downloadProgressContainer}>
+                {downloadProgress < 0 ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                    <View style={[styles.downloadProgressFill, {
+                      backgroundColor: colors.accent,
+                      width: `${Math.min(downloadProgress * 100, 100)}%`,
+                    }]} />
+                  </View>
+                )}
+                <Text style={[styles.downloadProgressText, { color: colors.textSecondary }]}>
+                  {downloadProgress >= 1 ? 'Done' : downloadProgress < 0
+                    ? `${Math.round(-downloadProgress)} KB`
+                    : `${Math.round(downloadProgress * 100)}%`}
+                </Text>
+                {downloadProgress < 1 && (
+                  <Pressable onPress={() => cancelDownload(item.uri)} hitSlop={4} style={styles.cancelDownloadButton}>
+                    <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                  </Pressable>
+                )}
+              </View>
+            )}
           </View>
         </Pressable>
 
@@ -330,11 +310,63 @@ export function PlaylistDetail({
           )}
           {onAddTrack && navidromeConnected && (
             <Pressable style={styles.addButton} onPress={() => setShowNavidromeModal(true)}>
-              <Ionicons name="server-outline" size={28} color="#34C759" />
+              <Ionicons name="server-outline" size={28} color={colors.success} />
             </Pressable>
+          )}
+          {batch?.running ? (
+            <View style={styles.headerBatchProgress}>
+              <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                <View style={[styles.downloadProgressFill, {
+                  backgroundColor: colors.accent,
+                  width: batch.total > 0 ? `${Math.min((batch.completed / batch.total) * 100, 100)}%` : '100%',
+                }]} />
+              </View>
+              <Text style={[styles.downloadProgressText, { color: colors.textSecondary }]} numberOfLines={1}>
+                {batch.completed}/{batch.total} downloaded{batch.skipped > 0 ? ` · ${batch.skipped} offline` : ''}
+              </Text>
+              <Pressable style={styles.addButton} onPress={() => cancelBatch(playlist.id)} hitSlop={8}>
+                <Ionicons name="close-circle" size={24} color={colors.danger} />
+              </Pressable>
+            </View>
+          ) : (
+            navidromeConnected && downloadableCount > 0 && (
+              <Pressable style={styles.addButton} onPress={handleDownloadAll} hitSlop={8}>
+                <Ionicons name="cloud-download" size={26} color={colors.accent} />
+              </Pressable>
+            )
           )}
         </View>
       </SafeAreaView>
+
+      {batch && !batch.running && (
+        <View style={[styles.batchBanner, { backgroundColor: batch.cancelled ? colors.card : batch.failed.length > 0 ? colors.danger + '15' : colors.success + '15' }]}>
+          <Ionicons
+            name={batch.cancelled ? 'information-circle' : batch.failed.length > 0 ? 'alert-circle' : 'checkmark-circle'}
+            size={20}
+            color={batch.cancelled ? colors.textSecondary : batch.failed.length > 0 ? colors.danger : colors.success}
+          />
+          <Text
+            style={[styles.batchBannerText, { color: batch.cancelled ? colors.text : batch.failed.length > 0 ? colors.danger : colors.success }]}
+            numberOfLines={1}
+          >
+            {batch.cancelled
+              ? `Cancelled — ${batch.completed}/${batch.total} downloaded`
+              : batch.failed.length > 0
+                ? `${batch.completed} downloaded, ${batch.failed.length} failed`
+                : batch.skipped === batch.total
+                  ? 'Already offline'
+                  : `Download complete${batch.skipped > 0 ? ` (${batch.skipped} already offline)` : ''}`}
+          </Text>
+          {batch.failed.length > 0 && !batch.cancelled && (
+            <Pressable onPress={() => retryBatch(playlist.id)} hitSlop={8}>
+              <Text style={[styles.selectionAction, { color: colors.accent }]}>Retry</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => dismissBatch(playlist.id)} hitSlop={8}>
+            <Ionicons name="close" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      )}
 
       {selectionMode && (
         <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
@@ -532,6 +564,46 @@ const styles = StyleSheet.create({
   },
   addButton: {
     padding: 8,
+  },
+  headerBatchProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 200,
+  },
+  batchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  batchBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  downloadProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  downloadProgressBar: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  downloadProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  downloadProgressText: {
+    fontSize: 12,
+  },
+  cancelDownloadButton: {
+    padding: 2,
   },
   collageContainer: {
     alignSelf: 'center',

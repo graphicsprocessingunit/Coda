@@ -105,6 +105,45 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
   };
 
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [albumDownloading, setAlbumDownloading] = useState(false);
+  const [albumDownloadProgress, setAlbumDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const handleDownloadAlbum = async () => {
+    if (!creds || albumDownloading || albumSongs.length === 0) return;
+    const tracks = albumSongs.map((s) => NavidromeService.songToTrackMetadata(creds, s));
+    const target = tracks.filter(
+      (t) => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t)
+    );
+    setAlbumDownloading(true);
+    setAlbumDownloadProgress({ done: 0, total: target.length });
+    const activeIds = new Set<string>();
+    try {
+      const result = await OfflineCacheService.downloadTracks(creds, tracks, {
+        concurrency: 3,
+        onTrackStart: (track) => {
+          if (track.navidromeId) {
+            activeIds.add(track.navidromeId);
+            setDownloadingIds(new Set(activeIds));
+          }
+        },
+        onTrackComplete: () => {
+          setAlbumDownloadProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+        },
+        onTrackError: () => {
+          setAlbumDownloadProgress((p) => (p ? { ...p, done: p.done + 1 } : p));
+        },
+      });
+      const succeeded = result.succeeded.filter((t) => t.cachedUri);
+      if (succeeded.length > 0) {
+        onAddTracks(succeeded);
+      }
+    } catch {}
+    finally {
+      setDownloadingIds(new Set());
+      setAlbumDownloading(false);
+      setAlbumDownloadProgress(null);
+    }
+  };
 
   const handleAddSong = async (song: NavidromeSong) => {
     if (!creds) return;
@@ -341,6 +380,24 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
         </View>
       )}
 
+      {!searchQuery && viewLevel === 'album-detail' && albumSongs.length > 0 && (
+        <View style={[styles.albumDownloadBar, { borderBottomColor: colors.border }]}>
+          {albumDownloading ? (
+            <>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={[styles.albumDownloadText, { color: colors.textSecondary }]}>
+                {albumDownloadProgress ? `${albumDownloadProgress.done}/${albumDownloadProgress.total}` : 'Downloading'}
+              </Text>
+            </>
+          ) : (
+            <Pressable style={styles.albumDownloadButton} onPress={handleDownloadAlbum} hitSlop={6}>
+              <Ionicons name="cloud-download" size={18} color={colors.accent} />
+              <Text style={[styles.albumDownloadText, { color: colors.accent }]}>Download All</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {loading ? (
         <SkeletonLoader variant="trackRow" count={5} />
       ) : error ? (
@@ -472,6 +529,24 @@ const styles = StyleSheet.create({
   },
   breadcrumbSeparator: {
     marginHorizontal: 6,
+  },
+  albumDownloadBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  albumDownloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  albumDownloadText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   listContent: {
     paddingBottom: 20,

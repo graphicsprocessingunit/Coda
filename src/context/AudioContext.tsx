@@ -177,6 +177,37 @@ export function useDownloadProgress() {
   return useContext(DownloadProgressCtx);
 }
 
+export interface BatchDownload {
+  key: string;
+  label: string;
+  total: number;
+  skipped: number;
+  completed: number;
+  failed: TrackMetadata[];
+  cancelled: boolean;
+  running: boolean;
+}
+
+interface BatchDownloadType {
+  batches: Map<string, BatchDownload>;
+  startBatchDownload: (tracks: TrackMetadata[], label: string, key: string) => void;
+  cancelBatch: (key: string) => void;
+  retryBatch: (key: string) => void;
+  dismissBatch: (key: string) => void;
+}
+
+const BatchDownloadCtx = createContext<BatchDownloadType>({
+  batches: new Map(),
+  startBatchDownload: () => {},
+  cancelBatch: () => {},
+  retryBatch: () => {},
+  dismissBatch: () => {},
+});
+
+export function useBatchDownloads() {
+  return useContext(BatchDownloadCtx);
+}
+
 interface IsPlayingType {
   isPlaying: boolean;
 }
@@ -256,6 +287,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeDownloads, setActiveDownloads] = useState<Map<string, number>>(new Map());
+  const [batchDownloads, setBatchDownloads] = useState<Map<string, BatchDownload>>(new Map());
+  const batchControllersRef = useRef<Map<string, AbortController>>(new Map());
   const [smartPlaylists, setSmartPlaylists] = useState<SmartPlaylist[]>([]);
   const [lastFmConnected, setLastFmConnected] = useState(false);
   const navidromeCredentialsRef = useRef<NavidromeCredentials | null>(null);
@@ -1132,6 +1165,30 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const applyOfflineTrack = useCallback((offlineTrack: TrackMetadata) => {
+    const idKey = offlineTrack.navidromeId;
+    const match = (t: TrackMetadata) => t.uri === offlineTrack.uri || (idKey ? t.navidromeId === idKey : false);
+    setLibrary((prev) =>
+      prev.map((t) => match(t) ? {
+        ...t,
+        cachedUri: offlineTrack.cachedUri,
+        cachedArtwork: offlineTrack.cachedArtwork,
+        artwork: offlineTrack.artwork,
+      } : t)
+    );
+    setPlaylists((prev) =>
+      prev.map((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) => match(t) ? {
+          ...t,
+          cachedUri: offlineTrack.cachedUri,
+          cachedArtwork: offlineTrack.cachedArtwork,
+          artwork: offlineTrack.artwork,
+        } : t),
+      }))
+    );
+  }, []);
+
   const downloadTrackForLibrary = useCallback(async (track: TrackMetadata): Promise<string | null> => {
     const creds = navidromeCredentialsRef.current;
     if (!creds || !track.navidromeId) return 'Not connected to Navidrome';
@@ -1161,14 +1218,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
       if (!offlineTrack.cachedUri) return 'Download failed';
 
-      setLibrary((prev) =>
-        prev.map((t) => (t.uri === track.uri ? {
-          ...t,
-          cachedUri: offlineTrack.cachedUri,
-          cachedArtwork: offlineTrack.cachedArtwork,
-          artwork: offlineTrack.artwork,
-        } : t))
-      );
+      applyOfflineTrack(offlineTrack);
       return null;
     } catch (err: any) {
       setActiveDownloads((prev) => {
@@ -1188,6 +1238,123 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const cancelDownload = useCallback((uri: string) => {
     OfflineCacheService.cancelDownload(uri);
+  }, []);
+
+  const runBatchDownload = useCallback((tracks: TrackMetadata[], label: string, key: string) => {
+    const creds = navidromeCredentialsRef.current;
+    if (!creds) return;
+
+    const previous = batchControllersRef.current.get(key);
+    if (previous) previous.abort();
+
+    const controller = new AbortController();
+    batchControllersRef.current.set(key, controller);
+
+    const stillMissing = tracks.filter(
+      (t) => t.source === 'navidrome' && t.navidromeId && !OfflineCacheService.isTrackCached(t)
+    );
+
+    setBatchDownloads((prev) => {
+      const existing = prev.get(key);
+      return new Map(prev).set(key, {
+        key,
+        label,
+        total: stillMissing.length,
+        skipped: (existing?.skipped ?? 0) + (tracks.length - stillMissing.length),
+        completed: 0,
+        failed: [],
+        cancelled: false,
+        running: true,
+      });
+    });
+
+    let lastUpdate = 0;
+    OfflineCacheService.downloadTracks(creds, stillMissing, {
+      signal: controller.signal,
+      concurrency: 3,
+      onTrackStart: (track) => {
+        setActiveDownloads((prev) => new Map(prev).set(track.uri, 0));
+      },
+      onTrackProgress: (track, progress) => {
+        const now = Date.now();
+        if (now - lastUpdate < 100 && progress !== 1 && progress > 0) return;
+        lastUpdate = now;
+        setActiveDownloads((prev) => new Map(prev).set(track.uri, progress));
+      },
+      onTrackComplete: (track, offlineTrack) => {
+        applyOfflineTrack(offlineTrack);
+        setActiveDownloads((prev) => {
+          const next = new Map(prev);
+          next.delete(track.uri);
+          return next;
+        });
+        setBatchDownloads((prev) => {
+          const batch = prev.get(key);
+          if (!batch) return prev;
+          return new Map(prev).set(key, { ...batch, completed: batch.completed + 1 });
+        });
+      },
+      onTrackError: (track, _error) => {
+        setActiveDownloads((prev) => {
+          const next = new Map(prev);
+          next.delete(track.uri);
+          return next;
+        });
+        setBatchDownloads((prev) => {
+          const batch = prev.get(key);
+          if (!batch) return prev;
+          return new Map(prev).set(key, { ...batch, failed: [...batch.failed, track] });
+        });
+      },
+    })
+      .then(() => {
+        setBatchDownloads((prev) => {
+          const batch = prev.get(key);
+          if (!batch) return prev;
+          return new Map(prev).set(key, { ...batch, running: false, cancelled: controller.signal.aborted });
+        });
+      })
+      .catch(() => {
+        setBatchDownloads((prev) => {
+          const batch = prev.get(key);
+          if (!batch) return prev;
+          return new Map(prev).set(key, { ...batch, running: false, cancelled: true });
+        });
+      })
+      .finally(() => {
+        batchControllersRef.current.delete(key);
+      });
+  }, [applyOfflineTrack]);
+
+  const startBatchDownload = useCallback((tracks: TrackMetadata[], label: string, key: string) => {
+    runBatchDownload(tracks, label, key);
+  }, [runBatchDownload]);
+
+  const cancelBatch = useCallback((key: string) => {
+    batchControllersRef.current.get(key)?.abort();
+    setBatchDownloads((prev) => {
+      const batch = prev.get(key);
+      if (!batch) return prev;
+      return new Map(prev).set(key, { ...batch, cancelled: true });
+    });
+  }, []);
+
+  const retryBatch = useCallback((key: string) => {
+    setBatchDownloads((prev) => {
+      const batch = prev.get(key);
+      if (!batch) return prev;
+      if (batch.failed.length === 0) return prev;
+      runBatchDownload(batch.failed, batch.label, key);
+      return prev;
+    });
+  }, [runBatchDownload]);
+
+  const dismissBatch = useCallback((key: string) => {
+    setBatchDownloads((prev) => {
+      const next = new Map(prev);
+      next.delete(key);
+      return next;
+    });
   }, []);
 
   const toggleFavorite = useCallback((uri: string) => {
@@ -2001,6 +2168,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     activeDownloads, cancelDownload,
   }), [activeDownloads, cancelDownload]);
 
+  const batchDownloadValue: BatchDownloadType = useMemo(() => ({
+    batches: batchDownloads,
+    startBatchDownload,
+    cancelBatch,
+    retryBatch,
+    dismissBatch,
+  }), [batchDownloads, startBatchDownload, cancelBatch, retryBatch, dismissBatch]);
+
   const isPlayingValue: IsPlayingType = useMemo(() => ({
     isPlaying,
   }), [isPlaying]);
@@ -2013,11 +2188,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     <AudioCtx.Provider value={value}>
       <PlaybackPositionCtx.Provider value={positionValue}>
         <DownloadProgressCtx.Provider value={downloadProgressValue}>
-          <IsPlayingCtx.Provider value={isPlayingValue}>
-            <SleepTimerCtx.Provider value={sleepTimerValue}>
-              {children}
-            </SleepTimerCtx.Provider>
-          </IsPlayingCtx.Provider>
+          <BatchDownloadCtx.Provider value={batchDownloadValue}>
+            <IsPlayingCtx.Provider value={isPlayingValue}>
+              <SleepTimerCtx.Provider value={sleepTimerValue}>
+                {children}
+              </SleepTimerCtx.Provider>
+            </IsPlayingCtx.Provider>
+          </BatchDownloadCtx.Provider>
         </DownloadProgressCtx.Provider>
       </PlaybackPositionCtx.Provider>
     </AudioCtx.Provider>

@@ -9,6 +9,42 @@ function sanitizeFileId(id: string): string {
   return id.replace(/[/\\.\x00]/g, '');
 }
 
+export interface BatchDownloadResult {
+  succeeded: TrackMetadata[];
+  failed: { track: TrackMetadata; error: string }[];
+  skipped: TrackMetadata[];
+}
+
+export interface DownloadTracksOptions {
+  concurrency?: number;
+  signal?: AbortSignal;
+  onTrackStart?: (track: TrackMetadata) => void;
+  onTrackProgress?: (track: TrackMetadata, progress: number) => void;
+  onTrackComplete?: (track: TrackMetadata, offlineTrack: TrackMetadata) => void;
+  onTrackError?: (track: TrackMetadata, error: string) => void;
+}
+
+function combineSignals(...signals: (AbortSignal | undefined)[]): AbortSignal | undefined {
+  const active = signals.filter((s): s is AbortSignal => !!s);
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  try {
+    if (typeof (AbortSignal as any).any === 'function') {
+      return (AbortSignal as any).any(active);
+    }
+  } catch {}
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+  return controller.signal;
+}
+
 export class DownloadError extends Error {
   constructor(message: string) {
     super(message);
@@ -62,8 +98,18 @@ export class OfflineCacheService {
   }
 
   static isTrackCached(track: TrackMetadata): boolean {
-    if (!track.cachedUri || !track.navidromeId) return false;
-    return new File(track.cachedUri).exists;
+    if (track.cachedUri) {
+      try {
+        if (new File(track.cachedUri).exists) return true;
+      } catch {}
+    }
+    if (!track.navidromeId || !activeConfigId) return false;
+    try {
+      const audioDir = AppStorageService.getAudioCacheDir(activeConfigId);
+      return new File(audioDir, `${sanitizeFileId(track.navidromeId)}.mp3`).exists;
+    } catch {
+      return false;
+    }
   }
 
   static async downloadTrack(
@@ -312,5 +358,80 @@ export class OfflineCacheService {
       cachedArtwork: cachedArt,
       artwork: cachedArt || track.artwork,
     };
+  }
+
+  static async downloadTracks(
+    creds: NavidromeCredentials,
+    tracks: TrackMetadata[],
+    options: DownloadTracksOptions = {},
+  ): Promise<BatchDownloadResult> {
+    const concurrency = Math.max(1, options.concurrency ?? 3);
+    const signal = options.signal;
+    if (signal?.aborted) throw new Error('Batch cancelled');
+
+    const seen = new Set<string>();
+    const work: TrackMetadata[] = [];
+    const skipped: TrackMetadata[] = [];
+    for (const track of tracks) {
+      if (track.source !== 'navidrome' || !track.navidromeId) continue;
+      const id = track.navidromeId;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (OfflineCacheService.isTrackCached(track)) {
+        skipped.push(track);
+      } else {
+        work.push(track);
+      }
+    }
+
+    const succeeded: TrackMetadata[] = [];
+    const failed: { track: TrackMetadata; error: string }[] = [];
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (nextIndex < work.length) {
+        if (signal?.aborted) break;
+        const index = nextIndex++;
+        const track = work[index];
+        if (!track.navidromeId) continue;
+
+        const perTrackController = OfflineCacheService.getAbortController(track.uri);
+        const effectiveSignal = combineSignals(signal, perTrackController.signal);
+        options.onTrackStart?.(track);
+
+        try {
+          const offlineTrack = await OfflineCacheService.downloadTrackForOffline(
+            creds,
+            track,
+            (progress) => options.onTrackProgress?.(track, progress),
+            effectiveSignal,
+          );
+          if (!offlineTrack.cachedUri) throw new DownloadError('Download failed');
+          succeeded.push(offlineTrack);
+          options.onTrackComplete?.(track, offlineTrack);
+        } catch (error: any) {
+          if (error?.name === 'AbortError') {
+            OfflineCacheService.removeController(track.uri);
+            try {
+              const partial = new File(this.getAudioDir(), `${sanitizeFileId(track.navidromeId)}.mp3`);
+              if (partial.exists) partial.delete();
+            } catch {}
+            if (signal?.aborted) break;
+            continue;
+          }
+          const message = error?.message || 'Download failed';
+          failed.push({ track, error: message });
+          options.onTrackError?.(track, message);
+        } finally {
+          OfflineCacheService.removeController(track.uri);
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, Math.max(work.length, 1)) }, () => worker()),
+    );
+
+    return { succeeded, failed, skipped };
   }
 }
