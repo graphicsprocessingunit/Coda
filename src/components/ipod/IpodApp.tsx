@@ -336,7 +336,12 @@ export function IpodApp() {
           >
             <View style={[styles.bezel, { backgroundColor: darkRim, borderColor: ipod.faceplateEdge }]}>
               <View style={styles.screen}>
-                <IpodStatusBar title={screenTitle(top)} loading={navidromeLoading} />
+                <IpodStatusBar
+                  title={screenTitle(top)}
+                  loading={navidromeLoading}
+                  shuffle={topIsNowPlaying ? audio.shuffleEnabled : false}
+                  repeat={topIsNowPlaying ? audio.repeatEnabled : false}
+                />
                 <Animated.View style={[styles.flex, slideStyle]}>
                   {topIsNowPlaying ? (
                     <IpodNowPlaying

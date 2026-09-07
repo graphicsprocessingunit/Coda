@@ -1,5 +1,7 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Battery from 'expo-battery';
 import { IPOD_SCREEN, SCREEN_TOP_BAR_HEIGHT } from './ipodTheme';
 
 interface IpodStatusBarProps {
@@ -16,8 +18,14 @@ interface IpodStatusBarProps {
  * Now Playing screen.
  */
 export function IpodStatusBar({ title, dark, shuffle, repeat, loading }: IpodStatusBarProps) {
+  const { batteryLevel, batteryState } = Battery.usePowerState();
+
   const fg = dark ? '#FFFFFF' : IPOD_SCREEN.text;
   const dim = dark ? 'rgba(255,255,255,0.55)' : IPOD_SCREEN.secondary;
+  const level = batteryLevel >= 0 ? Math.min(1, Math.max(0, batteryLevel)) : 1;
+  const pct = Math.round(level * 100);
+  const charging =
+    batteryState === Battery.BatteryState.CHARGING || batteryState === Battery.BatteryState.FULL;
 
   return (
     <View style={styles.bar} pointerEvents="none">
@@ -32,8 +40,11 @@ export function IpodStatusBar({ title, dark, shuffle, repeat, loading }: IpodSta
           </>
         ) : null}
         {loading ? <ActivityIndicator size="small" color={fg} style={styles.spinner} /> : null}
+        {charging ? <Ionicons name="flash" size={9} color={fg} style={styles.bolt} /> : null}
         <View style={[styles.battery, { borderColor: fg }]}>
-          <View style={[styles.batteryFill, { backgroundColor: fg }]} />
+          <View style={styles.batteryTrack}>
+            <View style={[styles.batteryFill, { backgroundColor: fg, width: `${pct}%` }]} />
+          </View>
         </View>
         <View style={[styles.batteryNub, { backgroundColor: fg }]} />
       </View>
@@ -74,9 +85,15 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     padding: 1.5,
   },
-  batteryFill: {
+  batteryTrack: {
     flex: 1,
+  },
+  batteryFill: {
+    height: '100%',
     borderRadius: 1,
+  },
+  bolt: {
+    marginRight: 3,
   },
   batteryNub: {
     width: 2,

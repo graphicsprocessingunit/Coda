@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { Image } from 'expo-image';
+import { File } from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAudio, useIsPlaying, usePlaybackPosition } from '../../context/AudioContext';
 import { fetchLyrics } from '../../services/LyricsService';
 import { LyricsDisplay } from '../LyricsDisplay';
 import { fmtDuration } from './menus';
-import { IpodStatusBar } from './IpodStatusBar';
 import { IPOD_NOWPLAYING, IPOD_SCREEN } from './ipodTheme';
 
 interface IpodNowPlayingProps {
@@ -26,7 +26,6 @@ export function IpodNowPlaying({
   const { currentTrack, volume, seekTo } = useAudio();
   const { isPlaying } = useIsPlaying();
   const { playbackPosition, duration } = usePlaybackPosition();
-  const { shuffleEnabled, repeatEnabled } = useAudio();
 
   const [lyrics, setLyrics] = useState<string | null>(null);
 
@@ -54,10 +53,20 @@ export function IpodNowPlaying({
     };
   }, [lyricsOpen, currentTrack]);
 
+  const artwork = useMemo(() => {
+    const t = currentTrack;
+    if (!t) return undefined;
+    if (t.cachedArtwork) {
+      try {
+        if (new File(t.cachedArtwork).exists) return t.cachedArtwork;
+      } catch {}
+    }
+    return t.artwork;
+  }, [currentTrack?.cachedArtwork, currentTrack?.artwork]);
+
   if (!currentTrack) {
     return (
       <View style={styles.emptyScreen}>
-        <IpodStatusBar dark />
         <View style={styles.center}>
           <Ionicons name="disc-outline" size={56} color={IPOD_NOWPLAYING.dim} />
           <Text style={styles.emptyText}>Nothing playing</Text>
@@ -72,53 +81,64 @@ export function IpodNowPlaying({
   const elapsedSec = Math.floor(playbackPosition / 1000);
   const remainingSec = durationMs > 0 ? Math.floor(durationMs / 1000) - elapsedSec : 0;
 
-  const artwork = currentTrack.cachedArtwork ?? currentTrack.artwork;
-
   return (
     <View style={styles.screen}>
-      <IpodStatusBar dark shuffle={shuffleEnabled} repeat={repeatEnabled} />
-
       <View style={styles.body}>
-        <View style={styles.artRow}>
-          {artwork ? (
-            <Image
-              source={{ uri: artwork }}
-              style={styles.art}
-              contentFit="cover"
+        {lyricsOpen && lyrics ? (
+          <View style={styles.lyricsPanel}>
+            <LyricsDisplay
+              lyrics={lyrics}
+              playbackPosition={playbackPosition}
+              accentColor={IPOD_SCREEN.highlightBottom}
+              textColor={IPOD_NOWPLAYING.text}
+              secondaryColor={IPOD_NOWPLAYING.dim}
+              onSeek={(pos) => seekTo(pos)}
             />
-          ) : (
-            <View style={[styles.art, styles.artFallback]}>
-              <Ionicons name="musical-notes" size={40} color={IPOD_NOWPLAYING.secondary} />
-            </View>
-          )}
-          <View style={styles.info}>
-            <Text style={styles.title} numberOfLines={2}>
-              {currentTrack.title}
-            </Text>
-            <Text style={styles.artist} numberOfLines={1}>
-              {currentTrack.artist}
-            </Text>
-            {currentTrack.album ? (
-              <Text style={styles.album} numberOfLines={1}>
-                {currentTrack.album}
-              </Text>
-            ) : null}
           </View>
-        </View>
-
-        <Pressable onPress={onToggleVolume} style={styles.barArea}>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${progressFill * 100}%` }]} />
-          </View>
-        </Pressable>
-
-        {volumeMode ? (
-          <Text style={styles.volumeLabel}>VOLUME</Text>
         ) : (
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{fmtDuration(elapsedSec)}</Text>
-            <Text style={styles.timeText}>{remainingSec > 0 ? `-${fmtDuration(remainingSec)}` : ''}</Text>
-          </View>
+          <>
+            <View style={styles.artRow}>
+              {artwork ? (
+                <Image
+                  source={{ uri: artwork }}
+                  style={styles.art}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={[styles.art, styles.artFallback]}>
+                  <Ionicons name="musical-notes" size={40} color={IPOD_NOWPLAYING.secondary} />
+                </View>
+              )}
+              <View style={styles.info}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {currentTrack.title}
+                </Text>
+                <Text style={styles.artist} numberOfLines={1}>
+                  {currentTrack.artist}
+                </Text>
+                {currentTrack.album ? (
+                  <Text style={styles.album} numberOfLines={1}>
+                    {currentTrack.album}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            <Pressable onPress={onToggleVolume} style={styles.barArea}>
+              <View style={styles.barTrack}>
+                <View style={[styles.barFill, { width: `${progressFill * 100}%` }]} />
+              </View>
+            </Pressable>
+
+            {volumeMode ? (
+              <Text style={styles.volumeLabel}>VOLUME</Text>
+            ) : (
+              <View style={styles.timeRow}>
+                <Text style={styles.timeText}>{fmtDuration(elapsedSec)}</Text>
+                <Text style={styles.timeText}>{remainingSec > 0 ? `-${fmtDuration(remainingSec)}` : ''}</Text>
+              </View>
+            )}
+          </>
         )}
 
         <View style={styles.controlsRow}>
@@ -136,19 +156,6 @@ export function IpodNowPlaying({
           </Text>
         </View>
       </View>
-
-      {lyricsOpen && lyrics ? (
-        <View style={styles.lyricsOverlay}>
-          <LyricsDisplay
-            lyrics={lyrics}
-            playbackPosition={playbackPosition}
-            accentColor={IPOD_SCREEN.highlightBottom}
-            textColor={IPOD_NOWPLAYING.text}
-            secondaryColor={IPOD_NOWPLAYING.dim}
-            onSeek={(pos) => seekTo(pos)}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -266,8 +273,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: IPOD_NOWPLAYING.dim,
   },
-  lyricsOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: IPOD_NOWPLAYING.bg,
+  lyricsPanel: {
+    flex: 1,
+    paddingTop: 4,
   },
 });
