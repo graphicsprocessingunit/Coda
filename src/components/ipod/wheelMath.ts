@@ -6,6 +6,48 @@ export interface WheelTickState {
 /** Maximum ticks a single wheel sample may emit (prevents runaway jumps). */
 export const MAX_TICKS_PER_SAMPLE = 8;
 
+export type WheelZoneId = 'select' | 'menu' | 'play' | 'previous' | 'next' | 'none';
+
+export interface WheelBands {
+  /** y above this is the MENU band. */
+  topY: number;
+  /** y below this is the PLAY/PAUSE band. */
+  bottomY: number;
+  /** x below this is the PREVIOUS band. */
+  leftX: number;
+  /** x above this is the NEXT band. */
+  rightX: number;
+}
+
+/**
+ * Classifies a tap on the wheel (touch-down position, in the wheel view's
+ * local coordinates) into the button it corresponds to, matching the classic
+ * 4-quadrant layout: center = SELECT, top band = MENU, bottom band =
+ * play/pause, left strip = previous, right strip = next. Corner regions
+ * resolve to the horizontal bands (as the real device's recessed buttons
+ * do); the four mid gaps between the strips yield 'none'.
+ */
+export function classifyTapStart(
+  x: number,
+  y: number,
+  centerX: number,
+  centerY: number,
+  minSelectRadius: number,
+  bands: WheelBands
+): WheelZoneId {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return 'none';
+  if (!Number.isFinite(centerX) || !Number.isFinite(centerY) || !Number.isFinite(minSelectRadius)) return 'none';
+  const dx = x - centerX;
+  const dy = y - centerY;
+  const radius = Math.sqrt(dx * dx + dy * dy);
+  if (radius < minSelectRadius) return 'select';
+  if (y < bands.topY) return 'menu';
+  if (y > bands.bottomY) return 'play';
+  if (x < bands.leftX) return 'previous';
+  if (x > bands.rightX) return 'next';
+  return 'none';
+}
+
 export function createWheelTickState(): WheelTickState {
   return { prevAngle: 0, accumulator: 0 };
 }

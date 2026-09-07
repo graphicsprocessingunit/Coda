@@ -1,5 +1,5 @@
-import React, { useCallback, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useRef } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -18,7 +18,9 @@ interface ClickWheelProps {
   onTicks: (ticks: number) => void;
 }
 
-const HAPTIC_THROTTLE_MS = 70;
+// One click per detent, spacing clicks at least this far apart so a fast
+// spin degrades gracefully instead of hammering the vibrator.
+const HAPTIC_MIN_INTERVAL_MS = 25;
 
 function luminance(hex: string): number {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
@@ -48,44 +50,47 @@ function ClickWheelInner({
 }: ClickWheelProps) {
   const { ipod } = useTheme();
 
-  const lastHapticRef = useRef(0);
+  const lastScrollHapticAtRef = useRef(0);
   const onTick = useCallback(
     (ticks: number) => {
       if (ticks === 0) return;
-      const now = Date.now();
-      if (now - lastHapticRef.current > HAPTIC_THROTTLE_MS) {
-        lastHapticRef.current = now;
-        scrollHaptic();
-      }
       onTicks(ticks);
+      const n = Math.abs(ticks);
+      const now = Date.now();
+      let next = lastScrollHapticAtRef.current + HAPTIC_MIN_INTERVAL_MS;
+      let fired = 0;
+      while (fired < n && next <= now) {
+        scrollHaptic();
+        fired++;
+        next += HAPTIC_MIN_INTERVAL_MS;
+      }
+      if (fired > 0) lastScrollHapticAtRef.current = now;
     },
     [onTicks]
   );
 
-  const { onWheelLayout, wheelPan } = useWheelTicks(onTick);
+  const zones = useMemo(
+    () => ({ onMenu, onPrevious, onNext, onPlayPause, onSelect }),
+    [onMenu, onPrevious, onNext, onPlayPause, onSelect]
+  );
+  const { onWheelLayout, wheelPan } = useWheelTicks({ onTicks: onTick, zones, onTapHaptic: tapHaptic });
 
   const darkWheel = luminance(ipod.wheelColor) < 0.5;
   const sheenColor = darkWheel ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.5)';
   const seamColor = withAlpha(ipod.wheelLabel, 0.18);
   const ringInset = (WHEEL_DIAMETER - 156) / 2;
 
-  const zoneProps = {
-    hitSlop: 6,
-    accessibilityRole: 'button' as const,
-  };
-
-  const zone = (label: string, ch: () => void, content: React.ReactNode, style: object) => (
-    <Pressable
-      {...zoneProps}
+  const zone = (label: string, onTap: () => void, content: React.ReactNode, style: object) => (
+    <View
+      accessible
+      accessibilityRole="button"
       accessibilityLabel={label}
-      onPress={() => {
-        tapHaptic();
-        ch();
-      }}
+      onAccessibilityTap={onTap}
+      pointerEvents="none"
       style={[styles.zone, style]}
     >
       {content}
-    </Pressable>
+    </View>
   );
 
   return (
@@ -98,10 +103,6 @@ function ClickWheelInner({
         },
       ]}
     >
-      <GestureDetector gesture={wheelPan}>
-        <View style={StyleSheet.absoluteFill} onLayout={onWheelLayout} />
-      </GestureDetector>
-
       {/* Outer gloss cap to give the disc dimensionality. */}
       <View
         pointerEvents="none"
@@ -155,17 +156,23 @@ function ClickWheelInner({
       )}
 
       {/* Center SELECT button */}
-      <Pressable
+      <View
+        accessible
         accessibilityRole="button"
         accessibilityLabel="Select"
-        onPress={() => {
-          tapHaptic();
-          onSelect();
-        }}
+        onAccessibilityTap={onSelect}
+        pointerEvents="none"
         style={[styles.select, { backgroundColor: ipod.centerFace, borderColor: ipod.faceplateEdge }]}
       >
         <View pointerEvents="none" style={[styles.selectSheen, { backgroundColor: sheenColor }]} />
-      </Pressable>
+      </View>
+
+      {/* Dedicated wheel-scroll layer: covers the whole disc (including button
+          labels) so a drag starting anywhere scrolls; still taps are routed by
+          the gesture into MENU/skip/play/SELECT. */}
+      <GestureDetector gesture={wheelPan}>
+        <View style={StyleSheet.absoluteFill} onLayout={onWheelLayout} />
+      </GestureDetector>
     </View>
   );
 }

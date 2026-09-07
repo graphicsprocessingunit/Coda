@@ -4,7 +4,9 @@ import {
   clampTickThreshold,
   advanceWheelTick,
   capTicks,
+  classifyTapStart,
   MAX_TICKS_PER_SAMPLE,
+  type WheelBands,
 } from '../src/components/ipod/wheelMath';
 
 describe('unwrapAngleDelta', () => {
@@ -116,5 +118,41 @@ describe('advanceWheelTick', () => {
     const spin = createWheelTickState();
     advanceWheelTick(spin, 0);
     expect(Math.abs(advanceWheelTick(spin, 10000))).toBeLessThanOrEqual(MAX_TICKS_PER_SAMPLE);
+  });
+});
+
+describe('classifyTapStart', () => {
+  // Wheel is 240x240, center at (120,120), center button radius 42.
+  // Band geometry mirrors the recessed button layout.
+  const cx = 120;
+  const cy = 120;
+  const sel = 42;
+  const bands: WheelBands = { topY: 70, bottomY: 168, leftX: 84, rightX: 156 };
+
+  it('routes the center button to select', () => {
+    expect(classifyTapStart(cx, cy, cx, cy, sel, bands)).toBe('select');
+    expect(classifyTapStart(100, 100, cx, cy, sel, bands)).toBe('select');
+    expect(classifyTapStart(120, 140, cx, cy, sel, bands)).toBe('select');
+  });
+  it('routes the top band to MENU', () => {
+    expect(classifyTapStart(cx, 40, cx, cy, sel, bands)).toBe('menu');
+    expect(classifyTapStart(60, 50, cx, cy, sel, bands)).toBe('menu');
+    expect(classifyTapStart(200, 60, cx, cy, sel, bands)).toBe('menu');
+  });
+  it('routes the bottom band to play/pause', () => {
+    expect(classifyTapStart(cx, 200, cx, cy, sel, bands)).toBe('play');
+    expect(classifyTapStart(200, 200, cx, cy, sel, bands)).toBe('play');
+  });
+  it('routes left/right strips to previous/next', () => {
+    expect(classifyTapStart(40, cy, cx, cy, sel, bands)).toBe('previous');
+    expect(classifyTapStart(200, cy, cx, cy, sel, bands)).toBe('next');
+  });
+  it('returns none for the mid gaps between the recessed buttons', () => {
+    expect(classifyTapStart(150, 90, cx, cy, sel, bands)).toBe('none');
+    expect(classifyTapStart(90, 150, cx, cy, sel, bands)).toBe('none');
+  });
+  it('does not crash on non-finite input', () => {
+    expect(classifyTapStart(NaN, 50, cx, cy, sel, bands)).toBe('none');
+    expect(classifyTapStart(50, Infinity, cx, cy, sel, bands)).toBe('none');
   });
 });
