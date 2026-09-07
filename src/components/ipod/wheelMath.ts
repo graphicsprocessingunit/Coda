@@ -35,6 +35,7 @@ export function classifyTapStart(
   minSelectRadius: number,
   bands: WheelBands
 ): WheelZoneId {
+  'worklet';
   if (!Number.isFinite(x) || !Number.isFinite(y)) return 'none';
   if (!Number.isFinite(centerX) || !Number.isFinite(centerY) || !Number.isFinite(minSelectRadius)) return 'none';
   const dx = x - centerX;
@@ -49,11 +50,13 @@ export function classifyTapStart(
 }
 
 export function createWheelTickState(): WheelTickState {
+  'worklet';
   return { prevAngle: 0, accumulator: 0 };
 }
 
 /** Signed angular delta in degrees between two angles, unwrapped across +/-180. */
 export function unwrapAngleDelta(prev: number, curr: number): number {
+  'worklet';
   if (!Number.isFinite(prev) || !Number.isFinite(curr)) return 0;
   let d = curr - prev;
   if (d > 180) d -= 360;
@@ -62,11 +65,13 @@ export function unwrapAngleDelta(prev: number, curr: number): number {
 }
 
 export function clampTickThreshold(speed: number): number {
+  'worklet';
   if (!Number.isFinite(speed)) return 13;
   return Math.min(16, Math.max(4, 13 - speed * 0.35));
 }
 
 export function capTicks(ticks: number): number {
+  'worklet';
   if (!Number.isFinite(ticks)) return 0;
   return Math.max(-MAX_TICKS_PER_SAMPLE, Math.min(MAX_TICKS_PER_SAMPLE, ticks));
 }
@@ -78,6 +83,7 @@ export function capTicks(ticks: number): number {
  * non-finite input and runaway accumulators.
  */
 export function advanceWheelTick(state: WheelTickState, absoluteDegrees: number): number {
+  'worklet';
   if (!Number.isFinite(absoluteDegrees) || !Number.isFinite(state.accumulator)) {
     if (Number.isFinite(absoluteDegrees)) state.prevAngle = absoluteDegrees;
     if (!Number.isFinite(state.accumulator)) state.accumulator = 0;
