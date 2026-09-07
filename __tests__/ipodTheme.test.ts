@@ -9,6 +9,15 @@ import {
   IPOD_ROW_HEIGHT,
 } from '../src/components/ipod/ipodTheme';
 
+function luminance(hex: string): number {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex)!;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
 describe('IPOD_FINISHES', () => {
   it('is a curated list of finishes', () => {
     expect(IPOD_FINISHES.length).toBeGreaterThanOrEqual(6);
@@ -28,6 +37,12 @@ describe('IPOD_FINISHES', () => {
       expect(f.wheelFace).toMatch(hex);
       expect(f.wheelLabel).toMatch(hex);
       expect(f.centerFace).toMatch(hex);
+      expect(f.nowPlayingAccent).toMatch(hex);
+    }
+  });
+  it('keeps every nowPlayingAccent legible against the black Now Playing LCD', () => {
+    for (const f of IPOD_FINISHES) {
+      expect(luminance(f.nowPlayingAccent)).toBeGreaterThan(0.2);
     }
   });
 });

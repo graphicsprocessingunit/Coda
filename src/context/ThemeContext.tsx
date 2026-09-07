@@ -84,6 +84,8 @@ export interface IpodPalette {
   screenText: string;
   highlight: string;
   highlightBottom: string;
+  /** Accent used on the classic 6G Now Playing LCD (progress bar, lyrics). */
+  nowPlayingAccent: string;
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -135,6 +137,7 @@ function ipodFromFinish(finishId: string): IpodPalette {
     screenText: IPOD_SCREEN.text,
     highlight: IPOD_SCREEN.highlightTop,
     highlightBottom: IPOD_SCREEN.highlightBottom,
+    nowPlayingAccent: f.nowPlayingAccent,
   };
 }
 

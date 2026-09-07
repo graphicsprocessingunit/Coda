@@ -5,10 +5,11 @@ import { File } from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAudio, useIsPlaying, usePlaybackPosition } from '../../context/AudioContext';
+import { useTheme } from '../../context/ThemeContext';
 import { fetchLyrics } from '../../services/LyricsService';
 import { LyricsDisplay } from '../LyricsDisplay';
 import { fmtDuration } from './menus';
-import { IPOD_NOWPLAYING, IPOD_SCREEN } from './ipodTheme';
+import { IPOD_NOWPLAYING } from './ipodTheme';
 
 interface IpodNowPlayingProps {
   volumeMode: boolean;
@@ -26,6 +27,7 @@ export function IpodNowPlaying({
   const { currentTrack, volume, seekTo } = useAudio();
   const { isPlaying } = useIsPlaying();
   const { playbackPosition, duration } = usePlaybackPosition();
+  const { ipod } = useTheme();
 
   const [lyrics, setLyrics] = useState<string | null>(null);
 
@@ -89,7 +91,7 @@ export function IpodNowPlaying({
             <LyricsDisplay
               lyrics={lyrics}
               playbackPosition={playbackPosition}
-              accentColor={IPOD_SCREEN.highlightBottom}
+              accentColor={ipod.nowPlayingAccent}
               textColor={IPOD_NOWPLAYING.text}
               secondaryColor={IPOD_NOWPLAYING.dim}
               onSeek={(pos) => seekTo(pos)}
@@ -106,7 +108,7 @@ export function IpodNowPlaying({
                 />
               ) : (
                 <View style={[styles.art, styles.artFallback]}>
-                  <Ionicons name="musical-notes" size={40} color={IPOD_NOWPLAYING.secondary} />
+                  <Ionicons name="musical-notes" size={40} color={ipod.nowPlayingAccent} />
                 </View>
               )}
               <View style={styles.info}>
@@ -126,7 +128,9 @@ export function IpodNowPlaying({
 
             <Pressable onPress={onToggleVolume} style={styles.barArea}>
               <View style={styles.barTrack}>
-                <View style={[styles.barFill, { width: `${progressFill * 100}%` }]} />
+                <View
+                  style={[styles.barFill, { width: `${progressFill * 100}%`, backgroundColor: ipod.nowPlayingAccent }]}
+                />
               </View>
             </Pressable>
 
@@ -146,9 +150,11 @@ export function IpodNowPlaying({
             <Ionicons
               name={lyricsOpen ? 'close' : 'musical-notes'}
               size={13}
-              color={IPOD_NOWPLAYING.secondary}
+              color={ipod.nowPlayingAccent}
             />
-            <Text style={styles.lyricsToggleText}>{lyricsOpen ? 'Hide Lyrics' : 'Lyrics'}</Text>
+            <Text style={[styles.lyricsToggleText, { color: ipod.nowPlayingAccent }]}>
+              {lyricsOpen ? 'Hide Lyrics' : 'Lyrics'}
+            </Text>
           </Pressable>
           <Text style={styles.hint} numberOfLines={1}>
             {isPlaying ? 'SELECT p a u s e' : 'SELECT p l a y'} · scroll{' '}
