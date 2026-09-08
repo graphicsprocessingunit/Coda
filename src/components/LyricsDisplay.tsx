@@ -10,17 +10,26 @@ interface LyricsDisplayProps {
   onSeek?: (position: number) => void;
 }
 
-interface LyricLine {
+export interface LyricLine {
   time: number;
   text: string;
 }
 
-function parseSyncedLyrics(raw: string): LyricLine[] {
+export function parseSyncedLyrics(raw: string): LyricLine[] {
   const lines: LyricLine[] = [];
   const tsRegex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g;
+  const offsetRegex = /\[offset:\s*([+-]?\d+)\s*\]/;
+  const enhancedTagRegex = /<(\d{1,2}):(\d{1,2})(?:[.:,](\d{1,3}))?>/g;
   const inputLines = raw.split('\n');
+  let offset = 0;
 
   for (const inputLine of inputLines) {
+    const offsetMatch = offsetRegex.exec(inputLine);
+    if (offsetMatch && offset === 0) {
+      offset = parseInt(offsetMatch[1], 10);
+      continue;
+    }
+
     const timestamps: number[] = [];
     let tsMatch: RegExpExecArray | null;
     tsRegex.lastIndex = 0;
@@ -36,15 +45,36 @@ function parseSyncedLyrics(raw: string): LyricLine[] {
       timestamps.push(minutes * 60000 + seconds * 1000 + frac);
     }
 
-    const text = inputLine.replace(tsRegex, '').trim();
+    const text = inputLine
+      .replace(tsRegex, '')
+      .replace(enhancedTagRegex, '')
+      .trim();
 
     if (timestamps.length > 0 && text.length > 0) {
       for (const time of timestamps) {
-        lines.push({ time, text });
+        lines.push({ time: time - offset, text });
       }
     }
   }
-  return lines;
+
+  return lines.sort((a, b) => a.time - b.time);
+}
+
+export function findActiveLineIndex(lines: LyricLine[], position: number): number {
+  if (lines.length === 0) return -1;
+  let lo = 0;
+  let hi = lines.length - 1;
+  let result = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].time <= position) {
+      result = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return result;
 }
 
 function isSynced(raw: string): boolean {
@@ -68,13 +98,7 @@ export function LyricsDisplay({
 
   const activeIndex = useMemo(() => {
     if (!synced || lines.length === 0) return -1;
-    const delay = 300;
-    let idx = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (playbackPosition >= lines[i].time + delay) idx = i;
-      else break;
-    }
-    return idx;
+    return findActiveLineIndex(lines, playbackPosition);
   }, [synced, lines, playbackPosition]);
 
   useEffect(() => {
