@@ -8,7 +8,7 @@
 
 A mobile music player for iOS and Android with local library management, multi-server Navidrome streaming, crossfade, synced lyrics, and full theming support.
 
-*Built primarily using AI models. This started as a personal project to learn more about AI models, and AI was heavily involved throughout the codebase.*
+*Built primarily using AI models. This started as a personal project to learn more about AI models.*
 
 ![Expo](https://img.shields.io/badge/Expo_SDK-54-000020?style=for-the-badge&logo=expo)
 ![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react)
