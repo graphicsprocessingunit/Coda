@@ -8,6 +8,7 @@ import {
   finishFor,
   nearestFinish,
 } from '../components/ipod/ipodTheme';
+import { contrastText } from '../utils/color';
 
 export type Theme = 'dark' | 'light' | 'midnight' | 'ocean';
 export type AppLayout = 'standard' | 'ipod';
@@ -15,11 +16,14 @@ export type AppLayout = 'standard' | 'ipod';
 interface ThemeColors {
   background: string;
   card: string;
+  surface: string;
   text: string;
   textSecondary: string;
   accent: string;
+  onAccent: string;
   border: string;
   tabBar: string;
+  scrim: string;
   danger: string;
   success: string;
 }
@@ -30,44 +34,56 @@ const themes: Record<Theme, ThemeColors> = {
   dark: {
     background: '#000000',
     card: '#1C1C1E',
+    surface: '#2C2C2E',
     text: '#FFFFFF',
     textSecondary: '#8E8E93',
     accent: '#007AFF',
+    onAccent: '#FFFFFF',
     border: '#1C1C1E',
     tabBar: '#000000',
+    scrim: 'rgba(0, 0, 0, 0.55)',
     danger: '#FF3B30',
     success: '#34C759',
   },
   light: {
     background: '#F2F2F7',
     card: '#FFFFFF',
+    surface: '#FFFFFF',
     text: '#000000',
     textSecondary: '#8E8E93',
     accent: '#007AFF',
+    onAccent: '#FFFFFF',
     border: '#C6C6C8',
     tabBar: '#F2F2F7',
+    scrim: 'rgba(0, 0, 0, 0.35)',
     danger: '#FF3B30',
     success: '#34C759',
   },
   midnight: {
     background: '#0A0E27',
     card: '#1A1F3A',
+    surface: '#242B4A',
     text: '#E8E8F0',
     textSecondary: '#8B8BA7',
     accent: '#6C5CE7',
+    onAccent: '#FFFFFF',
     border: '#1A1F3A',
     tabBar: '#0A0E27',
+    scrim: 'rgba(0, 0, 0, 0.6)',
     danger: '#FF453A',
     success: '#32D74B',
   },
   ocean: {
     background: '#0F172A',
     card: '#1E293B',
+    surface: '#273449',
     text: '#F1F5F9',
     textSecondary: '#94A3B8',
     accent: '#06B6D4',
+    onAccent: '#062B33',
     border: '#1E293B',
     tabBar: '#0F172A',
+    scrim: 'rgba(0, 0, 0, 0.6)',
     danger: '#FF453A',
     success: '#32D74B',
   },
@@ -114,11 +130,14 @@ function ipodColors(p: IpodPalette): ThemeColors {
   return {
     background: p.screenBg,
     card: shade(p.screenBg, p.screenBg === '#000000' ? 14 : -4),
+    surface: shade(p.screenBg, p.screenBg === '#000000' ? 22 : -8),
     text: p.screenText,
     textSecondary: withAlpha(p.screenText, 0.62),
     accent: p.highlight,
+    onAccent: contrastText(p.highlight),
     border: withAlpha(p.screenText, 0.2),
     tabBar: p.screenBg,
+    scrim: 'rgba(0, 0, 0, 0.6)',
     danger: '#FF3B30',
     success: '#34C759',
   };

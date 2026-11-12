@@ -26,6 +26,9 @@ interface TrackListProps {
   onBatchRemove?: (uris: string[]) => void;
   onBatchDownload?: (tracks: TrackMetadata[]) => void;
   onDownload?: (track: TrackMetadata) => Promise<string | null>;
+  showHeader?: boolean;
+  showSearch?: boolean;
+  onConnectNavidrome?: () => void;
 }
 
 const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, isCurrentTrack, colors, onPress, onLongPress, onToggleFavorite, downloadProgress, downloadError, onCancelDownload, selectionMode, isSelected, onToggleSelection }: {
@@ -174,7 +177,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
   );
 });
 
-export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload, onDownload }: TrackListProps) {
+export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onTrackLongPress, onRemoveTrack, onToggleFavorite, onBatchFavorite, onBatchAddToPlaylist, onBatchRemove, onBatchDownload, onDownload, showHeader = true, showSearch = true, onConnectNavidrome }: TrackListProps) {
   const { colors } = useTheme();
   const { navidromeConnected, addToLibrary, getNavidromeCredentials } = useAudio();
   const { activeDownloads, cancelDownload } = useDownloadProgress();
@@ -296,7 +299,8 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={showHeader ? ['top'] : []}>
+      {showHeader && (
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Library</Text>
         <View style={styles.headerButtons}>
@@ -312,6 +316,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           </Pressable>
         </View>
       </View>
+      )}
 
       {selectionMode && (
         <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
@@ -327,7 +332,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
         </View>
       )}
 
-      {tracks.length > 0 && !selectionMode && (
+      {showSearch && tracks.length > 0 && !selectionMode && (
         <View style={[styles.searchContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
           <Ionicons name="search" size={18} color={colors.textSecondary} style={styles.searchIcon} />
           <TextInput
@@ -394,7 +399,7 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           title="Welcome to Coda"
           subtitle="Import music from your device or connect to Navidrome to get started."
           action={{ label: 'Import Music', onPress: onAddTracks, primary: true, icon: 'cloud-upload' }}
-          secondaryAction={{ label: 'Connect Navidrome', onPress: () => setShowNavidrome(true), icon: 'server-outline' }}
+          secondaryAction={{ label: 'Connect Navidrome', onPress: onConnectNavidrome ?? (() => setShowNavidrome(true)), icon: 'server-outline' }}
         />
       ) : filteredTracks.length === 0 ? (
         <EmptyState

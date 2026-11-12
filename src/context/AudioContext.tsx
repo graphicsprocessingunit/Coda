@@ -11,6 +11,7 @@ import { NavidromeService, NavidromeCredentials, ServerConfig } from '../service
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
 import { migrateToMultiServer } from '../services/MigrationService';
+import { shouldScrobble, shouldStartCrossfade, shuffleArray } from '../services/PlaybackLogic';
 import * as AudioEQ from 'audio-eq';
 
 export interface TrackMetadata {
@@ -20,6 +21,10 @@ export interface TrackMetadata {
   duration?: number;
   artwork?: string;
   album?: string;
+  albumArtist?: string;
+  year?: number;
+  trackNumber?: number;
+  discNumber?: number;
   source?: 'local' | 'navidrome';
   navidromeId?: string;
   isFavorite?: boolean;
@@ -227,15 +232,6 @@ const SleepTimerCtx = createContext<SleepTimerType>({ sleepTimerEnd: null, sleep
 
 export function useSleepTimer() {
   return useContext(SleepTimerCtx);
-}
-
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 }
 
 function updateLockScreen(player: AudioPlayer, track: TrackMetadata) {
@@ -1019,18 +1015,22 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (crossfadeEnabledRef.current && crossfadeDurationRef.current > 0 && !repeatEnabledRef.current && !crossfadeActiveRef.current && !crossfadeStartedRef.current) {
-        const remaining = durationMs - positionMs;
-        if (remaining <= crossfadeDurationRef.current * 1000 + 500 && remaining > 0) {
-          startCrossfade();
-        }
+      if (
+        shouldStartCrossfade({
+          enabled: crossfadeEnabledRef.current,
+          durationSeconds: crossfadeDurationRef.current,
+          repeatEnabled: repeatEnabledRef.current,
+          active: crossfadeActiveRef.current,
+          started: crossfadeStartedRef.current,
+          remainingMs: durationMs - positionMs,
+        })
+      ) {
+        startCrossfade();
       }
 
-      if (lastFmConnectedRef.current && lastFmCredsRef.current && !scrobbleSubmittedRef.current) {
+      if (lastFmConnectedRef.current && lastFmCredsRef.current) {
         const elapsed = (Date.now() - listeningStartRef.current) / 1000;
-        const durationSec = status.duration || 0;
-        const threshold = Math.min(240, durationSec / 2);
-        if (elapsed >= threshold && threshold > 0) {
+        if (shouldScrobble(elapsed, status.duration || 0, scrobbleSubmittedRef.current)) {
           scrobbleSubmittedRef.current = true;
           const currentMeta = currentTrackRef.current;
           if (currentMeta) {

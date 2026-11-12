@@ -81,14 +81,20 @@ export class FilePickerService {
       let title = fallbackTitle;
       let artist = 'Unknown Artist';
       let album: string | undefined;
+      let albumArtist: string | undefined;
+      let year: number | undefined;
+      let trackNumber: number | undefined;
       let artwork: string | undefined;
 
       try {
-        const data = await getAudioMetadata(file.uri, ['name', 'artist', 'album', 'artwork']);
+        const data = await getAudioMetadata(file.uri, ['name', 'artist', 'album', 'albumArtist', 'year', 'track', 'artwork']);
         const meta = data?.metadata;
         if (meta?.name) title = meta.name;
         if (meta?.artist) artist = meta.artist;
         if (meta?.album) album = meta.album;
+        if (meta?.albumArtist) albumArtist = meta.albumArtist;
+        if (typeof meta?.year === 'number' && meta.year > 0) year = meta.year;
+        if (typeof meta?.track === 'number' && meta.track > 0) trackNumber = meta.track;
         if (meta?.artwork) {
           artwork = base64ToArtworkFile(meta.artwork, file.name) || undefined;
         }
@@ -101,6 +107,9 @@ export class FilePickerService {
         artist,
         uri: file.uri,
         album,
+        albumArtist,
+        year,
+        trackNumber,
         artwork,
       });
     }

@@ -67,8 +67,11 @@ export interface NavidromeSong {
   artistId?: string;
   album?: string;
   albumId?: string;
+  albumArtist?: string;
   duration?: number;
   track?: number;
+  discNumber?: number;
+  year?: number;
   coverArt?: string;
 }
 
@@ -453,8 +456,11 @@ export class NavidromeService {
         artistId: s.artistId,
         album: s.album,
         albumId: s.albumId,
+        albumArtist: s.albumArtist,
         duration: s.duration,
         track: s.track,
+        discNumber: s.discNumber,
+        year: s.year,
         coverArt: s.coverArt,
       }));
       return { album, songs };
@@ -496,8 +502,11 @@ export class NavidromeService {
           artistId: s.artistId,
           album: s.album,
           albumId: s.albumId,
+          albumArtist: s.albumArtist,
           duration: s.duration,
           track: s.track,
+          discNumber: s.discNumber,
+          year: s.year,
           coverArt: s.coverArt,
         })),
       };
@@ -514,6 +523,11 @@ export class NavidromeService {
       uri: NavidromeService.getStreamUrl(creds, song.id),
       duration: song.duration,
       artwork: song.coverArt ? NavidromeService.getCoverArtUrl(creds, song.coverArt, 300) : undefined,
+      album: song.album,
+      albumArtist: song.albumArtist,
+      year: song.year,
+      trackNumber: song.track,
+      discNumber: song.discNumber,
       source: 'navidrome',
       navidromeId: song.id,
     };

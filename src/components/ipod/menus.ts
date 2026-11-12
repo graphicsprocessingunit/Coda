@@ -531,7 +531,7 @@ function buildSettings(section: SettingsSection, ctx: RowsCtx): IpodRow[] {
         : [createNavRow('Connect Last.fm', () => ctx.nav.push({ type: 'settings', section: 'lastfmPanel', highlight: 0 }))];
     case 'about':
       return [
-        { key: 'version', kind: 'nav', label: 'Version', right: '1.4.0', chevron: false, action: () => {} },
+        { key: 'version', kind: 'nav', label: 'Version', right: '1.5.0', chevron: false, action: () => {} },
         {
           key: 'github',
           kind: 'nav',

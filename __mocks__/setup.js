@@ -214,3 +214,21 @@ jest.mock('expo-file-system', () => {
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
+
+jest.mock('react-native-image-colors', () => {
+  const cache = new Map();
+  const getColors = jest.fn(async () => ({ platform: 'android', dominant: '#000000' }));
+  return {
+    __esModule: true,
+    default: {
+      getColors,
+      cache: {
+        getItem: (key) => cache.get(key),
+        setItem: (key, value) => cache.set(key, value),
+        removeItem: (key) => cache.delete(key),
+        clear: () => cache.clear(),
+      },
+    },
+    getColors,
+  };
+});

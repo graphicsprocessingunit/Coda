@@ -2,7 +2,7 @@
   "expo": {
     "name": "Coda",
     "slug": "coda-app",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "scheme": "coda",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -51,7 +51,8 @@
       "expo-audio",
       "expo-asset",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "./plugins/withSceneLifecycle"
     ],
     "owner": "aaron656"
   }

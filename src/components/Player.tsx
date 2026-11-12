@@ -2,20 +2,26 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio } from '../context/AudioContext';
+import { useAudio, usePlaybackPosition } from '../context/AudioContext';
 import { ProgressBar } from './ProgressBar';
 import { LyricsDisplay } from './LyricsDisplay';
 import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
 import { fetchLyrics } from '../services/LyricsService';
+import { useReduceMotion } from '../hooks/useReduceMotion';
+import { contrastText } from '../utils/color';
 
 interface PlayerProps {
-  currentTrack: { title: string; artist: string; uri: string; artwork?: string; album?: string } | null;
+  currentTrack: {
+    title: string;
+    artist: string;
+    uri: string;
+    artwork?: string;
+    album?: string;
+    duration?: number;
+  } | null;
   isPlaying: boolean;
-  playbackPosition: number;
-  duration: number;
   onPlay: () => void;
   onPause: () => void;
   onSkipNext: () => void;
@@ -29,13 +35,40 @@ interface PlayerProps {
   onToggleFavorite?: () => void;
   isFavorite?: boolean;
   sleepTimerRemaining?: number | null;
+  accentColor?: string;
+}
+
+function NowPlayingProgress({ onSeek, accentColor }: { onSeek: (position: number) => void; accentColor: string }) {
+  const { playbackPosition, duration } = usePlaybackPosition();
+  return <ProgressBar progress={playbackPosition} duration={duration} onSeek={onSeek} accentColor={accentColor} />;
+}
+
+function NowPlayingLyrics({
+  lyrics,
+  onSeek,
+  accentColor,
+}: {
+  lyrics: string;
+  onSeek: (position: number) => void;
+  accentColor: string;
+}) {
+  const { playbackPosition } = usePlaybackPosition();
+  const { colors } = useTheme();
+  return (
+    <LyricsDisplay
+      lyrics={lyrics}
+      playbackPosition={playbackPosition}
+      accentColor={accentColor}
+      textColor={colors.text}
+      secondaryColor={colors.textSecondary}
+      onSeek={onSeek}
+    />
+  );
 }
 
 export function Player({
   currentTrack,
   isPlaying,
-  playbackPosition,
-  duration,
   onPlay,
   onPause,
   onSkipNext,
@@ -49,12 +82,19 @@ export function Player({
   onToggleFavorite,
   isFavorite = false,
   sleepTimerRemaining,
+  accentColor,
 }: PlayerProps) {
   const { colors } = useTheme();
   const { lastFmConnected } = useAudio();
+  const reduceMotion = useReduceMotion();
+  const accent = accentColor ?? colors.accent;
+  const onAccent = contrastText(accent);
 
-  const albumScale = useRef(new Animated.Value(0.9)).current;
-  const albumOpacity = useRef(new Animated.Value(0)).current;
+  const [containerWidth, setContainerWidth] = useState(0);
+  const artSize = containerWidth > 0 ? Math.max(140, Math.min(containerWidth - 64, 360)) : 240;
+
+  const albumScale = useRef(new Animated.Value(reduceMotion ? 1 : 0.92)).current;
+  const albumOpacity = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
   const playButtonScale = useRef(new Animated.Value(1)).current;
   const skipNextScale = useRef(new Animated.Value(1)).current;
   const skipPrevScale = useRef(new Animated.Value(1)).current;
@@ -69,10 +109,10 @@ export function Player({
       currentTrack.artist,
       currentTrack.title,
       currentTrack.album || '',
-      duration
+      currentTrack.duration || 0
     );
     setLyricsText(lyrics);
-  }, [currentTrack?.artist, currentTrack?.title, currentTrack?.album, duration]);
+  }, [currentTrack?.artist, currentTrack?.title, currentTrack?.album, currentTrack?.duration]);
 
   useEffect(() => {
     setLyricsText(null);
@@ -80,17 +120,29 @@ export function Player({
   }, [currentTrack?.uri]);
 
   useEffect(() => {
+    if (reduceMotion) {
+      albumScale.setValue(1);
+      albumOpacity.setValue(1);
+      return;
+    }
+    albumScale.setValue(0.92);
+    albumOpacity.setValue(0);
     Animated.parallel([
       Animated.spring(albumScale, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 100 }),
       Animated.timing(albumOpacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, [currentTrack?.uri]);
+  }, [currentTrack?.uri, reduceMotion]);
+
+  const pressFeedback = (value: Animated.Value, peak: number) => {
+    if (reduceMotion) return;
+    Animated.sequence([
+      Animated.spring(value, { toValue: peak, useNativeDriver: true, damping: 10, stiffness: 300 }),
+      Animated.spring(value, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
+    ]).start();
+  };
 
   const handlePlayPause = () => {
-    Animated.sequence([
-      Animated.spring(playButtonScale, { toValue: 0.85, useNativeDriver: true, damping: 10, stiffness: 300 }),
-      Animated.spring(playButtonScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
-    ]).start();
+    pressFeedback(playButtonScale, 0.85);
     if (isPlaying) {
       onPause();
     } else {
@@ -99,39 +151,45 @@ export function Player({
   };
 
   const handleSkipNext = () => {
-    Animated.sequence([
-      Animated.spring(skipNextScale, { toValue: 0.8, useNativeDriver: true, damping: 10, stiffness: 300 }),
-      Animated.spring(skipNextScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
-    ]).start();
+    pressFeedback(skipNextScale, 0.8);
     onSkipNext();
   };
 
   const handleSkipPrevious = () => {
-    Animated.sequence([
-      Animated.spring(skipPrevScale, { toValue: 0.8, useNativeDriver: true, damping: 10, stiffness: 300 }),
-      Animated.spring(skipPrevScale, { toValue: 1, useNativeDriver: true, damping: 10, stiffness: 200 }),
-    ]).start();
+    pressFeedback(skipPrevScale, 0.8);
     onSkipPrevious();
   };
 
   const handleToggleFavorite = () => {
-    Animated.sequence([
-      Animated.timing(heartScale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
-      Animated.timing(heartScale, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start();
+    pressFeedback(heartScale, 1.3);
     onToggleFavorite?.();
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }, lyricsVisible && { justifyContent: 'flex-start' }]} edges={['top']}>
+    <View
+      style={[styles.container, lyricsVisible && styles.containerLyrics]}
+      onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+    >
       {!lyricsVisible && (
-        <Animated.View style={[styles.albumArtContainer, { transform: [{ scale: albumScale }], opacity: albumOpacity, backgroundColor: colors.card }]}>
+        <Animated.View
+          style={[
+            styles.albumArtContainer,
+            {
+              width: artSize,
+              height: artSize,
+              transform: [{ scale: albumScale }],
+              opacity: albumOpacity,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        >
           {currentTrack?.artwork ? (
             <Image
               source={{ uri: currentTrack.artwork }}
               style={styles.albumArt}
-              resizeMode="cover"
+              contentFit="cover"
               cachePolicy="memory-disk"
+              transition={reduceMotion ? 0 : 300}
             />
           ) : (
             <View style={styles.albumArtPlaceholder}>
@@ -148,57 +206,43 @@ export function Player({
         <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
           {currentTrack?.artist || '-'}
         </Text>
+        {!lyricsVisible && currentTrack?.album ? (
+          <Text style={[styles.album, { color: colors.textSecondary }]} numberOfLines={1}>
+            {currentTrack.album}
+          </Text>
+        ) : null}
         {lastFmConnected && currentTrack && (
           <View style={styles.scrobbleIndicator}>
-            <View style={[styles.scrobbleDot, { backgroundColor: '#E81B23' }]} />
+            <View style={[styles.scrobbleDot, { backgroundColor: colors.danger }]} />
             <Text style={[styles.scrobbleText, { color: colors.textSecondary }]}>Scrobbling</Text>
           </View>
         )}
       </View>
 
-      <ProgressBar
-        progress={playbackPosition}
-        duration={duration}
-        onSeek={onSeek}
-      />
+      <NowPlayingProgress onSeek={onSeek} accentColor={accent} />
 
       <View style={styles.secondaryControls}>
         {onToggleShuffle && (
           <Pressable onPress={onToggleShuffle} style={styles.secondaryButton}>
-            <Ionicons
-              name="shuffle"
-              size={24}
-              color={shuffleEnabled ? colors.accent : colors.textSecondary}
-            />
+            <Ionicons name="shuffle" size={24} color={shuffleEnabled ? accent : colors.textSecondary} />
           </Pressable>
         )}
         {onToggleRepeat && (
           <Pressable onPress={onToggleRepeat} style={styles.secondaryButton}>
-            <Ionicons
-              name="repeat"
-              size={24}
-              color={repeatEnabled ? colors.accent : colors.textSecondary}
-            />
+            <Ionicons name="repeat" size={24} color={repeatEnabled ? accent : colors.textSecondary} />
           </Pressable>
         )}
-        <Pressable
-          onPress={() => setLyricsVisible(!lyricsVisible)}
-          style={styles.secondaryButton}
-        >
+        <Pressable onPress={() => setLyricsVisible(!lyricsVisible)} style={styles.secondaryButton}>
           <Ionicons
             name="document-text"
             size={24}
-            color={lyricsVisible ? colors.accent : colors.textSecondary}
+            color={lyricsVisible ? accent : colors.textSecondary}
           />
         </Pressable>
         {onToggleFavorite && (
           <Pressable onPress={handleToggleFavorite} style={styles.secondaryButton}>
             <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-              <Ionicons
-                name="heart"
-                size={30}
-                color={isFavorite ? '#FF2D55' : colors.textSecondary}
-              />
+              <Ionicons name="heart" size={30} color={isFavorite ? colors.danger : colors.textSecondary} />
             </Animated.View>
           </Pressable>
         )}
@@ -210,9 +254,9 @@ export function Player({
       </View>
 
       {sleepTimerRemaining != null && sleepTimerRemaining > 0 && (
-        <View style={[styles.timerBadge, { backgroundColor: colors.accent + '20' }]}>
-          <Ionicons name="moon" size={14} color={colors.accent} />
-          <Text style={[styles.timerBadgeText, { color: colors.accent }]}>
+        <View style={[styles.timerBadge, { backgroundColor: accent + '20' }]}>
+          <Ionicons name="moon" size={14} color={accent} />
+          <Text style={[styles.timerBadgeText, { color: accent }]}>
             {Math.floor(sleepTimerRemaining / 60)}:{(sleepTimerRemaining % 60).toString().padStart(2, '0')}
           </Text>
         </View>
@@ -221,14 +265,7 @@ export function Player({
       {lyricsVisible && (
         <View style={styles.lyricsContainer}>
           {lyricsText ? (
-            <LyricsDisplay
-              lyrics={lyricsText}
-              playbackPosition={playbackPosition}
-              accentColor={colors.accent}
-              textColor={colors.text}
-              secondaryColor={colors.textSecondary}
-              onSeek={onSeek}
-            />
+            <NowPlayingLyrics lyrics={lyricsText} onSeek={onSeek} accentColor={accent} />
           ) : lyricsText === '' ? (
             <EmptyState
               icon="mic-outline"
@@ -251,16 +288,11 @@ export function Player({
           </Pressable>
         </Animated.View>
 
-        <Animated.View style={[{ backgroundColor: colors.accent }, isPlaying && { backgroundColor: colors.text }, { transform: [{ scale: playButtonScale }] }, styles.playButton]}>
-          <Pressable
-            onPress={handlePlayPause}
-            style={styles.playButtonInner}
-          >
-            <Ionicons
-              name={isPlaying ? "pause" : "play"}
-              size={36}
-              color={colors.background}
-            />
+        <Animated.View
+          style={[styles.playButton, { backgroundColor: accent, transform: [{ scale: playButtonScale }] }]}
+        >
+          <Pressable onPress={handlePlayPause} style={styles.playButtonInner}>
+            <Ionicons name={isPlaying ? 'pause' : 'play'} size={36} color={onAccent} />
           </Pressable>
         </Animated.View>
 
@@ -270,7 +302,7 @@ export function Player({
           </Pressable>
         </Animated.View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -279,19 +311,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  containerLyrics: {
+    justifyContent: 'flex-start',
   },
   albumArtContainer: {
-    width: 300,
-    height: 300,
-    marginBottom: 40,
-    borderRadius: 12,
+    marginBottom: 36,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 10,
   },
   albumArt: {
     width: '100%',
@@ -305,8 +339,9 @@ const styles = StyleSheet.create({
   },
   trackInfo: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     paddingHorizontal: 20,
+    width: '100%',
   },
   trackInfoCompact: {
     marginBottom: 8,
@@ -315,12 +350,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center',
   },
   artist: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  album: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
+    opacity: 0.8,
   },
   controls: {
     flexDirection: 'row',
@@ -382,12 +423,13 @@ const styles = StyleSheet.create({
   lyricsContainer: {
     flex: 1,
     marginBottom: 16,
+    width: '100%',
   },
   scrobbleIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 4,
+    marginTop: 6,
   },
   scrobbleDot: {
     width: 6,

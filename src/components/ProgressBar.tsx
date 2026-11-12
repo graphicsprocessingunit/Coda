@@ -1,91 +1,134 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useDerivedValue,
+  withSpring,
+  runOnJS,
+  clamp,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../context/ThemeContext';
 
 interface ProgressBarProps {
   progress: number;
   duration: number;
   onSeek: (value: number) => void;
+  accentColor?: string;
 }
 
-export function ProgressBar({ progress, duration, onSeek }: ProgressBarProps) {
-  const { colors } = useTheme();
-  const sliderWidthRef = useRef(0);
+const THUMB_SPRING = { damping: 18, stiffness: 300, mass: 0.5 };
 
-  const thumbPosition = useRef(new Animated.Value(0)).current;
-  const thumbScale = useRef(new Animated.Value(1)).current;
-  const fillWidth = useRef(new Animated.Value(0)).current;
+export function ProgressBar({ progress, duration, onSeek, accentColor }: ProgressBarProps) {
+  const { colors } = useTheme();
+  const accent = accentColor ?? colors.accent;
+
+  const width = useSharedValue(0);
+  const posFraction = useSharedValue(0);
+  const dragX = useSharedValue(0);
+  const dragging = useSharedValue(0);
+  const lastSecond = useSharedValue(-1);
+  const thumbScale = useSharedValue(1);
+
+  const [scrubMs, setScrubMs] = useState<number | null>(null);
 
   useEffect(() => {
-    const percent = duration > 0 ? Math.min((progress / duration) * 100, 100) : 0;
-    Animated.parallel([
-      Animated.timing(fillWidth, { toValue: percent, duration: 300, easing: Easing.linear, useNativeDriver: false }),
-      Animated.timing(thumbPosition, { toValue: percent, duration: 300, easing: Easing.linear, useNativeDriver: false }),
-    ]).start();
+    if (dragging.value === 1) return;
+    posFraction.value = duration > 0 ? clamp(progress / duration, 0, 1) : 0;
   }, [progress, duration]);
 
+  const displayFraction = useDerivedValue(() => {
+    if (dragging.value === 1) {
+      return width.value > 0 ? clamp(dragX.value / width.value, 0, 1) : 0;
+    }
+    return posFraction.value;
+  });
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${displayFraction.value * 100}%`,
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    left: `${displayFraction.value * 100}%`,
+    transform: [{ scale: thumbScale.value }],
+  }));
+
+  const updateScrub = (ms: number) => {
+    setScrubMs(ms);
+  };
+
+  const commit = (ms: number) => {
+    setScrubMs(null);
+    onSeek(clamp(ms, 0, duration));
+  };
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-4, 4])
+    .onBegin((e) => {
+      dragging.value = 1;
+      dragX.value = clamp(e.x, 0, width.value);
+      const ms = width.value > 0 ? (dragX.value / width.value) * duration : 0;
+      lastSecond.value = Math.floor(ms / 1000);
+      thumbScale.value = withSpring(1.4, THUMB_SPRING);
+      runOnJS(updateScrub)(ms);
+    })
+    .onUpdate((e) => {
+      dragX.value = clamp(e.x, 0, width.value);
+      const ms = width.value > 0 ? (dragX.value / width.value) * duration : 0;
+      const second = Math.floor(ms / 1000);
+      if (second !== lastSecond.value) {
+        lastSecond.value = second;
+        runOnJS(updateScrub)(ms);
+      }
+    })
+    .onEnd((e) => {
+      const x = clamp(e.x, 0, width.value);
+      const ms = width.value > 0 ? (x / width.value) * duration : 0;
+      runOnJS(commit)(ms);
+    })
+    .onFinalize(() => {
+      dragging.value = 0;
+      thumbScale.value = withSpring(1, THUMB_SPRING);
+    });
+
+  const tap = Gesture.Tap().onEnd((e, success) => {
+    if (!success) return;
+    const x = clamp(e.x, 0, width.value);
+    const ms = width.value > 0 ? (x / width.value) * duration : 0;
+    runOnJS(commit)(ms);
+  });
+
+  const gesture = Gesture.Exclusive(pan, tap);
+
   const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
+    const seconds = Math.max(0, Math.floor(ms / 1000));
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const handleSeek = (event: any) => {
-    const { locationX } = event.nativeEvent;
-    const width = sliderWidthRef.current;
-    if (width > 0 && duration > 0) {
-      const seekPosition = (locationX / width) * duration;
-      onSeek(Math.max(0, Math.min(seekPosition, duration)));
-    }
-  };
-
-  const handlePressIn = () => {
-    Animated.spring(thumbScale, { toValue: 1.5, useNativeDriver: false, damping: 10, stiffness: 300 }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(thumbScale, { toValue: 1, useNativeDriver: false, damping: 10, stiffness: 200 }).start();
-  };
-
-  const handleLayout = (event: any) => {
-    sliderWidthRef.current = event.nativeEvent.layout.width;
-  };
-
-  const fillWidthStyle = fillWidth.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
-
-  const thumbPositionStyle = thumbPosition.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-  });
+  const label = scrubMs ?? progress;
 
   return (
     <View style={styles.container}>
       <View style={styles.timeLabels}>
-        <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatTime(progress)}</Text>
+        <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatTime(label)}</Text>
         <Text style={[styles.timeText, { color: colors.textSecondary }]}>{formatTime(duration)}</Text>
       </View>
-      <Pressable
-        style={styles.sliderContainer}
-        onLayout={handleLayout}
-        onPress={handleSeek}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-      >
-        <View style={[styles.track, { backgroundColor: colors.border }]}>
-          <Animated.View style={[styles.fill, { width: fillWidthStyle, backgroundColor: colors.accent }]} />
-          <Animated.View
-            style={[
-              styles.thumb,
-              { left: thumbPositionStyle, backgroundColor: colors.accent },
-              { transform: [{ scale: thumbScale }] },
-            ]}
-          />
+      <GestureDetector gesture={gesture}>
+        <View
+          style={styles.sliderContainer}
+          onLayout={(event) => {
+            width.value = event.nativeEvent.layout.width;
+          }}
+        >
+          <View style={[styles.track, { backgroundColor: colors.border }]}>
+            <Animated.View style={[styles.fill, { backgroundColor: accent }, fillStyle]} />
+            <Animated.View style={[styles.thumb, { backgroundColor: accent }, thumbStyle]} />
+          </View>
         </View>
-      </Pressable>
+      </GestureDetector>
     </View>
   );
 }
@@ -104,6 +147,7 @@ const styles = StyleSheet.create({
   timeText: {
     fontSize: 12,
     fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
   sliderContainer: {
     width: '100%',

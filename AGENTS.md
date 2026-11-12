@@ -17,8 +17,8 @@ The `ios/` and `android/` directories are generated (`gitignored`) and are NOT t
 ## Architecture
 
 - **Entry**: `index.ts` → `App.tsx` (registers root component via `registerRootComponent`)
-- **Navigation**: Bottom tabs (Player, Library, Playlists, Settings). Playlists tab has its own Stack navigator.
-- **State**: Two React Contexts — `AudioContext` (audio engine, library, playlists, queue) and `ThemeContext` (4 themes: dark/light/midnight/ocean). All state lives in context, no Redux/Zustand.
+- **Navigation**: Bottom tabs (Player, Library, Playlists, Settings). Library and Playlists tabs have their own Stack navigators (album/artist detail, playlist/smart-playlist detail). The expanded Now Playing UI is a sheet overlay (`NowPlayingSheet`) above the tabs, with a mini player that persists across tabs.
+- **State**: Three React Contexts — `AudioContext` (audio engine, library, playlists, queue), `ThemeContext` (4 themes: dark/light/midnight/ocean), and `NowPlayingContext` (sheet expansion shared value). All state lives in context, no Redux/Zustand. Pure playback decisions (crossfade gate, scrobble threshold, shuffle) live in `src/services/PlaybackLogic.ts` and are unit-tested.
 - **Gestures/animations**: `react-native-reanimated` (~4.1.x, requires New Architecture — enabled) + `react-native-worklets` + `react-native-gesture-handler` (~3.x). Root is wrapped in `GestureHandlerRootView` in `App.tsx` — never remove it. Swipe-to-reveal rows (`SwipeableRow`) use `Gesture.Pan()` + `GestureDetector` + `useSharedValue` (UI-thread), with `activeOffsetX`/`failOffsetY` to disambiguate horizontal swipe from FlatList vertical scroll and `onFinalize` to guarantee rows settle after interrupted gestures. Action colors come from theme `colors.danger`/`colors.success` — no hardcoded backgrounds. The iPod ClickWheel also uses UI-thread `Gesture.Pan()` with its pure math workletized in `src/components/ipod/wheelMath.ts` and haptic ticks via `useWheelTicks`. Drag-to-reorder (`PanResponderView`) and the Equalizer still use the legacy `Animated`/`PanResponder` APIs.
 - **iPod Classic layout** (v1.4.0): alternate themed UI in `src/components/ipod/` — `ClickWheel`, `IpodApp` (device chrome + menu navigation in `menus.ts`), `IpodNowPlaying`, `IpodRowList`, `IpodStatusBar`, `IpodSettingsScreens`, plus `ipodTheme.ts`. `IPOD_FINISHES` (8 curated finishes: classic white/black, aluminum, mini silver/blue/green/pink/gold) color ONLY the device chrome (faceplate, bezel, wheel) and a per-finish `nowPlayingAccent`; the LCD screens deliberately stay on the fixed classic palette (`IPOD_SCREEN`/`IPOD_NOWPLAYING`) regardless of finish, matching real devices. Consume via `useTheme().ipod` (`IpodPalette`/`ipodFromFinish` in `ThemeContext`). The status-bar battery reads `Battery.usePowerState()` from `expo-battery` (charging = `CHARGING`/`FULL`, level −1 when unknown).
 - **Persistence**: `AsyncStorage` via `StorageService` — library, playlists, current track, playback position, queue. Navidrome/Last.fm login secrets stored encrypted in settings JSON (`CryptoService`), with `expo-secure-store` as the key store and legacy fallback. Theme stored separately in `ThemeContext`.
@@ -36,8 +36,9 @@ The `ios/` and `android/` directories are generated (`gitignored`) and are NOT t
 
 All app files live under `Paths.document/Coda/` (user-browsable in iOS Files → On My iPhone, via `UIFileSharingEnabled`/`LSSupportsOpeningDocumentsInPlace`). Managed exclusively through `AppStorageService`:
 
-- `Coda/Downloads/audio` — offline Navidrome tracks (`OfflineCacheService`)
-- `Coda/Downloads/artwork` — cached Navidrome + extracted local artwork
+- `Coda/Downloads/<configId>/audio` — offline Navidrome tracks, per server (`OfflineCacheService`)
+- `Coda/Downloads/<configId>/artwork` — cached Navidrome artwork, per server
+- `Coda/Downloads/artwork` — artwork extracted from imported local files (`FilePickerService`)
 - `Coda/Music` — imported local audio files (`FilePickerService`)
 - `Coda/Settings` — settings JSON (`navidrome-settings.json`, `lastfm-settings.json`)
 
@@ -45,15 +46,16 @@ All app files live under `Paths.document/Coda/` (user-browsable in iOS Files →
 
 ## Releases & builds
 
-- Version lives in `app.json` (`expo.version`, currently 1.4.0). GitHub release assets are `Coda-v<version>.apk` / `Coda-v<version>.ipa`; hotfixes replace the assets **in place** on the existing release (no version bump unless features change) via `gh release upload <tag> <file> --clobber`.
+- Version lives in `app.json` (`expo.version`, currently 1.5.0) and `package.json`. `Settings.tsx` and `ipod/menus.ts` hardcode the displayed version, so bump them with every release. GitHub release assets are `Coda-v<version>.apk` / `Coda-v<version>.ipa`; hotfixes replace the assets **in place** on the existing release (no version bump unless features change) via `gh release upload <tag> <file> --clobber`.
 - `scripts/build-apk.sh` — Android release: EAS cloud build via `eas build -p android --profile preview-android` (APK, internal dist), polls to completion, then downloads the APK to `build/Coda-v<version>.apk`. EAS project: `@aaron656/coda-app` (`e1cfe987-ef12-4e14-bae9-453f64f2d48b`), `appVersionSource: remote`.
 - iOS release IPAs are built LOCALLY in Xcode (Release archive → development export, dev-signed with the "iOS Team Provisioning Profile", sideloadable). EAS iOS production credentials are NOT configured on the server, so `eas build -p ios` fails non-interactively — don't attempt it for releases.
 - The website is a SEPARATE sibling repo at `../coda-website` (github.com/graphicsprocessingunit/coda-website, Next.js, auto-deployed by Vercel to codamusicplayer.vercel.app). Changelog: `app/changelog/page.tsx`; the homepage and `/downloads` buttons read `DOWNLOAD_URLS` in `lib/tracking.ts` — keep those pointed at the current `v<version>` release assets. The static `docs/index.html` in this repo is legacy and not deployed.
 
 ## Conventions
 
-- Components in `src/components/`, contexts in `src/context/`, services in `src/services/`. `src/screens/` exists but is empty — screens are defined inline in `App.tsx`.
+- Components in `src/components/`, contexts in `src/context/`, services in `src/services/`. Screens are defined inline in `App.tsx` (there is no `src/screens/`).
 - Theming: access via `useTheme()` hook, never hardcode colors.
 - Audio state: access via `useAudio()` hook.
 - TypeScript strict mode enabled (`tsconfig.json`).
+- Tests: `npm test` covers services, parsers, iPod menus/wheel math, library grouping/search, and playback decision helpers. Player/queue transitions still need manual on-device checks — there is no integration test for `AudioContext`.
 - Icons use `@expo/vector-icons` (Ionicons).

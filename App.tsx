@@ -1,30 +1,27 @@
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useIsFocused } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect, useRef } from 'react';
-import { Alert, Modal, View, Text, Pressable, FlatList, StyleSheet, Animated, ScrollView, TextInput, ActivityIndicator } from 'react-native';
-import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
-import { AudioProvider, useAudio, usePlaybackPosition, useDownloadProgress, useBatchDownloads, useIsPlaying, useSleepTimer, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Alert, View, Text, Pressable, StyleSheet, Animated, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AudioProvider, useAudio, useDownloadProgress, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
-import { Player } from './src/components/Player';
-import { TrackList } from './src/components/TrackList';
+import { NowPlayingProvider, useNowPlaying } from './src/context/NowPlayingContext';
+import { LibraryView } from './src/components/LibraryView';
+import { AlbumDetail } from './src/components/AlbumDetail';
+import { ArtistDetail } from './src/components/ArtistDetail';
+import { buildLibraryIndex } from './src/services/LibraryGrouping';
 import { Playlists } from './src/components/Playlists';
 import { PlaylistDetail } from './src/components/PlaylistDetail';
 import { SmartPlaylistDetail } from './src/components/SmartPlaylistDetail';
 import { evaluateSmartPlaylist } from './src/services/SmartPlaylistEngine';
 import { Settings } from './src/components/Settings';
-import { MiniPlayer } from './src/components/MiniPlayer';
-import { Queue } from './src/components/Queue';
+import { NowPlayingSheet } from './src/components/NowPlayingSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { TrackInfo } from './src/components/TrackInfo';
-import { AudioEffectsSection } from './src/components/AudioEffects';
-import { Equalizer } from './src/components/Equalizer';
 import { OfflineCacheService } from './src/services/OfflineCacheService';
-import { SleepTimerSection } from './src/components/SleepTimer';
-import { FilePickerService } from './src/services/FilePickerService';
 import { Toast } from './src/components/Toast';
 import { Sidebar } from './src/components/Sidebar';
 import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
@@ -53,445 +50,86 @@ function AnimatedTabIcon({ name, color, size, focused }: { name: string; color: 
   );
 }
 
-function PlayerScreen() {
-  const {
-    currentTrack,
-    loadTrack,
-    play,
-    pause,
-    skipNext,
-    skipPrevious,
-    seekTo,
-    shuffleEnabled,
-    repeatEnabled,
-    toggleShuffle,
-    toggleRepeat,
-    toggleFavorite,
-  } = useAudio();
-  const { playbackPosition, duration } = usePlaybackPosition();
-  const { isPlaying } = useIsPlaying();
-  const { sleepTimerRemaining } = useSleepTimer();
-  const { colors } = useTheme();
-  const [showEffects, setShowEffects] = useState(false);
-  const [showQueue, setShowQueue] = useState(false);
-  const [showTrackInfo, setShowTrackInfo] = useState(false);
-  const [showMore, setShowMore] = useState(false);
+function PlayerScreen({ navigation }: any) {
+  const { open, isExpanded, lastTabRef } = useNowPlaying();
+  const isFocused = useIsFocused();
+  const wasExpanded = useRef(false);
 
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => open());
+    return unsubscribe;
+  }, [navigation, open]);
+
+  useEffect(() => {
+    if (isExpanded) wasExpanded.current = true;
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (isFocused && wasExpanded.current && !isExpanded) {
+      wasExpanded.current = false;
+      navigation.navigate(lastTabRef.current);
+    }
+  }, [isExpanded, isFocused, navigation, lastTabRef]);
+
+  return <View style={{ flex: 1 }} />;
+}
+
+function LibraryScreen({ navigation }: any) {
   return (
-    <>
-      {!currentTrack ? (
-        <Player
-          currentTrack={null}
-          isPlaying={false}
-          playbackPosition={0}
-          duration={0}
-          onPlay={() => {}}
-          onPause={() => {}}
-          onSkipNext={() => {}}
-          onSkipPrevious={() => {}}
-          onSeek={() => {}}
-          shuffleEnabled={shuffleEnabled}
-          repeatEnabled={repeatEnabled}
-          onToggleShuffle={toggleShuffle}
-          onToggleRepeat={toggleRepeat}
-          onMorePress={() => setShowMore(true)}
-        />
-      ) : (
-        <Player
-          currentTrack={currentTrack}
-          isPlaying={isPlaying}
-          playbackPosition={playbackPosition}
-          duration={duration}
-          onPlay={play}
-          onPause={pause}
-          onSkipNext={skipNext}
-          onSkipPrevious={skipPrevious}
-          onSeek={seekTo}
-          shuffleEnabled={shuffleEnabled}
-          repeatEnabled={repeatEnabled}
-          onToggleShuffle={toggleShuffle}
-          onToggleRepeat={toggleRepeat}
-          onToggleFavorite={() => currentTrack && toggleFavorite(currentTrack.uri)}
-          isFavorite={currentTrack?.isFavorite}
-          onMorePress={() => setShowMore(true)}
-          sleepTimerRemaining={sleepTimerRemaining}
-        />
-      )}
-      <Modal
-        visible={showMore}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowMore(false)}
-      >
-        <View style={effectsModalStyles.overlay}>
-          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
-            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[effectsModalStyles.title, { color: colors.text }]}>More</Text>
-              <Pressable onPress={() => setShowMore(false)} hitSlop={10}>
-                <Ionicons name="close" size={28} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            <View style={{ padding: 12 }}>
-              <Pressable
-                style={[moreMenuStyles.row, { borderBottomColor: colors.border }]}
-                onPress={() => { setShowMore(false); setTimeout(() => setShowQueue(true), 200); }}
-              >
-                <Ionicons name="list" size={24} color={colors.textSecondary} />
-                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Queue</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </Pressable>
-              <Pressable
-                style={[moreMenuStyles.row, { borderBottomColor: colors.border }]}
-                onPress={() => { setShowMore(false); setTimeout(() => setShowEffects(true), 200); }}
-              >
-                <Ionicons name="options" size={24} color={colors.textSecondary} />
-                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Audio Settings</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </Pressable>
-              <Pressable
-                style={moreMenuStyles.row}
-                onPress={() => { setShowMore(false); setTimeout(() => setShowTrackInfo(true), 200); }}
-              >
-                <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
-                <Text style={[moreMenuStyles.rowText, { color: colors.text }]}>Song Info</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      <Modal
-        visible={showEffects}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowEffects(false)}
-      >
-        <View style={effectsModalStyles.overlay}>
-          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
-            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Audio Settings</Text>
-              <Pressable onPress={() => setShowEffects(false)} hitSlop={10}>
-                <Ionicons name="close" size={28} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-              <Equalizer />
-              <AudioEffectsSection />
-              <SleepTimerSection />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-      <Modal
-        visible={showQueue}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowQueue(false)}
-      >
-        <View style={queueModalStyles.overlay}>
-          <View style={[queueModalStyles.content, { backgroundColor: colors.background }]}>
-            <Queue onClose={() => setShowQueue(false)} />
-          </View>
-        </View>
-      </Modal>
-      <Modal
-        visible={showTrackInfo}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowTrackInfo(false)}
-      >
-        <View style={effectsModalStyles.overlay}>
-          <View style={[effectsModalStyles.content, { backgroundColor: colors.background }]}>
-            <View style={[effectsModalStyles.header, { borderBottomColor: colors.border }]}>
-              <Text style={[effectsModalStyles.title, { color: colors.text }]}>Song Info</Text>
-              <Pressable onPress={() => setShowTrackInfo(false)} hitSlop={10}>
-                <Ionicons name="close" size={28} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-              {currentTrack && <TrackInfo track={currentTrack} duration={duration} />}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </>
+    <LibraryView
+      onAlbumPress={(albumKey) => navigation.navigate('AlbumDetail', { albumKey })}
+      onArtistPress={(artistKey) => navigation.navigate('ArtistDetail', { artistKey })}
+    />
   );
 }
 
-function LibraryScreen() {
-  const { library, currentTrack, playFromLibrary, addToLibrary, removeFromLibrary, downloadTrackForLibrary, playlists, addTrackToPlaylist, createPlaylist, playNextInQueue, addToQueue, toggleFavorite, batchToggleFavorite, batchRemoveFromLibrary } = useAudio();
-  const { activeDownloads, cancelDownload } = useDownloadProgress();
-  const { batches, startBatchDownload, cancelBatch } = useBatchDownloads();
-  const { colors } = useTheme();
-  const [selectedTrack, setSelectedTrack] = useState<TrackMetadata | null>(null);
-  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-  const [showCreateFromLibraryModal, setShowCreateFromLibraryModal] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [batchUris, setBatchUris] = useState<string[] | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [batchToast, setBatchToast] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
-  const lastSelectionBatchRef = useRef<any>(null);
+function AlbumDetailScreen({ route, navigation }: any) {
+  const { library, currentTrack } = useAudio();
+  const { albumKey } = route.params;
+  const album = useMemo(() => buildLibraryIndex(library).albums.find((a) => a.key === albumKey), [library, albumKey]);
 
-  const selectionBatch = batches.get('library-selection');
-
-  useEffect(() => {
-    if (!selectionBatch || selectionBatch.running) return;
-    if (lastSelectionBatchRef.current === selectionBatch) return;
-    lastSelectionBatchRef.current = selectionBatch;
-    if (selectionBatch.cancelled) {
-      if (selectionBatch.completed > 0) {
-        setBatchToast({ message: `Download cancelled — ${selectionBatch.completed} track${selectionBatch.completed > 1 ? 's' : ''} downloaded.`, type: 'info' });
-      }
-      return;
-    }
-    if (selectionBatch.failed.length > 0) {
-      setBatchToast({ message: `${selectionBatch.completed} downloaded, ${selectionBatch.failed.length} failed. Reselect and tap download to retry.`, type: 'error' });
-    } else if (selectionBatch.completed > 0 || selectionBatch.skipped > 0) {
-      setBatchToast({
-        message: selectionBatch.completed > 0
-          ? `Downloaded ${selectionBatch.completed} track${selectionBatch.completed > 1 ? 's' : ''}${selectionBatch.skipped > 0 ? ` (${selectionBatch.skipped} already offline)` : ''}.`
-          : `All ${selectionBatch.skipped} track${selectionBatch.skipped > 1 ? 's' : ''} already offline.`,
-        type: 'success',
-      });
-    }
-  }, [selectionBatch]);
-
-  const handleAddTracks = async () => {
-    const files = await FilePickerService.pickAudioFiles();
-    if (files.length > 0) {
-      const tracks = await FilePickerService.filesToTracks(files);
-      addToLibrary(tracks);
-    }
-  };
-
-  const handleTrackPress = (track: any) => {
-    playFromLibrary(track);
-  };
-
-  const handleTrackLongPress = (track: TrackMetadata) => {
-    const isAlreadyDownloading = activeDownloads?.has(track.uri);
-    const isDownloadable = track.source === 'navidrome' && track.navidromeId && !OfflineCacheService.isTrackCached(track) && !isAlreadyDownloading;
-    const isDownloaded = OfflineCacheService.isTrackCached(track);
-    Alert.alert(
-      track.title,
-      track.artist,
-      [
-        {
-          text: 'Play Next',
-          onPress: () => playNextInQueue(track),
-        },
-        {
-          text: 'Add to Queue',
-          onPress: () => addToQueue(track),
-        },
-        {
-          text: 'Add to Playlist',
-          onPress: () => {
-            setSelectedTrack(track);
-            setShowPlaylistModal(true);
-          },
-        },
-        {
-          text: track.isFavorite ? 'Remove from Favorites' : 'Add to Favorites',
-          onPress: () => toggleFavorite(track.uri),
-        },
-        ...(isDownloadable ? [{
-          text: 'Download for Offline',
-          onPress: async () => {
-            const error = await downloadTrackForLibrary(track);
-            if (error) {
-              setDownloadError(error);
-            } else {
-              Alert.alert('Downloaded', `"${track.title}" is now available offline.`);
-            }
-          },
-        }] : []),
-        ...(isDownloaded ? [{
-          text: 'Downloaded ✓',
-          onPress: () => {},
-        }] : []),
-        { text: 'Cancel', style: 'cancel' as const },
-      ]
+  if (!album) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#8E8E93' }}>Album not found</Text>
+      </View>
     );
-  };
+  }
 
-  const handleBatchFavorite = (uris: string[]) => {
-    batchToggleFavorite(uris);
-  };
+  return <AlbumDetail album={album} currentTrack={currentTrack} onBack={() => navigation.goBack()} />;
+}
 
-  const handleBatchRemove = (uris: string[]) => {
-    Alert.alert(
-      'Remove Tracks',
-      `Remove ${uris.length} track${uris.length > 1 ? 's' : ''} from library?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => batchRemoveFromLibrary(uris) },
-      ]
+function ArtistDetailScreen({ route, navigation }: any) {
+  const { library, currentTrack } = useAudio();
+  const { artistKey } = route.params;
+  const artist = useMemo(() => buildLibraryIndex(library).artists.find((a) => a.key === artistKey), [library, artistKey]);
+
+  if (!artist) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#8E8E93' }}>Artist not found</Text>
+      </View>
     );
-  };
-
-  const handleBatchAddToPlaylist = (uris: string[]) => {
-    setBatchUris(uris);
-    setShowPlaylistModal(true);
-  };
-
-  const handleBatchDownload = (tracks: TrackMetadata[]) => {
-    startBatchDownload(tracks, 'Download selection', 'library-selection');
-  };
-
-  const handleAddToPlaylist = (playlistId: string) => {
-    if (batchUris) {
-      batchUris.forEach(uri => {
-        const track = library.find(t => t.uri === uri);
-        if (track) addTrackToPlaylist(playlistId, track);
-      });
-      setBatchUris(null);
-      setShowPlaylistModal(false);
-    } else if (selectedTrack) {
-      addTrackToPlaylist(playlistId, selectedTrack);
-      setShowPlaylistModal(false);
-      setSelectedTrack(null);
-    }
-  };
-
-  const handleCreateNewPlaylist = () => {
-    setNewPlaylistName('');
-    setShowCreateFromLibraryModal(true);
-  };
-
-  const handleConfirmCreatePlaylist = () => {
-    if (newPlaylistName.trim()) {
-      const newId = createPlaylist(newPlaylistName.trim());
-      if (batchUris) {
-        batchUris.forEach(uri => {
-          const track = library.find(t => t.uri === uri);
-          if (track) addTrackToPlaylist(newId, track);
-        });
-        setBatchUris(null);
-      } else if (selectedTrack) {
-        addTrackToPlaylist(newId, selectedTrack);
-        setSelectedTrack(null);
-      }
-      setShowPlaylistModal(false);
-      setShowCreateFromLibraryModal(false);
-      setNewPlaylistName('');
-    }
-  };
+  }
 
   return (
-    <View style={{ flex: 1 }}>
-      <TrackList
-        tracks={library}
-        currentTrack={currentTrack}
-        onTrackPress={handleTrackPress}
-        onAddTracks={handleAddTracks}
-        onTrackLongPress={handleTrackLongPress}
-        onRemoveTrack={removeFromLibrary}
-        onToggleFavorite={toggleFavorite}
-        onBatchFavorite={handleBatchFavorite}
-        onBatchRemove={handleBatchRemove}
-        onBatchAddToPlaylist={handleBatchAddToPlaylist}
-        onBatchDownload={handleBatchDownload}
-        onDownload={downloadTrackForLibrary}
-      />
-      <MiniPlayer />
-      <Modal
-        visible={showPlaylistModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPlaylistModal(false)}
-      >
-        <View style={modalStyles.modalOverlay}>
-          <SafeAreaView style={[modalStyles.modalContent, { backgroundColor: colors.card }]} edges={['bottom']}>
-            <Text style={[modalStyles.modalTitle, { color: colors.text }]}>Add to Playlist</Text>
-            {playlists.length === 0 ? (
-              <View style={modalStyles.emptyState}>
-                <Text style={[modalStyles.emptyText, { color: colors.textSecondary }]}>No playlists yet</Text>
-                <Pressable style={[modalStyles.createButton, { backgroundColor: colors.accent }]} onPress={handleCreateNewPlaylist}>
-                  <Text style={modalStyles.createButtonText}>Create Playlist</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <FlatList
-                data={playlists}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={[modalStyles.playlistItem, { borderBottomColor: colors.border }]}
-                    onPress={() => handleAddToPlaylist(item.id)}
-                  >
-                    <Text style={[modalStyles.playlistName, { color: colors.text }]}>{item.name}</Text>
-                    <Text style={[modalStyles.playlistCount, { color: colors.textSecondary }]}>{item.tracks.length} tracks</Text>
-                  </Pressable>
-                )}
-                style={modalStyles.playlistList}
-              />
-            )}
-            <Pressable
-              style={[modalStyles.cancelButton, { backgroundColor: colors.border }]}
-              onPress={() => {
-                setShowPlaylistModal(false);
-                setSelectedTrack(null);
-                setBatchUris(null);
-              }}
-            >
-              <Text style={[modalStyles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
-            </Pressable>
-            {playlists.length > 0 && (
-              <Pressable style={[modalStyles.newPlaylistButton, { backgroundColor: colors.border }]} onPress={handleCreateNewPlaylist}>
-                <Ionicons name="add-circle" size={20} color={colors.accent} />
-                <Text style={[modalStyles.newPlaylistText, { color: colors.accent }]}>New Playlist</Text>
-              </Pressable>
-            )}
-          </SafeAreaView>
-        </View>
-      </Modal>
+    <ArtistDetail
+      artist={artist}
+      currentTrack={currentTrack}
+      onBack={() => navigation.goBack()}
+      onAlbumPress={(key) => navigation.navigate('AlbumDetail', { albumKey: key })}
+    />
+  );
+}
 
-      <Modal
-        visible={showCreateFromLibraryModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setShowCreateFromLibraryModal(false);
-          setNewPlaylistName('');
-        }}
-      >
-        <Pressable style={modalStyles.modalOverlay} onPress={() => {
-          setShowCreateFromLibraryModal(false);
-          setNewPlaylistName('');
-        }}>
-          <Pressable style={[modalStyles.modalContent, { backgroundColor: colors.card }]} onPress={(e) => e.stopPropagation()}>
-            <Text style={[modalStyles.modalTitle, { color: colors.text }]}>Create Playlist</Text>
-            <TextInput
-              style={[modalStyles.input, { backgroundColor: colors.border, color: colors.text }]}
-              placeholder="Playlist name"
-              placeholderTextColor={colors.textSecondary}
-              value={newPlaylistName}
-              onChangeText={setNewPlaylistName}
-              autoFocus
-            />
-            <View style={modalStyles.modalButtons}>
-              <Pressable
-                style={[modalStyles.modalButton, { backgroundColor: 'transparent' }]}
-                onPress={() => {
-                  setShowCreateFromLibraryModal(false);
-                  setNewPlaylistName('');
-                }}
-              >
-                <Text style={[modalStyles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[modalStyles.modalButton, { backgroundColor: colors.accent }]}
-                onPress={handleConfirmCreatePlaylist}
-              >
-                <Text style={[modalStyles.modalButtonText, { color: colors.text }]}>Create</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
-      {downloadError && <Toast message={downloadError} type="error" onDismiss={() => setDownloadError(null)} />}
-      {batchToast && <Toast message={batchToast.message} type={batchToast.type} onDismiss={() => setBatchToast(null)} />}
+function LibraryStack() {
+  return (
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="LibraryHome" component={LibraryScreen} />
+        <Stack.Screen name="AlbumDetail" component={AlbumDetailScreen} />
+        <Stack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
+      </Stack.Navigator>
     </View>
   );
 }
@@ -613,7 +251,6 @@ function PlaylistsStack() {
         <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
         <Stack.Screen name="SmartPlaylistDetail" component={SmartPlaylistDetailScreen} />
       </Stack.Navigator>
-      <MiniPlayer />
     </View>
   );
 }
@@ -662,7 +299,6 @@ function SettingsScreen() {
   return (
     <View style={{ flex: 1 }}>
       <Settings onClearData={handleClearData} onClearCache={handleClearCache} />
-      <MiniPlayer />
     </View>
   );
 }
@@ -687,6 +323,7 @@ function MainTabs() {
       <View style={{ flex: 1 }}>
         {error && <Toast message={error} type="error" onDismiss={clearError} />}
         <Tab.Navigator
+        initialRouteName="Library"
         screenOptions={{
           headerShown: false,
           tabBarStyle: isTablet
@@ -709,7 +346,7 @@ function MainTabs() {
       />
       <Tab.Screen
         name="Library"
-        component={LibraryScreen}
+        component={LibraryStack}
         options={{
           tabBarIcon: ({ color, size, focused }) => (
             <AnimatedTabIcon name="musical-notes" color={color} size={size} focused={focused} />
@@ -735,6 +372,7 @@ function MainTabs() {
         }}
       />
     </Tab.Navigator>
+        <NowPlayingSheet />
       </View>
     </View>
   );
@@ -752,7 +390,9 @@ export default function App() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AudioProvider>
-              <RootLayout />
+              <NowPlayingProvider>
+                <RootLayout />
+              </NowPlayingProvider>
             </AudioProvider>
           </ThemeProvider>
         </SafeAreaProvider>
@@ -763,6 +403,7 @@ export default function App() {
 
 function RootLayout() {
   const { layout } = useTheme();
+  const { lastTabRef } = useNowPlaying();
   if (layout === 'ipod') {
     return (
       <>
@@ -772,160 +413,18 @@ function RootLayout() {
     );
   }
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer
+      ref={navigationRef}
+      onStateChange={(state) => {
+        if (!state) return;
+        const route = state.routes[state.index];
+        if (route && route.name !== 'Player') {
+          lastTabRef.current = route.name;
+        }
+      }}
+    >
       <MainTabs />
       <ThemedStatusBar />
     </NavigationContainer>
   );
 }
-
-const modalStyles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  createButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  createButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  playlistList: {
-    flex: 1,
-    marginBottom: 16,
-  },
-  playlistItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  playlistName: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  playlistCount: {
-    fontSize: 14,
-  },
-  cancelButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  newPlaylistButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  newPlaylistText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  input: {
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-  },
-  modalButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});
-
-const effectsModalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  content: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-});
-
-const queueModalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  content: {
-    flex: 1,
-    marginTop: 60,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-});
-
-const moreMenuStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  rowText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-});
