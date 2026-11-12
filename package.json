@@ -51,6 +51,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "prebuild": "expo prebuild",
+    "build:android": "bash scripts/build-apk.sh",
+    "build:ios": "bash scripts/build-ipa.sh",
     "test": "jest"
   },
   "private": true
