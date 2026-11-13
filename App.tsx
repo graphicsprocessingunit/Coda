@@ -21,7 +21,6 @@ import { evaluateSmartPlaylist } from './src/services/SmartPlaylistEngine';
 import { Settings } from './src/components/Settings';
 import { NowPlayingSheet } from './src/components/NowPlayingSheet';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
-import { OfflineCacheService } from './src/services/OfflineCacheService';
 import { Toast } from './src/components/Toast';
 import { Sidebar } from './src/components/Sidebar';
 import { useResponsiveLayout } from './src/hooks/useResponsiveLayout';
@@ -277,28 +276,9 @@ function SettingsScreen() {
     );
   };
 
-  const handleClearCache = (onSuccess?: () => void) => {
-    Alert.alert(
-      'Clear Cache',
-      'This will delete all cached Navidrome tracks and artwork.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            OfflineCacheService.clearCache();
-            onSuccess?.();
-            Alert.alert('Success', 'Cache cleared.');
-          },
-        },
-      ]
-    );
-  };
-
   return (
     <View style={{ flex: 1 }}>
-      <Settings onClearData={handleClearData} onClearCache={handleClearCache} />
+      <Settings onClearData={handleClearData} />
     </View>
   );
 }

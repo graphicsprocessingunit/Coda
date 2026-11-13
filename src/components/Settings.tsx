@@ -7,17 +7,28 @@ import { useAudio } from '../context/AudioContext';
 import { SleepTimerSection } from './SleepTimer';
 import { AudioEffectsSection } from './AudioEffects';
 import { NavidromeSettingsSection } from './NavidromeSettings';
-import { OfflineCacheService } from '../services/OfflineCacheService';
+import { AppStorageService, StorageUsage } from '../services/AppStorageService';
 import { LastFmService } from '../services/LastFmService';
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
+}
 
 interface SettingsProps {
   onClearData: () => void;
-  onClearCache?: (onSuccess?: () => void) => void;
 }
 
-export function Settings({ onClearData, onClearCache }: SettingsProps) {
+export function Settings({ onClearData }: SettingsProps) {
   const { theme, colors, setTheme, layout, setLayout } = useTheme();
-  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin } = useAudio();
+  const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, clearDownloadedTracks, clearCachedArtwork } = useAudio();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
@@ -29,11 +40,8 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
   const [lastFmToken, setLastFmToken] = useState('');
   const [lastFmLoading, setLastFmLoading] = useState(false);
   const [lastFmError, setLastFmError] = useState('');
-  const [cacheSize, setCacheSize] = useState(0);
-
-  useEffect(() => {
-    setCacheSize(OfflineCacheService.getCacheSize());
-  }, []);
+  const [showStorage, setShowStorage] = useState(false);
+  const [usage, setUsage] = useState<StorageUsage>(() => AppStorageService.getStorageUsage());
 
   useEffect(() => {
     loadSavedLastFmLogin().then((saved) => {
@@ -43,6 +51,25 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
       }
     });
   }, [loadSavedLastFmLogin]);
+
+  const confirmClearStorage = (
+    title: string,
+    message: string,
+    confirmLabel: string,
+    action: () => void,
+  ) => {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: confirmLabel,
+        style: 'destructive',
+        onPress: () => {
+          action();
+          setUsage(AppStorageService.getStorageUsage());
+        },
+      },
+    ]);
+  };
 
   const themes: { key: Theme; name: string; icon: string }[] = [
     { key: 'dark', name: 'Dark', icon: 'moon' },
@@ -144,25 +171,24 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Data</Text>
           <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
-            {onClearCache && cacheSize > 0 && (
-              <Pressable
-                style={styles.settingItem}
-                onPress={() => {
-                  onClearCache?.(() => setCacheSize(0));
-                }}
-              >
-                <View style={styles.settingLeft}>
-                  <Ionicons name="cloud-offline" size={24} color={colors.accent} />
-                  <View>
-                    <Text style={[styles.settingText, { color: colors.accent }]}>Clear Cache</Text>
-                    <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
-                      {(cacheSize / (1024 * 1024)).toFixed(1)} MB
-                    </Text>
-                  </View>
+            <Pressable
+              style={[styles.settingItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                setUsage(AppStorageService.getStorageUsage());
+                setShowStorage(true);
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="folder-outline" size={24} color={colors.textSecondary} />
+                <View>
+                  <Text style={[styles.settingText, { color: colors.text }]}>Storage</Text>
+                  <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                    {formatSize(usage.total)} used
+                  </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
-              </Pressable>
-            )}
+              </View>
+              <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+            </Pressable>
             <Pressable
               style={styles.settingItem}
               onPress={onClearData}
@@ -358,6 +384,102 @@ export function Settings({ onClearData, onClearCache }: SettingsProps) {
                   </View>
                 </View>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showStorage}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowStorage(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={[modalStyles.content, { backgroundColor: colors.background }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <Text style={[modalStyles.title, { color: colors.text }]}>Storage</Text>
+              <Pressable onPress={() => setShowStorage(false)} hitSlop={10}>
+                <Ionicons name="close" size={28} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
+              <View style={[styles.storageCard, { backgroundColor: colors.card }]}>
+                {[
+                  { label: 'Downloaded tracks', size: usage.downloadedTracks, icon: 'cloud-download-outline' },
+                  { label: 'Downloaded artwork', size: usage.downloadedArtwork, icon: 'image-outline' },
+                  { label: 'Imported music & art', size: usage.importedMusic, icon: 'musical-notes-outline' },
+                  { label: 'Server settings', size: usage.settings, icon: 'document-text-outline' },
+                ].map((row, index, rows) => (
+                  <View
+                    key={row.label}
+                    style={[
+                      modalStyles.themeRow,
+                      { borderBottomColor: colors.border },
+                      index === rows.length - 1 && { borderBottomWidth: 0 },
+                    ]}
+                  >
+                    <View style={modalStyles.themeLeft}>
+                      <Ionicons name={row.icon as any} size={22} color={colors.textSecondary} />
+                      <Text style={[modalStyles.themeName, { color: colors.text }]}>{row.label}</Text>
+                    </View>
+                    <Text style={[styles.settingValue, { color: colors.textSecondary }]}>{formatSize(row.size)}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={[styles.settingSubtext, { color: colors.textSecondary, marginTop: 10 }]}>
+                Total {formatSize(usage.total)} · Files → On My iPhone → Coda
+              </Text>
+
+              <Pressable
+                style={[
+                  modalStyles.themeRow,
+                  { borderBottomColor: colors.border, marginTop: 16 },
+                  usage.downloadedTracks === 0 && { opacity: 0.4 },
+                ]}
+                disabled={usage.downloadedTracks === 0}
+                onPress={() =>
+                  confirmClearStorage(
+                    'Remove downloads',
+                    'Offline tracks will be deleted. They stream from your server again the next time you play them.',
+                    'Remove',
+                    clearDownloadedTracks,
+                  )
+                }
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="cloud-offline-outline" size={22} color={colors.danger} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[modalStyles.themeName, { color: colors.danger }]}>Remove downloads</Text>
+                    <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                      Frees {formatSize(usage.downloadedTracks)}; playback falls back to streaming
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }, usage.downloadedArtwork === 0 && { opacity: 0.4 }]}
+                disabled={usage.downloadedArtwork === 0}
+                onPress={() =>
+                  confirmClearStorage(
+                    'Clear cached artwork',
+                    'Cached cover art from your server will be deleted and re-downloaded when needed.',
+                    'Clear',
+                    clearCachedArtwork,
+                  )
+                }
+              >
+                <View style={modalStyles.themeLeft}>
+                  <Ionicons name="image-outline" size={22} color={colors.danger} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[modalStyles.themeName, { color: colors.danger }]}>Clear cached artwork</Text>
+                    <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                      Frees {formatSize(usage.downloadedArtwork)}; imported cover art is kept
+                    </Text>
+                  </View>
+                </View>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -652,6 +774,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     marginTop: 4,
+  },
+  storageCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   lastFmError: {
     flexDirection: 'row',

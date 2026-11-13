@@ -116,3 +116,48 @@ describe('AppStorageService.migrateImportedFiles', () => {
     expect(already.exists).toBe(true);
   });
 });
+
+describe('AppStorageService storage usage', () => {
+  it('reports per-directory sizes across server configs and the legacy layout', () => {
+    AppStorageService.ensureStructure();
+    AppStorageService.ensureStructure('config-a');
+    new File(AppStorageService.getAudioCacheDir('config-a'), 'a.mp3').write(new Uint8Array([1, 2, 3, 4]));
+    new File(AppStorageService.getArtworkCacheDir('config-a'), 'a.jpg').write(new Uint8Array([1, 2, 3, 4, 5]));
+    new File(AppStorageService.audioCacheDir, 'legacy.mp3').write(new Uint8Array([1, 2, 3]));
+    new File(AppStorageService.artworkCacheDir, 'song_artwork.jpg').write(new Uint8Array([1, 2, 3, 4, 5, 6]));
+    new File(AppStorageService.musicDir, 'song.mp3').write(new Uint8Array([1, 2, 3, 4, 5]));
+
+    const usage = AppStorageService.getStorageUsage();
+
+    expect(usage.downloadedTracks).toBe(7);
+    expect(usage.downloadedArtwork).toBe(5);
+    // Imported music includes the shared artwork dir, which also holds extracted local covers.
+    expect(usage.importedMusic).toBe(11);
+    expect(usage.total).toBe(
+      usage.downloadedTracks + usage.downloadedArtwork + usage.importedMusic + usage.settings,
+    );
+  });
+
+  it('clears downloads and cached artwork but keeps imported music and cover art', () => {
+    AppStorageService.ensureStructure();
+    AppStorageService.ensureStructure('config-a');
+    const cachedTrack = new File(AppStorageService.getAudioCacheDir('config-a'), 'a.mp3');
+    cachedTrack.write(new Uint8Array([1, 2, 3]));
+    const cachedArt = new File(AppStorageService.getArtworkCacheDir('config-a'), 'a.jpg');
+    cachedArt.write(new Uint8Array([1, 2]));
+    const imported = new File(AppStorageService.musicDir, 'song.mp3');
+    imported.write(new Uint8Array([1, 2, 3, 4]));
+    const importedArt = new File(AppStorageService.artworkCacheDir, 'song_artwork.jpg');
+    importedArt.write(new Uint8Array([1, 2, 3]));
+
+    AppStorageService.clearDownloadedTracks();
+    AppStorageService.clearCachedArtwork();
+
+    expect(cachedTrack.exists).toBe(false);
+    expect(cachedArt.exists).toBe(false);
+    expect(imported.exists).toBe(true);
+    expect(importedArt.exists).toBe(true);
+    expect(AppStorageService.getStorageUsage().downloadedTracks).toBe(0);
+    expect(AppStorageService.getStorageUsage().downloadedArtwork).toBe(0);
+  });
+});

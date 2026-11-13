@@ -143,6 +143,8 @@ interface AudioContextType {
   seamlessEnabled: boolean;
   setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
+  clearDownloadedTracks: () => void;
+  clearCachedArtwork: () => void;
   lastFmConnected: boolean;
   connectLastFm: (apiKey: string, sharedSecret: string, token: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectLastFm: () => Promise<void>;
@@ -1801,6 +1803,69 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setLastFmConnected(false);
   }, [cancelSleepTimer]);
 
+  // Drop cachedUri/cachedArtwork references whose files no longer exist, and pick up any
+  // cache files that do, so playback doesn't point at a deleted download.
+  const refreshOfflineAvailability = useCallback(() => {
+    const { audio: cachedAudio, artwork: cachedArtwork } = OfflineCacheService.scanCacheDirectory();
+
+    const resolveTrack = (track: TrackMetadata): TrackMetadata => {
+      let updated = track;
+      if (updated.cachedUri && !new File(updated.cachedUri).exists) {
+        updated = { ...updated, cachedUri: undefined };
+      }
+      if (updated.cachedArtwork && !new File(updated.cachedArtwork).exists) {
+        updated = { ...updated, cachedArtwork: undefined };
+      }
+      if (updated.source === 'navidrome' && updated.navidromeId) {
+        const cachedPath = cachedAudio.get(updated.navidromeId);
+        if (cachedPath && !updated.cachedUri) updated = { ...updated, cachedUri: cachedPath };
+        if (updated.artwork && !updated.cachedArtwork) {
+          const coverArtId = updated.artwork.match(/id=([^&]+)/)?.[1];
+          const artPath = coverArtId ? cachedArtwork.get(coverArtId) : undefined;
+          if (artPath) updated = { ...updated, cachedArtwork: artPath };
+        }
+      }
+      return updated;
+    };
+
+    const resolveAll = (tracks: TrackMetadata[]): TrackMetadata[] => {
+      let changed = false;
+      const next = tracks.map((track) => {
+        const updated = resolveTrack(track);
+        if (updated !== track) changed = true;
+        return updated;
+      });
+      return changed ? next : tracks;
+    };
+
+    setLibrary((prev) => {
+      const next = resolveAll(prev);
+      if (next !== prev) StorageService.saveLibrary(next);
+      return next;
+    });
+    setQueue((prev) => {
+      const next = resolveAll(prev);
+      if (next !== prev) StorageService.saveQueue(next);
+      return next;
+    });
+    setCurrentTrack((prev) => {
+      if (!prev) return prev;
+      const next = resolveTrack(prev);
+      if (next !== prev) StorageService.saveCurrentTrack(next);
+      return next;
+    });
+  }, []);
+
+  const clearDownloadedTracks = useCallback(() => {
+    AppStorageService.clearDownloadedTracks();
+    refreshOfflineAvailability();
+  }, [refreshOfflineAvailability]);
+
+  const clearCachedArtwork = useCallback(() => {
+    AppStorageService.clearCachedArtwork();
+    refreshOfflineAvailability();
+  }, [refreshOfflineAvailability]);
+
   const checkSleepTimerExpiry = useCallback(() => {
     if (!sleepTimerEnd) return;
     const remaining = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
@@ -2126,6 +2191,8 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     seamlessEnabled,
     setSeamlessEnabled,
     clearAllData,
+    clearDownloadedTracks,
+    clearCachedArtwork,
     lastFmConnected,
     connectLastFm,
     disconnectLastFm,
@@ -2154,7 +2221,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     getNavidromeCredentials, loadSavedNavidromeLogin,
     switchServer, addServer, updateServer, deleteServer,
     setCrossfadeEnabled, setCrossfadeDuration,
-    setSeamlessEnabled, clearAllData,
+    setSeamlessEnabled, clearAllData, clearDownloadedTracks, clearCachedArtwork,
     lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, toggleFavorite,
     batchToggleFavorite, batchRemoveFromLibrary,
     error, clearError, isLoading,
