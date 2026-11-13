@@ -378,6 +378,7 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
       }
       return (
         <FlatList
+          key="albums"
           data={index.albums}
           renderItem={renderAlbum}
           keyExtractor={(item) => item.key}
@@ -392,6 +393,7 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
     }
     return (
       <FlatList
+        key="artists"
         data={index.artists}
         renderItem={renderArtist}
         keyExtractor={(item) => item.key}
