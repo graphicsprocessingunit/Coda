@@ -152,7 +152,7 @@ describe('LyricsService', () => {
     it('retries after the negative cache expires', async () => {
       await fetchLyrics(query(180000));
       await AsyncStorage.setItem(
-        '@coda_lyrics_v2_artist::song::180',
+        '@coda_lyrics_v3_artist::song::180',
         JSON.stringify({ none: true, at: Date.now() - 2 * 60 * 60 * 1000 })
       );
 

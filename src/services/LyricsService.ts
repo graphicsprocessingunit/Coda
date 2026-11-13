@@ -7,7 +7,8 @@ import { readEmbeddedLyrics } from './EmbeddedLyrics';
  * timed edits (album, radio, live, remaster) with completely different word
  * timings. A cached match from one edit must never be reused for another.
  */
-const CACHE_PREFIX = '@coda_lyrics_v2_';
+// v3 invalidates matches cached under the old, looser acceptance rules.
+const CACHE_PREFIX = '@coda_lyrics_v3_';
 const USER_AGENT = 'Coda Music Player v1.4.0';
 
 /** Remember a miss for an hour so tracks without lyrics don't refetch on every play. */
