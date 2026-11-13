@@ -85,6 +85,32 @@ export function AlbumDetail({ album, currentTrack, onBack }: AlbumDetailProps) {
           <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
             {item.artist}
           </Text>
+          {typeof progress === 'number' && progress < 1 && (
+            <View style={styles.downloadProgressContainer}>
+              {progress < 0 ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <View style={[styles.downloadProgressBar, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.downloadProgressFill,
+                      { backgroundColor: colors.accent, width: `${Math.min(progress * 100, 100)}%` },
+                    ]}
+                  />
+                </View>
+              )}
+              <Text style={[styles.downloadProgressText, { color: colors.textSecondary }]}>
+                {progress < 0 ? `${Math.round(-progress)} KB` : `${Math.round(progress * 100)}%`}
+              </Text>
+              <Pressable
+                onPress={() => cancelDownload(item.uri)}
+                hitSlop={4}
+                style={styles.cancelDownloadButton}
+              >
+                <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          )}
         </View>
         {item.source === 'navidrome' && (
           <Ionicons
