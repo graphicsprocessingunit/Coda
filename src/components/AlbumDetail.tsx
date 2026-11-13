@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Animated } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Animated, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,8 +18,8 @@ interface AlbumDetailProps {
 export function AlbumDetail({ album, currentTrack, onBack }: AlbumDetailProps) {
   const { colors } = useTheme();
   const { setQueue, loadTrack, toggleFavorite } = useAudio();
-  const { activeDownloads } = useDownloadProgress();
-  const { batches, startBatchDownload, cancelBatch } = useBatchDownloads();
+  const { activeDownloads, cancelDownload } = useDownloadProgress();
+  const { batches, startBatchDownload, cancelBatch, retryBatch, dismissBatch } = useBatchDownloads();
   const playScale = useRef(new Animated.Value(1)).current;
 
   const batchId = `album:${album.key}`;
@@ -135,6 +135,69 @@ export function AlbumDetail({ album, currentTrack, onBack }: AlbumDetailProps) {
             </Pressable>
           )}
         </View>
+
+        {batch?.running && (
+          <View style={[styles.batchProgress, { borderBottomColor: colors.border }]}>
+            <View style={[styles.batchProgressTrack, { backgroundColor: colors.border }]}>
+              <View
+                style={[
+                  styles.batchProgressFill,
+                  {
+                    backgroundColor: colors.accent,
+                    width: `${batch.total > 0 ? Math.min((batch.completed / batch.total) * 100, 100) : 0}%`,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.batchProgressLabel, { color: colors.textSecondary }]}>
+              {batch.completed}/{batch.total} downloaded
+              {batch.skipped > 0 ? ` \u00b7 ${batch.skipped} already offline` : ''}
+            </Text>
+          </View>
+        )}
+
+        {batch && !batch.running && (
+          <View
+            style={[
+              styles.batchBanner,
+              {
+                backgroundColor: batch.cancelled
+                  ? colors.card
+                  : batch.failed.length > 0
+                    ? colors.danger + '15'
+                    : colors.success + '15',
+              },
+            ]}
+          >
+            <Ionicons
+              name={batch.cancelled ? 'information-circle' : batch.failed.length > 0 ? 'alert-circle' : 'checkmark-circle'}
+              size={18}
+              color={batch.cancelled ? colors.textSecondary : batch.failed.length > 0 ? colors.danger : colors.success}
+            />
+            <Text
+              style={[
+                styles.batchBannerText,
+                { color: batch.cancelled ? colors.text : batch.failed.length > 0 ? colors.danger : colors.success },
+              ]}
+            >
+              {batch.cancelled
+                ? `Cancelled \u2014 ${batch.completed}/${batch.total} downloaded`
+                : batch.failed.length > 0
+                  ? `${batch.completed} downloaded, ${batch.failed.length} failed`
+                  : batch.skipped === batch.total
+                    ? 'All tracks were already offline'
+                    : `Download complete${batch.skipped > 0 ? ` (${batch.skipped} already offline)` : ''}`}
+            </Text>
+            {batch.failed.length > 0 && !batch.cancelled && (
+              <Pressable onPress={() => retryBatch(batchId)} hitSlop={8}>
+                <Text style={[styles.batchBannerAction, { color: colors.accent }]}>Retry</Text>
+              </Pressable>
+            )}
+            <Pressable onPress={() => dismissBatch(batchId)} hitSlop={8}>
+              <Ionicons name="close" size={16} color={colors.textSecondary} />
+            </Pressable>
+          </View>
+        )}
       </SafeAreaView>
 
       <FlatList
@@ -194,6 +257,66 @@ const styles = StyleSheet.create({
   backButton: { padding: 8 },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700' },
   headerAction: { padding: 8 },
+  batchProgress: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 6,
+  },
+  batchProgressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  batchProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  batchProgressLabel: {
+    fontSize: 12,
+  },
+  batchBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 10,
+  },
+  batchBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  batchBannerAction: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  downloadProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  downloadProgressBar: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  downloadProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  downloadProgressText: {
+    fontSize: 11,
+    minWidth: 34,
+  },
+  cancelDownloadButton: {
+    padding: 2,
+  },
   listContent: { paddingBottom: 120 },
   hero: { alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 20 },
   artwork: { width: 180, height: 180, borderRadius: 10 },
