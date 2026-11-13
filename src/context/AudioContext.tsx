@@ -272,6 +272,11 @@ function localFileExists(uri: string): boolean {
 
 function destroyPlayer(player: AudioPlayer | null) {
   if (!player) return;
+  // Tear the PCM tap down before releasing the native player; a tap left on a
+  // removed player is what made the next seek hang.
+  try {
+    player.setAudioSamplingEnabled(false);
+  } catch {}
   try {
     player.pause();
     player.clearLockScreenControls();

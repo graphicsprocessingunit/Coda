@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -112,13 +112,23 @@ export function Player({
   const trackDurationMs =
     playerDuration > 0 ? playerDuration : (currentTrack?.duration ?? 0) * 1000;
 
+  // A track switch renders once before the fetch effect clears the previous
+  // result. Never show or seek with another track's lyrics in that window.
+  const lyricsForTrack =
+    currentTrack && lyricsUriRef.current === currentTrack.uri ? lyrics : null;
+  const lyricsStatusForTrack: 'loading' | 'ready' | 'none' = !currentTrack
+    ? 'none'
+    : lyricsUriRef.current === currentTrack.uri
+      ? lyricsStatus
+      : 'loading';
+
   const lyricLines = useMemo(
-    () => (lyrics ? parseLyrics(lyrics.lyrics) : []),
-    [lyrics]
+    () => (lyricsForTrack ? parseLyrics(lyricsForTrack.lyrics) : []),
+    [lyricsForTrack]
   );
   const lyricLineTimes = useMemo(() => lyricLines.map((line) => line.time), [lyricLines]);
-  const lyricOffsetMs = useLyricsAlignment({
-    enabled: lyricsVisible && !!lyrics && syncedLyricsEnabled,
+  const { offsetMs: lyricOffsetMs, stop: stopLyricAlignment } = useLyricsAlignment({
+    enabled: lyricsVisible && !!lyricsForTrack && syncedLyricsEnabled,
     isPlaying,
     getPlayer: getAudioPlayer,
     artist: currentTrack?.artist ?? '',
@@ -126,6 +136,19 @@ export function Player({
     durationMs: trackDurationMs,
     lineTimesMs: lyricLineTimes,
   });
+  const stopLyricAlignmentRef = useRef(stopLyricAlignment);
+  stopLyricAlignmentRef.current = stopLyricAlignment;
+
+  const handleLyricSeek = useCallback(
+    (position: number) => {
+      // Stop the PCM tap before seeking; changing position mid-sample was what
+      // froze the player after switching tracks.
+      stopLyricAlignmentRef.current();
+      if (trackDurationMs > 0 && position > trackDurationMs + 500) return;
+      onSeek(position);
+    },
+    [onSeek, trackDurationMs]
+  );
 
   useEffect(() => {
     if (!currentTrack) {
@@ -352,15 +375,16 @@ export function Player({
 
       {lyricsVisible && (
         <View style={styles.lyricsContainer}>
-          {lyricsStatus === 'ready' && lyrics ? (
+          {lyricsStatusForTrack === 'ready' && lyricsForTrack ? (
             <NowPlayingLyrics
-              lyrics={lyrics.lyrics}
-              onSeek={onSeek}
+              key={currentTrack?.uri}
+              lyrics={lyricsForTrack.lyrics}
+              onSeek={handleLyricSeek}
               accentColor={accent}
               isPlaying={isPlaying}
               offsetMs={lyricOffsetMs}
             />
-          ) : lyricsStatus === 'none' ? (
+          ) : lyricsStatusForTrack === 'none' ? (
             <EmptyState
               icon="mic-outline"
               decorativeIcons={[

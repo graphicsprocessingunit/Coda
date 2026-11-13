@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import type { AudioPlayer, AudioSample } from 'expo-audio';
 
@@ -41,20 +41,24 @@ export function useLyricsAlignment({
   title,
   durationMs,
   lineTimesMs,
-}: Params): number {
+}: Params): { offsetMs: number; stop: () => void } {
   const key = lyricOffsetKey({ artist, title, durationMs });
-  const [offsetMs, setOffsetMs] = useState(0);
+  const [applied, setApplied] = useState<{ key: string; offsetMs: number }>({
+    key: '',
+    offsetMs: 0,
+  });
   const [hasCached, setHasCached] = useState(false);
   const attemptedRef = useRef<string | null>(null);
+  const stopRef = useRef<() => void>(() => {});
+  const stop = useCallback(() => stopRef.current(), []);
 
   useEffect(() => {
     let active = true;
-    setOffsetMs(0);
     setHasCached(false);
 
     loadLyricOffset(key).then((value) => {
       if (!active || value === null) return;
-      setOffsetMs(value);
+      setApplied({ key, offsetMs: value });
       setHasCached(true);
     });
 
@@ -91,6 +95,16 @@ export function useLyricsAlignment({
       timer = null;
     };
 
+    const stopThisSampling = () => {
+      if (!active) return;
+      active = false;
+      // A seek aborts calibration for this track/session; do not save a
+      // partial estimate computed across the jump.
+      attemptedRef.current = key;
+      stopSampling();
+    };
+    stopRef.current = stopThisSampling;
+
     const finish = () => {
       if (!active) return;
       active = false;
@@ -101,7 +115,7 @@ export function useLyricsAlignment({
       const estimate = estimateLyricOffset(lineTimesMs, onsets);
       if (!estimate) return;
 
-      setOffsetMs(estimate.offsetMs);
+      setApplied({ key, offsetMs: estimate.offsetMs });
       setHasCached(true);
       void saveLyricOffset(key, estimate);
     };
@@ -140,8 +154,12 @@ export function useLyricsAlignment({
     return () => {
       active = false;
       stopSampling();
+      if (stopRef.current === stopThisSampling) stopRef.current = () => {};
     };
   }, [enabled, isPlaying, hasCached, key, lineTimesMs, getPlayer]);
 
-  return offsetMs;
+  return {
+    offsetMs: applied.key === key ? applied.offsetMs : 0,
+    stop,
+  };
 }
