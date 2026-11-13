@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-nativ
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio, usePlaybackPosition } from '../context/AudioContext';
+import { useAudio, usePlaybackPosition, type TrackMetadata } from '../context/AudioContext';
 import { ProgressBar } from './ProgressBar';
 import { LyricsDisplay } from './LyricsDisplay';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -21,14 +21,7 @@ import { useReduceMotion } from '../hooks/useReduceMotion';
 import { contrastText } from '../utils/color';
 
 interface PlayerProps {
-  currentTrack: {
-    title: string;
-    artist: string;
-    uri: string;
-    artwork?: string;
-    album?: string;
-    duration?: number;
-  } | null;
+  currentTrack: TrackMetadata | null;
   isPlaying: boolean;
   onPlay: () => void;
   onPause: () => void;
@@ -167,25 +160,30 @@ export function Player({
   // Manual sync nudge, remembered per track: some files are timed against a
   // slightly different intro and no amount of matching fixes them.
   const [lyricsOffset, setLyricsOffset] = useState(0);
+  // Stream URLs embed a per-login token, so key Navidrome tracks by song id.
+  const lyricsOffsetKey = currentTrack
+    ? currentTrack.navidromeId
+      ? `navidrome:${currentTrack.navidromeId}`
+      : currentTrack.uri
+    : null;
 
   useEffect(() => {
     setLyricsOffset(0);
-    const uri = currentTrack?.uri;
-    if (!uri) return;
+    if (!lyricsOffsetKey) return;
     let cancelled = false;
-    loadLyricsOffset(uri).then((value) => {
+    loadLyricsOffset(lyricsOffsetKey).then((value) => {
       if (!cancelled) setLyricsOffset(value);
     });
     return () => {
       cancelled = true;
     };
-  }, [currentTrack?.uri]);
+  }, [lyricsOffsetKey]);
 
   const applyLyricsOffset = (value: number) => {
-    if (!currentTrack) return;
+    if (!lyricsOffsetKey) return;
     const next = clampLyricsOffset(value);
     setLyricsOffset(next);
-    void saveLyricsOffset(currentTrack.uri, next);
+    void saveLyricsOffset(lyricsOffsetKey, next);
   };
 
   useEffect(() => {
