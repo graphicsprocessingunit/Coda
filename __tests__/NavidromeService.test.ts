@@ -244,4 +244,100 @@ describe('NavidromeService', () => {
       expect(NavidromeService.loadSettingsForConfig(TEST_CONFIG_ID)).toBeNull();
     });
   });
+
+  describe('server playlists and starred songs', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('maps getPlaylists results', async () => {
+      const spy = jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({
+        playlists: {
+          playlist: [
+            { id: 'p1', name: 'Road Trip', songCount: 12, owner: 'user' },
+            { id: 'p2', name: 'Focus', songCount: 4 },
+          ],
+        },
+      } as any);
+
+      const playlists = await NavidromeService.getPlaylists(mockCreds);
+
+      expect(spy).toHaveBeenCalledWith(mockCreds, 'getPlaylists');
+      expect(playlists).toHaveLength(2);
+      expect(playlists[0]).toMatchObject({ id: 'p1', name: 'Road Trip', songCount: 12, owner: 'user' });
+      expect(playlists[1]).toMatchObject({ id: 'p2', name: 'Focus' });
+    });
+
+    it('handles a single playlist returned as an object', async () => {
+      jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({
+        playlists: { playlist: { id: 'only', name: 'Only One', songCount: 2 } },
+      } as any);
+
+      const playlists = await NavidromeService.getPlaylists(mockCreds);
+
+      expect(playlists).toHaveLength(1);
+      expect(playlists[0].name).toBe('Only One');
+    });
+
+    it('returns an empty list when the server fails', async () => {
+      jest.spyOn(NavidromeService, 'apiCall').mockRejectedValue(new Error('HTTP 500'));
+      await expect(NavidromeService.getPlaylists(mockCreds)).resolves.toEqual([]);
+    });
+
+    it('maps getPlaylist entries to songs', async () => {
+      const spy = jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({
+        playlist: {
+          id: 'p1',
+          name: 'Road Trip',
+          songCount: 2,
+          entry: [
+            { id: 's1', title: 'First', artist: 'A', duration: 100 },
+            { id: 's2', title: 'Second', artist: 'B' },
+          ],
+        },
+      } as any);
+
+      const { playlist, songs } = await NavidromeService.getPlaylist(mockCreds, 'p1');
+
+      expect(spy).toHaveBeenCalledWith(mockCreds, 'getPlaylist', { id: 'p1' });
+      expect(playlist).toMatchObject({ id: 'p1', name: 'Road Trip' });
+      expect(songs.map((s) => s.title)).toEqual(['First', 'Second']);
+      expect(songs[0].duration).toBe(100);
+    });
+
+    it('normalizes a single-entry playlist response', async () => {
+      jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({
+        playlist: { id: 'p3', name: 'Solo', entry: { id: 's9', title: 'Only Song' } },
+      } as any);
+
+      const { songs } = await NavidromeService.getPlaylist(mockCreds, 'p3');
+
+      expect(songs).toHaveLength(1);
+      expect(songs[0].id).toBe('s9');
+    });
+
+    it('returns no songs when the playlist is missing', async () => {
+      jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({} as any);
+      const result = await NavidromeService.getPlaylist(mockCreds, 'gone');
+      expect(result.playlist).toBeNull();
+      expect(result.songs).toEqual([]);
+    });
+
+    it('maps starred songs from getStarred2', async () => {
+      const spy = jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({
+        starred2: { song: [{ id: 'z1', title: 'Loved', artist: 'C', album: 'LP' }] },
+      } as any);
+
+      const songs = await NavidromeService.getStarredSongs(mockCreds);
+
+      expect(spy).toHaveBeenCalledWith(mockCreds, 'getStarred2');
+      expect(songs).toHaveLength(1);
+      expect(songs[0]).toMatchObject({ id: 'z1', title: 'Loved', album: 'LP' });
+    });
+
+    it('returns an empty list when nothing is starred', async () => {
+      jest.spyOn(NavidromeService, 'apiCall').mockResolvedValue({ starred2: {} } as any);
+      await expect(NavidromeService.getStarredSongs(mockCreds)).resolves.toEqual([]);
+    });
+  });
 });

@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
-import { Playlist, TrackMetadata, SmartPlaylist, SmartPlaylistRule } from '../context/AudioContext';
+import { useAudio, Playlist, TrackMetadata, SmartPlaylist, SmartPlaylistRule } from '../context/AudioContext';
+import { NavidromeService, NavidromePlaylist, NavidromeSong } from '../services/NavidromeService';
 import { evaluateSmartPlaylist } from '../services/SmartPlaylistEngine';
 import { EmptyState } from './EmptyState';
 
@@ -103,6 +104,7 @@ export function Playlists({
   trackToAdd,
 }: PlaylistsProps) {
   const { colors } = useTheme();
+  const { navidromeConnected, getNavidromeCredentials, playTracks } = useAudio();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [playlistName, setPlaylistName] = useState('');
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -121,6 +123,63 @@ export function Playlists({
   const [ruleValueText, setRuleValueText] = useState('');
   const [ruleValueBool, setRuleValueBool] = useState(true);
   const [ruleValueSource, setRuleValueSource] = useState<'local' | 'navidrome'>('local');
+
+  const [serverPlaylists, setServerPlaylists] = useState<NavidromePlaylist[]>([]);
+  const [starredSongs, setStarredSongs] = useState<NavidromeSong[]>([]);
+  const [serverLoading, setServerLoading] = useState(false);
+  const [serverModal, setServerModal] = useState<{ title: string; songs: NavidromeSong[] } | null>(null);
+  const [serverTracksLoading, setServerTracksLoading] = useState(false);
+
+  useEffect(() => {
+    if (!navidromeConnected) {
+      setServerPlaylists([]);
+      setStarredSongs([]);
+      return;
+    }
+    const creds = getNavidromeCredentials();
+    if (!creds) return;
+    let cancelled = false;
+    setServerLoading(true);
+    Promise.all([NavidromeService.getPlaylists(creds), NavidromeService.getStarredSongs(creds)])
+      .then(([lists, starred]) => {
+        if (cancelled) return;
+        setServerPlaylists(lists);
+        setStarredSongs(starred);
+      })
+      .catch(() => {})
+      .then(() => {
+        if (!cancelled) setServerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navidromeConnected, getNavidromeCredentials]);
+
+  const openServerPlaylist = useCallback(
+    async (playlist: NavidromePlaylist) => {
+      const creds = getNavidromeCredentials();
+      if (!creds) return;
+      setServerTracksLoading(true);
+      setServerModal({ title: playlist.name, songs: [] });
+      const { playlist: loaded, songs } = await NavidromeService.getPlaylist(creds, playlist.id);
+      setServerModal({ title: loaded?.name || playlist.name, songs });
+      setServerTracksLoading(false);
+    },
+    [getNavidromeCredentials],
+  );
+
+  const playServerSongs = useCallback(
+    (songs: NavidromeSong[], startIndex: number) => {
+      const creds = getNavidromeCredentials();
+      if (!creds || songs.length === 0) return;
+      playTracks(
+        songs.map((song) => NavidromeService.songToTrackMetadata(creds, song)),
+        startIndex,
+      );
+      setServerModal(null);
+    },
+    [getNavidromeCredentials, playTracks],
+  );
 
   const handleCreatePlaylist = () => {
     if (playlistName.trim()) {
@@ -246,7 +305,11 @@ export function Playlists({
     );
   };
 
-  type SectionItem = { id: string; type: 'header'; title: string; icon: string } | { id: string; type: 'smart'; data: SmartPlaylist } | { id: string; type: 'playlist'; data: Playlist };
+  type SectionItem =
+    | { id: string; type: 'header'; title: string; icon: string }
+    | { id: string; type: 'smart'; data: SmartPlaylist }
+    | { id: string; type: 'playlist'; data: Playlist }
+    | { id: string; type: 'server'; data: { title: string; subtitle: string; icon: string; onPress: () => void } };
 
   const smartPlaylistCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -275,8 +338,60 @@ export function Playlists({
       data: playlists.map(p => ({ id: p.id, type: 'playlist' as const, data: p })),
     });
 
+    if (navidromeConnected) {
+      const serverItems: SectionItem[] = [];
+
+      if (starredSongs.length > 0) {
+        serverItems.push({
+          id: 'server:starred',
+          type: 'server',
+          data: {
+            title: 'Starred songs',
+            subtitle: `${starredSongs.length} ${starredSongs.length === 1 ? 'song' : 'songs'}`,
+            icon: 'star',
+            onPress: () => setServerModal({ title: 'Starred songs', songs: starredSongs }),
+          },
+        });
+      }
+
+      for (const playlist of serverPlaylists) {
+        const count = playlist.songCount ?? 0;
+        serverItems.push({
+          id: `server:${playlist.id}`,
+          type: 'server',
+          data: {
+            title: playlist.name,
+            subtitle: `${count} ${count === 1 ? 'track' : 'tracks'}`,
+            icon: 'cloud',
+            onPress: () => openServerPlaylist(playlist),
+          },
+        });
+      }
+
+      if (serverItems.length > 0) {
+        sections.push({ title: 'Navidrome', icon: 'cloud', data: serverItems });
+      } else if (serverLoading) {
+        sections.push({
+          title: 'Navidrome',
+          icon: 'cloud',
+          data: [
+            {
+              id: 'server:loading',
+              type: 'server',
+              data: {
+                title: 'Loading server playlists…',
+                subtitle: '',
+                icon: 'cloud-outline',
+                onPress: () => {},
+              },
+            },
+          ],
+        });
+      }
+    }
+
     return sections;
-  }, [smartPlaylists, playlists]);
+  }, [smartPlaylists, playlists, navidromeConnected, starredSongs, serverPlaylists, serverLoading, openServerPlaylist]);
 
   const renderSectionHeader = ({ section }: { section: { title: string; icon: string } }) => (
     <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
@@ -286,6 +401,29 @@ export function Playlists({
   );
 
   const renderPlaylistSectionItem = ({ item }: { item: SectionItem }) => {
+    if (item.type === 'server') {
+      return (
+        <Pressable
+          style={[styles.playlistItem, { backgroundColor: colors.background }]}
+          onPress={item.data.onPress}
+        >
+          <View style={[styles.playlistIcon, { backgroundColor: colors.card }]}>
+            <Ionicons name={item.data.icon as any} size={32} color={colors.accent} />
+          </View>
+          <View style={styles.playlistInfo}>
+            <Text style={[styles.playlistName, { color: colors.text }]} numberOfLines={1}>
+              {item.data.title}
+            </Text>
+            {item.data.subtitle ? (
+              <Text style={[styles.playlistCount, { color: colors.textSecondary }]}>
+                {item.data.subtitle}
+              </Text>
+            ) : null}
+          </View>
+          <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+        </Pressable>
+      );
+    }
     if (item.type === 'smart') {
       return renderSmartPlaylistItem({ item: item.data });
     }
@@ -685,6 +823,71 @@ export function Playlists({
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={!!serverModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setServerModal(null)}
+      >
+        <View style={styles.serverModalOverlay}>
+          <View style={[styles.serverModalContent, { backgroundColor: colors.background }]}>
+            <View style={[styles.serverModalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.serverModalTitle, { color: colors.text }]} numberOfLines={1}>
+                {serverModal?.title ?? ''}
+              </Text>
+              <Pressable onPress={() => setServerModal(null)} hitSlop={10}>
+                <Ionicons name="close" size={26} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            {serverTracksLoading ? (
+              <ActivityIndicator color={colors.accent} style={{ marginVertical: 40 }} />
+            ) : (
+              <FlatList
+                data={serverModal?.songs ?? []}
+                keyExtractor={(song, index) => `${song.id}-${index}`}
+                contentContainerStyle={{ paddingBottom: 32 }}
+                ListHeaderComponent={
+                  (serverModal?.songs.length ?? 0) > 0 ? (
+                    <Pressable
+                      style={[styles.serverPlayAll, { backgroundColor: colors.accent }]}
+                      onPress={() => playServerSongs(serverModal?.songs ?? [], 0)}
+                    >
+                      <Ionicons name="play" size={18} color="#fff" />
+                      <Text style={styles.serverPlayAllText}>Play all</Text>
+                    </Pressable>
+                  ) : null
+                }
+                ListEmptyComponent={
+                  <Text style={[styles.serverEmpty, { color: colors.textSecondary }]}>
+                    No songs in this playlist
+                  </Text>
+                }
+                renderItem={({ item, index }) => (
+                  <Pressable
+                    style={[styles.serverTrackRow, { borderBottomColor: colors.border }]}
+                    onPress={() => playServerSongs(serverModal?.songs ?? [], index)}
+                  >
+                    <Text style={[styles.serverTrackNumber, { color: colors.textSecondary }]}>
+                      {index + 1}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }} numberOfLines={1}>
+                        {item.artist || 'Unknown Artist'}
+                      </Text>
+                    </View>
+                    <Ionicons name="play-circle" size={24} color={colors.textSecondary} />
+                  </Pressable>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -802,6 +1005,62 @@ const styles = StyleSheet.create({
   createButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  serverModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  serverModalContent: {
+    maxHeight: '85%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 24,
+  },
+  serverModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  serverModalTitle: {
+    flex: 1,
+    marginRight: 12,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  serverPlayAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 20,
+    marginVertical: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  serverPlayAllText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  serverTrackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  serverTrackNumber: {
+    width: 28,
+    fontSize: 14,
+  },
+  serverEmpty: {
+    textAlign: 'center',
+    paddingVertical: 40,
+    fontSize: 15,
   },
   sectionHeader: {
     flexDirection: 'row',

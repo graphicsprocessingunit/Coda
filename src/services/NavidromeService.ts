@@ -60,6 +60,17 @@ export interface NavidromeAlbum {
   year?: number;
 }
 
+export interface NavidromePlaylist {
+  id: string;
+  name: string;
+  songCount?: number;
+  owner?: string;
+  comment?: string;
+  coverArt?: string;
+  created?: string;
+  changed?: string;
+}
+
 export interface NavidromeSong {
   id: string;
   title: string;
@@ -73,6 +84,42 @@ export interface NavidromeSong {
   discNumber?: number;
   year?: number;
   coverArt?: string;
+}
+
+// Subsonic returns a bare object instead of a one-element array for single children.
+function asArray<T>(value: T | T[] | undefined | null): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function mapSong(s: any): NavidromeSong {
+  return {
+    id: s.id,
+    title: s.title,
+    artist: s.artist,
+    artistId: s.artistId,
+    album: s.album,
+    albumId: s.albumId,
+    albumArtist: s.albumArtist,
+    duration: s.duration,
+    track: s.track,
+    discNumber: s.discNumber,
+    year: s.year,
+    coverArt: s.coverArt,
+  };
+}
+
+function mapPlaylist(p: any): NavidromePlaylist {
+  return {
+    id: p.id,
+    name: p.name || 'Playlist',
+    songCount: p.songCount,
+    owner: p.owner,
+    comment: p.comment,
+    coverArt: p.coverArt,
+    created: p.created,
+    changed: p.changed,
+  };
 }
 
 function generateSalt(): string {
@@ -513,6 +560,45 @@ export class NavidromeService {
     } catch (error) {
       console.error('Error searching:', error);
       return { artists: [], albums: [], songs: [] };
+    }
+  }
+
+  static async getPlaylists(creds: NavidromeCredentials): Promise<NavidromePlaylist[]> {
+    try {
+      const response = await NavidromeService.apiCall<any>(creds, 'getPlaylists');
+      return asArray(response?.['playlists']?.['playlist']).map(mapPlaylist);
+    } catch (error) {
+      console.error('Error fetching playlists:', error);
+      return [];
+    }
+  }
+
+  static async getPlaylist(
+    creds: NavidromeCredentials,
+    playlistId: string,
+  ): Promise<{ playlist: NavidromePlaylist | null; songs: NavidromeSong[] }> {
+    try {
+      const response = await NavidromeService.apiCall<any>(creds, 'getPlaylist', { id: playlistId });
+      const data = response?.['playlist'];
+      if (!data) return { playlist: null, songs: [] };
+      return {
+        playlist: mapPlaylist(data),
+        songs: asArray(data.entry).map(mapSong),
+      };
+    } catch (error) {
+      console.error('Error fetching playlist:', error);
+      return { playlist: null, songs: [] };
+    }
+  }
+
+  /** Songs the user starred on the server (getStarred2). */
+  static async getStarredSongs(creds: NavidromeCredentials): Promise<NavidromeSong[]> {
+    try {
+      const response = await NavidromeService.apiCall<any>(creds, 'getStarred2');
+      return asArray(response?.['starred2']?.['song']).map(mapSong);
+    } catch (error) {
+      console.error('Error fetching starred songs:', error);
+      return [];
     }
   }
 

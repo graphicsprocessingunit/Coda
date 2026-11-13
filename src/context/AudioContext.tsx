@@ -145,6 +145,7 @@ interface AudioContextType {
   clearAllData: () => void;
   clearDownloadedTracks: () => void;
   clearCachedArtwork: () => void;
+  playTracks: (tracks: TrackMetadata[], startIndex?: number) => Promise<void>;
   lastFmConnected: boolean;
   connectLastFm: (apiKey: string, sharedSecret: string, token: string) => Promise<{ ok: boolean; error?: string }>;
   disconnectLastFm: () => Promise<void>;
@@ -1866,6 +1867,15 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     refreshOfflineAvailability();
   }, [refreshOfflineAvailability]);
 
+  // Play an ad-hoc list (server playlist, starred songs) by queueing what follows the start.
+  const playTracks = useCallback(async (tracks: TrackMetadata[], startIndex = 0) => {
+    if (tracks.length === 0) return;
+    const index = Math.min(Math.max(startIndex, 0), tracks.length - 1);
+    const track = tracks[index];
+    setQueue(tracks.slice(index + 1));
+    await loadTrack(track.cachedUri || track.uri, track, true);
+  }, [loadTrack]);
+
   const checkSleepTimerExpiry = useCallback(() => {
     if (!sleepTimerEnd) return;
     const remaining = Math.max(0, Math.ceil((sleepTimerEnd - Date.now()) / 1000));
@@ -2193,6 +2203,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     clearAllData,
     clearDownloadedTracks,
     clearCachedArtwork,
+    playTracks,
     lastFmConnected,
     connectLastFm,
     disconnectLastFm,
@@ -2221,7 +2232,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     getNavidromeCredentials, loadSavedNavidromeLogin,
     switchServer, addServer, updateServer, deleteServer,
     setCrossfadeEnabled, setCrossfadeDuration,
-    setSeamlessEnabled, clearAllData, clearDownloadedTracks, clearCachedArtwork,
+    setSeamlessEnabled, clearAllData, clearDownloadedTracks, clearCachedArtwork, playTracks,
     lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, toggleFavorite,
     batchToggleFavorite, batchRemoveFromLibrary,
     error, clearError, isLoading,
