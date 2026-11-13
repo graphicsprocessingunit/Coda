@@ -6,7 +6,7 @@ export function useAnimatedColor(color: string, duration = 450): SharedValue<str
 
   useEffect(() => {
     value.value = withTiming(color, { duration });
-  }, [color, duration]);
+  }, [color, duration, value]);
 
   return value;
 }

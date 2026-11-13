@@ -112,12 +112,12 @@ export function Player({
       currentTrack.duration || 0
     );
     setLyricsText(lyrics);
-  }, [currentTrack?.artist, currentTrack?.title, currentTrack?.album, currentTrack?.duration]);
+  }, [currentTrack]);
 
   useEffect(() => {
     setLyricsText(null);
     loadLyrics();
-  }, [currentTrack?.uri]);
+  }, [currentTrack?.uri, loadLyrics]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -131,7 +131,7 @@ export function Player({
       Animated.spring(albumScale, { toValue: 1, useNativeDriver: true, damping: 12, stiffness: 100 }),
       Animated.timing(albumOpacity, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, [currentTrack?.uri, reduceMotion]);
+  }, [currentTrack?.uri, reduceMotion, albumOpacity, albumScale]);
 
   const pressFeedback = (value: Animated.Value, peak: number) => {
     if (reduceMotion) return;
@@ -190,6 +190,7 @@ export function Player({
               contentFit="cover"
               cachePolicy="memory-disk"
               transition={reduceMotion ? 0 : 300}
+              accessible={false}
             />
           ) : (
             <View style={styles.albumArtPlaceholder}>
@@ -199,7 +200,15 @@ export function Player({
         </Animated.View>
       )}
 
-      <View style={[styles.trackInfo, lyricsVisible && styles.trackInfoCompact]}>
+      <View
+        style={[styles.trackInfo, lyricsVisible && styles.trackInfoCompact]}
+        accessible
+        accessibilityLabel={
+          currentTrack
+            ? [currentTrack.title, currentTrack.artist, currentTrack.album].filter(Boolean).join(', ')
+            : 'No track loaded'
+        }
+      >
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
           {currentTrack?.title || 'No Track Loaded'}
         </Text>
@@ -223,16 +232,34 @@ export function Player({
 
       <View style={styles.secondaryControls}>
         {onToggleShuffle && (
-          <Pressable onPress={onToggleShuffle} style={styles.secondaryButton}>
+          <Pressable
+            onPress={onToggleShuffle}
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Shuffle"
+            accessibilityState={{ selected: shuffleEnabled }}
+          >
             <Ionicons name="shuffle" size={24} color={shuffleEnabled ? accent : colors.textSecondary} />
           </Pressable>
         )}
         {onToggleRepeat && (
-          <Pressable onPress={onToggleRepeat} style={styles.secondaryButton}>
+          <Pressable
+            onPress={onToggleRepeat}
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Repeat"
+            accessibilityState={{ selected: repeatEnabled }}
+          >
             <Ionicons name="repeat" size={24} color={repeatEnabled ? accent : colors.textSecondary} />
           </Pressable>
         )}
-        <Pressable onPress={() => setLyricsVisible(!lyricsVisible)} style={styles.secondaryButton}>
+        <Pressable
+          onPress={() => setLyricsVisible(!lyricsVisible)}
+          style={styles.secondaryButton}
+          accessibilityRole="button"
+          accessibilityLabel="Lyrics"
+          accessibilityState={{ selected: lyricsVisible }}
+        >
           <Ionicons
             name="document-text"
             size={24}
@@ -240,21 +267,36 @@ export function Player({
           />
         </Pressable>
         {onToggleFavorite && (
-          <Pressable onPress={handleToggleFavorite} style={styles.secondaryButton}>
+          <Pressable
+            onPress={handleToggleFavorite}
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            accessibilityState={{ selected: isFavorite }}
+          >
             <Animated.View style={{ transform: [{ scale: heartScale }] }}>
               <Ionicons name="heart" size={30} color={isFavorite ? colors.danger : colors.textSecondary} />
             </Animated.View>
           </Pressable>
         )}
         {onMorePress && (
-          <Pressable onPress={onMorePress} style={styles.secondaryButton}>
+          <Pressable
+            onPress={onMorePress}
+            style={styles.secondaryButton}
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+          >
             <Ionicons name="ellipsis-horizontal" size={24} color={colors.textSecondary} />
           </Pressable>
         )}
       </View>
 
       {sleepTimerRemaining != null && sleepTimerRemaining > 0 && (
-        <View style={[styles.timerBadge, { backgroundColor: accent + '20' }]}>
+        <View
+          style={[styles.timerBadge, { backgroundColor: accent + '20' }]}
+          accessible
+          accessibilityLabel={`Sleep timer, ${Math.ceil(sleepTimerRemaining / 60)} minutes remaining`}
+        >
           <Ionicons name="moon" size={14} color={accent} />
           <Text style={[styles.timerBadgeText, { color: accent }]}>
             {Math.floor(sleepTimerRemaining / 60)}:{(sleepTimerRemaining % 60).toString().padStart(2, '0')}
@@ -283,7 +325,12 @@ export function Player({
 
       <View style={styles.controls}>
         <Animated.View style={{ transform: [{ scale: skipPrevScale }] }}>
-          <Pressable onPress={handleSkipPrevious} style={styles.controlButton}>
+          <Pressable
+            onPress={handleSkipPrevious}
+            style={styles.controlButton}
+            accessibilityRole="button"
+            accessibilityLabel="Previous track"
+          >
             <Ionicons name="play-skip-back" size={32} color={colors.text} />
           </Pressable>
         </Animated.View>
@@ -291,13 +338,23 @@ export function Player({
         <Animated.View
           style={[styles.playButton, { backgroundColor: accent, transform: [{ scale: playButtonScale }] }]}
         >
-          <Pressable onPress={handlePlayPause} style={styles.playButtonInner}>
+          <Pressable
+            onPress={handlePlayPause}
+            style={styles.playButtonInner}
+            accessibilityRole="button"
+            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+          >
             <Ionicons name={isPlaying ? 'pause' : 'play'} size={36} color={onAccent} />
           </Pressable>
         </Animated.View>
 
         <Animated.View style={{ transform: [{ scale: skipNextScale }] }}>
-          <Pressable onPress={handleSkipNext} style={styles.controlButton}>
+          <Pressable
+            onPress={handleSkipNext}
+            style={styles.controlButton}
+            accessibilityRole="button"
+            accessibilityLabel="Next track"
+          >
             <Ionicons name="play-skip-forward" size={32} color={colors.text} />
           </Pressable>
         </Animated.View>

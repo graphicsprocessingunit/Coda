@@ -40,7 +40,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
       Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 50 }),
     ]).start();
-  }, []);
+  }, [index, opacity, translateY]);
 
   const handlePressIn = () => {
     Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -314,7 +314,12 @@ export function SmartPlaylistDetail({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable style={styles.backButton} onPress={onBack}>
+          <Pressable
+            style={styles.backButton}
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
             <Ionicons name="chevron-back" size={28} color={colors.accent} />
           </Pressable>
           <View style={styles.headerInfo}>

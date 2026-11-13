@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../context/ThemeContext';
 import { useAudio, useIsPlaying, usePlaybackPosition, useBatchDownloads } from '../../context/AudioContext';
-import type { TrackMetadata } from '../../context/AudioContext';
 import { NavidromeService } from '../../services/NavidromeService';
 import type { NavidromeArtist, NavidromeAlbum, NavidromeSong } from '../../services/NavidromeService';
 

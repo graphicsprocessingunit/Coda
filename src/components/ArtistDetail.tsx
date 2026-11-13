@@ -73,7 +73,13 @@ export function ArtistDetail({ artist, currentTrack, onBack, onAlbumPress }: Art
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable style={styles.backButton} onPress={onBack} hitSlop={8}>
+          <Pressable
+            style={styles.backButton}
+            onPress={onBack}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
             <Ionicons name="chevron-back" size={28} color={colors.accent} />
           </Pressable>
           <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>

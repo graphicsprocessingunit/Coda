@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Pressable } from 'react-native';
+import { Text, StyleSheet, Animated, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export interface ToastProps {
@@ -27,7 +27,7 @@ export function Toast({ message, type = 'error', onDismiss, duration = 3000 }: T
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [onDismiss, duration]);
+  }, [onDismiss, duration, opacity, translateY]);
 
   const config = {
     error: { bg: '#FF3B30', icon: 'alert-circle' as const },

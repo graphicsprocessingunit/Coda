@@ -8,11 +8,6 @@ interface LRCLIBSearchResult {
   duration: number;
 }
 
-interface LRCLIBGetResponse {
-  syncedLyrics?: string;
-  plainLyrics?: string;
-}
-
 function cacheKey(artist: string, title: string): string {
   return `${LYRICS_CACHE_PREFIX}${artist}::${title}`;
 }

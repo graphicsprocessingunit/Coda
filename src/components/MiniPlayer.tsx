@@ -27,7 +27,7 @@ export const MiniPlayer = React.memo(function MiniPlayer() {
         Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
-  }, [currentTrack]);
+  }, [currentTrack, opacity, slideY]);
 
   if (!currentTrack) return null;
 
@@ -41,9 +41,15 @@ export const MiniPlayer = React.memo(function MiniPlayer() {
 
   return (
     <Animated.View style={[styles.container, { backgroundColor: colors.card, borderTopColor: colors.border }, { opacity, transform: [{ translateY: slideY }] }]}>
-      <Pressable style={styles.content} onPress={() => navigation.navigate('Player')}>
+      <Pressable
+        style={styles.content}
+        onPress={() => navigation.navigate('Player')}
+        accessibilityRole="button"
+        accessibilityLabel={`${currentTrack.title}, ${currentTrack.artist}`}
+        accessibilityHint="Opens the player"
+      >
         {currentTrack.artwork ? (
-           <Image source={{ uri: currentTrack.artwork }} style={styles.artwork} cachePolicy="memory-disk" />
+           <Image source={{ uri: currentTrack.artwork }} style={styles.artwork} cachePolicy="memory-disk" accessible={false} />
         ) : (
           <View style={[styles.artworkPlaceholder, { backgroundColor: colors.border }]}>
             <Ionicons name="musical-note" size={18} color={colors.textSecondary} />
@@ -53,13 +59,31 @@ export const MiniPlayer = React.memo(function MiniPlayer() {
           <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{currentTrack.title}</Text>
           <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>{currentTrack.artist}</Text>
         </View>
-        <Pressable style={styles.skipButton} onPress={skipPrevious} hitSlop={12}>
+        <Pressable
+          style={styles.skipButton}
+          onPress={skipPrevious}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Previous track"
+        >
           <Ionicons name="play-skip-back" size={22} color={colors.textSecondary} />
         </Pressable>
-        <Pressable style={styles.playButton} onPress={handleTogglePlay} hitSlop={12}>
+        <Pressable
+          style={styles.playButton}
+          onPress={handleTogglePlay}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+        >
           <Ionicons name={isPlaying ? 'pause' : 'play'} size={28} color={colors.accent} />
         </Pressable>
-        <Pressable style={styles.skipButton} onPress={skipNext} hitSlop={12}>
+        <Pressable
+          style={styles.skipButton}
+          onPress={skipNext}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Next track"
+        >
           <Ionicons name="play-skip-forward" size={22} color={colors.textSecondary} />
         </Pressable>
       </Pressable>

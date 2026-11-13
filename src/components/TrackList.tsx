@@ -55,7 +55,7 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
       Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 50, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: index * 50 }),
     ]).start();
-  }, []);
+  }, [index, opacity, translateY]);
 
   const handlePressIn = () => {
     Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -81,6 +81,16 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
         onLongPress={!selectionMode && onLongPress ? () => onLongPress(item) : undefined}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.title}, ${item.artist}`}
+        accessibilityHint={
+          selectionMode
+            ? 'Selects this track'
+            : onLongPress
+              ? 'Plays this track. Long press to select multiple tracks.'
+              : 'Plays this track'
+        }
+        accessibilityState={{ selected: selectionMode ? !!isSelected : isCurrentTrack }}
       >
         <View style={styles.trackNumber}>
           {selectionMode ? (
@@ -109,9 +119,9 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
         </View>
 
         {item.artwork ? (
-          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" />
+          <Image source={{ uri: item.artwork }} style={styles.trackArtwork} cachePolicy="memory-disk" accessible={false} />
         ) : (
-          <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]}>
+          <View style={[styles.trackArtworkPlaceholder, { backgroundColor: colors.card }]} accessible={false}>
             <Ionicons name="musical-note" size={24} color={colors.textSecondary} />
           </View>
         )}
@@ -144,7 +154,13 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
                   : `${Math.round(downloadProgress * 100)}%`}
               </Text>
               {onCancelDownload && downloadProgress < 1 && (
-                <Pressable onPress={onCancelDownload} hitSlop={4} style={styles.cancelDownloadButton}>
+                <Pressable
+                  onPress={onCancelDownload}
+                  hitSlop={4}
+                  style={styles.cancelDownloadButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel download"
+                >
                   <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
                 </Pressable>
               )}
@@ -164,7 +180,14 @@ const AnimatedTrackItem = React.memo(function AnimatedTrackItem({ item, index, i
           <Ionicons name="play" size={20} color={colors.accent} />
         )}
         {!selectionMode && onToggleFavorite && (
-          <Pressable onPress={(e) => { e.stopPropagation(); onToggleFavorite(item.uri); }} hitSlop={8} style={styles.heartButton}>
+          <Pressable
+            onPress={(e) => { e.stopPropagation(); onToggleFavorite(item.uri); }}
+            hitSlop={8}
+            style={styles.heartButton}
+            accessibilityRole="button"
+            accessibilityLabel={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            accessibilityState={{ selected: !!item.isFavorite }}
+          >
             <Ionicons
               name="heart"
               size={20}
@@ -304,14 +327,24 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Library</Text>
         <View style={styles.headerButtons}>
-          <Pressable style={styles.navidromeButton} onPress={() => setShowNavidrome(true)}>
+          <Pressable
+            style={styles.navidromeButton}
+            onPress={() => setShowNavidrome(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Navidrome servers"
+          >
             <Ionicons
               name="server-outline"
               size={24}
               color={navidromeConnected ? '#34C759' : colors.textSecondary}
             />
           </Pressable>
-          <Pressable style={styles.addButton} onPress={onAddTracks}>
+          <Pressable
+            style={styles.addButton}
+            onPress={onAddTracks}
+            accessibilityRole="button"
+            accessibilityLabel="Import music"
+          >
             <Ionicons name="add-circle" size={24} color={colors.accent} />
           </Pressable>
         </View>
@@ -320,13 +353,25 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
 
       {selectionMode && (
         <View style={[styles.selectionHeader, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-          <Pressable onPress={() => setSelectedUris(new Set(filteredTracks.map(t => t.uri)))}>
+          <Pressable
+            onPress={() => setSelectedUris(new Set(filteredTracks.map(t => t.uri)))}
+            accessibilityRole="button"
+            accessibilityLabel="Select all tracks"
+          >
             <Text style={[styles.selectionAction, { color: colors.accent }]}>All</Text>
           </Pressable>
-          <Pressable onPress={() => setSelectedUris(new Set())}>
+          <Pressable
+            onPress={() => setSelectedUris(new Set())}
+            accessibilityRole="button"
+            accessibilityLabel="Select no tracks"
+          >
             <Text style={[styles.selectionAction, { color: colors.textSecondary }]}>None</Text>
           </Pressable>
-          <Pressable onPress={() => { setSelectionMode(false); setSelectedUris(new Set()); }}>
+          <Pressable
+            onPress={() => { setSelectionMode(false); setSelectedUris(new Set()); }}
+            accessibilityRole="button"
+            accessibilityLabel="Done selecting"
+          >
             <Text style={[styles.selectionAction, { color: colors.accent }]}>Done</Text>
           </Pressable>
         </View>
@@ -342,9 +387,15 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCorrect={false}
+            accessibilityLabel="Search tracks"
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
               <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
             </Pressable>
           )}
@@ -357,12 +408,18 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
             <Pressable
               style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'all' && { backgroundColor: colors.accent, borderColor: colors.accent }]}
               onPress={() => setFilterMode('all')}
+              accessibilityRole="button"
+              accessibilityLabel="Show all tracks"
+              accessibilityState={{ selected: filterMode === 'all' }}
             >
               <Text style={[styles.filterChipText, { color: filterMode === 'all' ? '#FFFFFF' : colors.text }]}>All</Text>
             </Pressable>
             <Pressable
               style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'favorites' && { backgroundColor: '#FF2D55', borderColor: '#FF2D55' }]}
               onPress={() => setFilterMode('favorites')}
+              accessibilityRole="button"
+              accessibilityLabel="Show favorites"
+              accessibilityState={{ selected: filterMode === 'favorites' }}
             >
               <Ionicons name="heart" size={14} color={filterMode === 'favorites' ? '#FFFFFF' : '#FF2D55'} />
               <Text style={[styles.filterChipText, { color: filterMode === 'favorites' ? '#FFFFFF' : colors.text }]}>Favorites</Text>
@@ -370,6 +427,9 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
             <Pressable
               style={[styles.filterChip, { borderColor: colors.border }, filterMode === 'downloads' && { backgroundColor: '#34C759', borderColor: '#34C759' }]}
               onPress={() => setFilterMode('downloads')}
+              accessibilityRole="button"
+              accessibilityLabel="Show downloads"
+              accessibilityState={{ selected: filterMode === 'downloads' }}
             >
               <Ionicons name="download-outline" size={14} color={filterMode === 'downloads' ? '#FFFFFF' : '#34C759'} />
               <Text style={[styles.filterChipText, { color: filterMode === 'downloads' ? '#FFFFFF' : colors.text }]}>Downloads</Text>
@@ -378,6 +438,10 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           <Pressable
             style={styles.sortButton}
             onPress={() => setSortMode((prev) => prev === 'title' ? 'playCount' : 'title')}
+            accessibilityRole="button"
+            accessibilityLabel="Sort tracks"
+            accessibilityValue={{ text: sortMode === 'playCount' ? 'By play count' : 'By title' }}
+            accessibilityHint="Switches between title and play count"
           >
             <Ionicons
               name={sortMode === 'playCount' ? 'trophy' : 'arrow-down'}
@@ -437,7 +501,13 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
               <Text style={[styles.batchCount, { color: colors.text }]}>
                 {selectionBatch.completed}/{selectionBatch.total} downloaded{selectionBatch.skipped > 0 ? ` · ${selectionBatch.skipped} already offline` : ''}
               </Text>
-              <Pressable style={styles.batchButton} onPress={() => cancelBatch('library-selection')} hitSlop={8}>
+              <Pressable
+                style={styles.batchButton}
+                onPress={() => cancelBatch('library-selection')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel download"
+              >
                 <Ionicons name="close-circle" size={22} color={colors.danger} />
               </Pressable>
             </View>
@@ -446,25 +516,45 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
               <Text style={[styles.batchCount, { color: colors.text }]}>{selectedUris.size} selected</Text>
               <View style={styles.batchActions}>
                 {onBatchFavorite && (
-                  <Pressable style={styles.batchButton} onPress={() => onBatchFavorite([...selectedUris])}>
+                  <Pressable
+                    style={styles.batchButton}
+                    onPress={() => onBatchFavorite([...selectedUris])}
+                    accessibilityRole="button"
+                    accessibilityLabel="Favorite selected tracks"
+                  >
                     <Ionicons name="heart" size={20} color={colors.accent} />
                   </Pressable>
                 )}
                 {onBatchAddToPlaylist && (
-                  <Pressable style={styles.batchButton} onPress={() => onBatchAddToPlaylist([...selectedUris])}>
+                  <Pressable
+                    style={styles.batchButton}
+                    onPress={() => onBatchAddToPlaylist([...selectedUris])}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add selected tracks to a playlist"
+                  >
                     <Ionicons name="list" size={20} color={colors.accent} />
                   </Pressable>
                 )}
                 {onBatchDownload && (
-                  <Pressable style={styles.batchButton} onPress={() => {
-                    const tracks = filteredTracks.filter(t => selectedUris.has(t.uri));
-                    onBatchDownload(tracks);
-                  }}>
+                  <Pressable
+                    style={styles.batchButton}
+                    onPress={() => {
+                      const tracks = filteredTracks.filter(t => selectedUris.has(t.uri));
+                      onBatchDownload(tracks);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Download selected tracks"
+                  >
                     <Ionicons name="download" size={20} color={colors.accent} />
                   </Pressable>
                 )}
                 {onBatchRemove && (
-                  <Pressable style={styles.batchButton} onPress={() => onBatchRemove([...selectedUris])}>
+                  <Pressable
+                    style={styles.batchButton}
+                    onPress={() => onBatchRemove([...selectedUris])}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove selected tracks"
+                  >
                     <Ionicons name="trash" size={20} color="#FF3B30" />
                   </Pressable>
                 )}
@@ -484,7 +574,12 @@ export function TrackList({ tracks, currentTrack, onTrackPress, onAddTracks, onT
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Navidrome</Text>
-              <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
+              <Pressable
+                onPress={() => setShowNavidrome(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close Navidrome browser"
+              >
                 <Ionicons name="close" size={28} color={colors.textSecondary} />
               </Pressable>
             </View>

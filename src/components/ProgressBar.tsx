@@ -36,7 +36,7 @@ export function ProgressBar({ progress, duration, onSeek, accentColor }: Progres
   useEffect(() => {
     if (dragging.value === 1) return;
     posFraction.value = duration > 0 ? clamp(progress / duration, 0, 1) : 0;
-  }, [progress, duration]);
+  }, [progress, duration, dragging, posFraction]);
 
   const displayFraction = useDerivedValue(() => {
     if (dragging.value === 1) {
@@ -119,6 +119,27 @@ export function ProgressBar({ progress, duration, onSeek, accentColor }: Progres
       <GestureDetector gesture={gesture}>
         <View
           style={styles.sliderContainer}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Playback position"
+          accessibilityValue={{
+            min: 0,
+            max: Math.max(0, Math.round(duration)),
+            now: Math.max(0, Math.round(Math.min(label, duration))),
+            text: `${formatTime(label)} of ${formatTime(duration)}`,
+          }}
+          accessibilityActions={[
+            { name: 'increment', label: 'Forward 15 seconds' },
+            { name: 'decrement', label: 'Back 15 seconds' },
+          ]}
+          onAccessibilityAction={(event) => {
+            const step = 15_000;
+            if (event.nativeEvent.actionName === 'increment') {
+              commit(Math.min(label + step, duration));
+            } else if (event.nativeEvent.actionName === 'decrement') {
+              commit(Math.max(label - step, 0));
+            }
+          }}
           onLayout={(event) => {
             width.value = event.nativeEvent.layout.width;
           }}

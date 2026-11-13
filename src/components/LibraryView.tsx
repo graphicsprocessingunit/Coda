@@ -38,10 +38,10 @@ interface LibraryViewProps {
 
 function ArtworkThumb({ uri, size = 48, radius = 6, colors }: { uri?: string; size?: number; radius?: number; colors: any }) {
   if (uri) {
-    return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: radius }} cachePolicy="memory-disk" />;
+    return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: radius }} cachePolicy="memory-disk" accessible={false} />;
   }
   return (
-    <View style={{ width: size, height: size, borderRadius: radius, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
+    <View style={{ width: size, height: size, borderRadius: radius, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }} accessible={false}>
       <Ionicons name="musical-note" size={size * 0.45} color={colors.textSecondary} />
     </View>
   );
@@ -66,7 +66,7 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
     playPlaylist,
   } = useAudio();
   const { activeDownloads } = useDownloadProgress();
-  const { batches, startBatchDownload, cancelBatch } = useBatchDownloads();
+  const { batches, startBatchDownload } = useBatchDownloads();
   const { colors } = useTheme();
 
   const [tab, setTab] = useState<LibraryTab>('songs');
@@ -218,7 +218,13 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
   };
 
   const renderAlbum = ({ item }: { item: AlbumGroup }) => (
-    <Pressable style={styles.albumCard} onPress={() => onAlbumPress(item.key)}>
+    <Pressable
+      style={styles.albumCard}
+      onPress={() => onAlbumPress(item.key)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.album}, ${item.albumArtist}${item.year ? `, ${item.year}` : ''}`}
+      accessibilityHint="Opens album"
+    >
       {item.artUri ? (
         <Image source={{ uri: item.artUri }} style={styles.albumArt} cachePolicy="memory-disk" />
       ) : (
@@ -237,6 +243,9 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
     <Pressable
       style={[styles.artistRow, { borderBottomColor: colors.border }]}
       onPress={() => onArtistPress(item.key)}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.artist}, ${item.albums.length} ${item.albums.length === 1 ? 'album' : 'albums'}, ${item.trackCount} ${item.trackCount === 1 ? 'song' : 'songs'}`}
+      accessibilityHint="Opens artist"
     >
       {item.artUri ? (
         <Image source={{ uri: item.artUri }} style={styles.artistArt} cachePolicy="memory-disk" />
@@ -272,7 +281,14 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
           <>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Songs</Text>
             {results.songs.map((track) => (
-              <Pressable key={`song-${track.uri}`} style={styles.resultRow} onPress={() => playFromLibrary(track)}>
+              <Pressable
+                key={`song-${track.uri}`}
+                style={styles.resultRow}
+                onPress={() => playFromLibrary(track)}
+                accessibilityRole="button"
+                accessibilityLabel={`${track.title}, ${track.artist}`}
+                accessibilityHint="Plays song"
+              >
                 <ArtworkThumb uri={track.artwork} colors={colors} />
                 <View style={styles.resultInfo}>
                   <Text style={[styles.resultTitle, { color: colors.text }]} numberOfLines={1}>{track.title}</Text>
@@ -286,7 +302,14 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
           <>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Albums</Text>
             {results.albums.map((album) => (
-              <Pressable key={`album-${album.key}`} style={styles.resultRow} onPress={() => onAlbumPress(album.key)}>
+              <Pressable
+                key={`album-${album.key}`}
+                style={styles.resultRow}
+                onPress={() => onAlbumPress(album.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${album.album}, ${album.albumArtist}`}
+                accessibilityHint="Opens album"
+              >
                 <ArtworkThumb uri={album.artUri} colors={colors} />
                 <View style={styles.resultInfo}>
                   <Text style={[styles.resultTitle, { color: colors.text }]} numberOfLines={1}>{album.album}</Text>
@@ -300,7 +323,14 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
           <>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Artists</Text>
             {results.artists.map((artist) => (
-              <Pressable key={`artist-${artist.key}`} style={styles.resultRow} onPress={() => onArtistPress(artist.key)}>
+              <Pressable
+                key={`artist-${artist.key}`}
+                style={styles.resultRow}
+                onPress={() => onArtistPress(artist.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${artist.artist}, ${artist.albums.length} ${artist.albums.length === 1 ? 'album' : 'albums'}`}
+                accessibilityHint="Opens artist"
+              >
                 <View style={[styles.resultArtistIcon, { backgroundColor: colors.card }]}>
                   <Ionicons name="person" size={22} color={colors.textSecondary} />
                 </View>
@@ -318,7 +348,14 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
           <>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Playlists</Text>
             {results.playlists.map((playlist) => (
-              <Pressable key={`playlist-${playlist.id}`} style={styles.resultRow} onPress={() => playPlaylist(playlist)}>
+              <Pressable
+                key={`playlist-${playlist.id}`}
+                style={styles.resultRow}
+                onPress={() => playPlaylist(playlist)}
+                accessibilityRole="button"
+                accessibilityLabel={`${playlist.name}, ${playlist.tracks.length} ${playlist.tracks.length === 1 ? 'track' : 'tracks'}`}
+                accessibilityHint="Plays playlist"
+              >
                 <View style={[styles.resultArtistIcon, { backgroundColor: colors.card }]}>
                   <Ionicons name="list" size={22} color={colors.textSecondary} />
                 </View>
@@ -413,10 +450,20 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Library</Text>
         <View style={styles.headerButtons}>
-          <Pressable style={styles.headerButton} onPress={() => setShowNavidrome(true)}>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => setShowNavidrome(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Navidrome servers"
+          >
             <Ionicons name="server-outline" size={24} color={colors.textSecondary} />
           </Pressable>
-          <Pressable style={styles.headerButton} onPress={handleAddTracks}>
+          <Pressable
+            style={styles.headerButton}
+            onPress={handleAddTracks}
+            accessibilityRole="button"
+            accessibilityLabel="Import music"
+          >
             <Ionicons name="add-circle" size={24} color={colors.accent} />
           </Pressable>
         </View>
@@ -431,6 +478,9 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
                 key={t.key}
                 style={[styles.tabItem, active && { borderBottomColor: colors.accent }]}
                 onPress={() => setTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityLabel={`${t.label} tab`}
+                accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.tabLabel, { color: active ? colors.accent : colors.textSecondary }]}>{t.label}</Text>
               </Pressable>
@@ -450,9 +500,15 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
             onChangeText={setSearchQuery}
             autoCorrect={false}
             returnKeyType="search"
+            accessibilityLabel="Search library"
           />
           {searchQuery.length > 0 && (
-            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
               <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
             </Pressable>
           )}
@@ -471,7 +527,12 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
           <View style={[styles.modalContent, { backgroundColor: colors.background }]}>
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Navidrome</Text>
-              <Pressable onPress={() => setShowNavidrome(false)} hitSlop={10}>
+              <Pressable
+                onPress={() => setShowNavidrome(false)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close Navidrome browser"
+              >
                 <Ionicons name="close" size={28} color={colors.textSecondary} />
               </Pressable>
             </View>
@@ -498,7 +559,12 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
             {playlists.length === 0 ? (
               <View style={modalStyles.emptyState}>
                 <Text style={[modalStyles.emptyText, { color: colors.textSecondary }]}>No playlists yet</Text>
-                <Pressable style={[modalStyles.createButton, { backgroundColor: colors.accent }]} onPress={openCreatePlaylist}>
+                <Pressable
+                  style={[modalStyles.createButton, { backgroundColor: colors.accent }]}
+                  onPress={openCreatePlaylist}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create playlist"
+                >
                   <Text style={modalStyles.createButtonText}>Create Playlist</Text>
                 </Pressable>
               </View>
@@ -510,6 +576,8 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
                   <Pressable
                     style={[modalStyles.playlistItem, { borderBottomColor: colors.border }]}
                     onPress={() => handleAddToPlaylist(item.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.name}, ${item.tracks.length} ${item.tracks.length === 1 ? 'track' : 'tracks'}`}
                   >
                     <Text style={[modalStyles.playlistName, { color: colors.text }]}>{item.name}</Text>
                     <Text style={[modalStyles.playlistCount, { color: colors.textSecondary }]}>{item.tracks.length} tracks</Text>
@@ -525,11 +593,18 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
                 setSelectedTrack(null);
                 setBatchUris(null);
               }}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
             >
               <Text style={[modalStyles.cancelButtonText, { color: colors.text }]}>Cancel</Text>
             </Pressable>
             {playlists.length > 0 && (
-              <Pressable style={[modalStyles.newPlaylistButton, { backgroundColor: colors.border }]} onPress={openCreatePlaylist}>
+              <Pressable
+                style={[modalStyles.newPlaylistButton, { backgroundColor: colors.border }]}
+                onPress={openCreatePlaylist}
+                accessibilityRole="button"
+                accessibilityLabel="New playlist"
+              >
                 <Ionicons name="add-circle" size={20} color={colors.accent} />
                 <Text style={[modalStyles.newPlaylistText, { color: colors.accent }]}>New Playlist</Text>
               </Pressable>
@@ -571,10 +646,17 @@ export function LibraryView({ onAlbumPress, onArtistPress }: LibraryViewProps) {
                   setShowCreateFromLibraryModal(false);
                   setNewPlaylistName('');
                 }}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
               >
                 <Text style={[modalStyles.modalButtonText, { color: colors.textSecondary }]}>Cancel</Text>
               </Pressable>
-              <Pressable style={[modalStyles.modalButton, { backgroundColor: colors.accent }]} onPress={handleConfirmCreatePlaylist}>
+              <Pressable
+                style={[modalStyles.modalButton, { backgroundColor: colors.accent }]}
+                onPress={handleConfirmCreatePlaylist}
+                accessibilityRole="button"
+                accessibilityLabel="Create playlist"
+              >
                 <Text style={[modalStyles.modalButtonText, { color: colors.onAccent }]}>Create</Text>
               </Pressable>
             </View>

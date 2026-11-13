@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, Easing, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, FlatList, SectionList, Pressable, TextInput, Modal, Alert, Animated, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme, Theme } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 import { useAudio, Playlist, TrackMetadata, SmartPlaylist, SmartPlaylistRule } from '../context/AudioContext';
 import { NavidromeService, NavidromePlaylist, NavidromeSong } from '../services/NavidromeService';
 import { evaluateSmartPlaylist } from '../services/SmartPlaylistEngine';
@@ -41,7 +41,7 @@ const AnimatedPlaylistItem = React.memo(function AnimatedPlaylistItem({ item, co
       Animated.timing(opacity, { toValue: 1, duration: 300, delay: 100, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100, delay: 100 }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   const handlePressIn = () => {
     Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, damping: 15, stiffness: 300 }).start();
@@ -288,21 +288,6 @@ export function Playlists({
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => onDeleteSmartPlaylist?.(item.id) },
     ]);
-  };
-
-  const renderPlaylist = ({ item }: { item: Playlist }) => {
-    const canAddTrack = trackToAdd && !item.tracks.some((t) => t.uri === trackToAdd.uri);
-
-    return (
-      <AnimatedPlaylistItem
-        item={item}
-        colors={colors}
-        onPress={() => onPlaylistPress ? onPlaylistPress(item) : onPlayPlaylist(item)}
-        onLongPress={() => handleLongPress(item)}
-        canAddTrack={!!canAddTrack}
-        onAddToPlaylist={() => handleAddToPlaylist(item.id)}
-      />
-    );
   };
 
   type SectionItem =

@@ -9,6 +9,7 @@ This project uses Expo SDK **54** (installed: 54.0.35). Read the exact versioned
 - `npm run prebuild` — regenerate `ios/` and `android/` native projects from `app.json`
 - `npm test` — run unit tests (jest-expo)
 - `npx tsc --noEmit` — type checking
+- `npm run lint` — ESLint via `eslint-config-expo` (flat config in `eslint.config.js`)
 
 ## Native project regeneration
 

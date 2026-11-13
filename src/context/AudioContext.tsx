@@ -315,6 +315,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const listeningStartRef = useRef(0);
   const lastFmConnectedRef = useRef(false);
   const currentTrackRef = useRef<TrackMetadata | null>(null);
+  // Forward-referenced callbacks (defined below the effects/callbacks that use them) are held in
+  // refs so those consumers stay stable; the refs are assigned every render after the definitions.
+  const preloadNextTrackRef = useRef<() => void>(() => {});
+  const onPlaybackStatusUpdateRef = useRef<(status: any) => void>(() => {});
+  const incrementPlayCountRef = useRef<(uri: string) => void>(() => {});
+  const cancelSleepTimerRef = useRef<() => void>(() => {});
 
   const soundRef = useRef<AudioPlayer | null>(null);
   const playbackStatusRef = useRef<any>(null);
@@ -464,7 +470,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (saveQueueTimerRef.current) clearTimeout(saveQueueTimerRef.current);
       if (saveSmartPlaylistsTimerRef.current) clearTimeout(saveSmartPlaylistsTimerRef.current);
     };
-  }, []);
+  }, [savePositionImmediate]);
 
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
@@ -481,7 +487,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, []);
+  }, [savePositionImmediate]);
 
   useEffect(() => {
     const loadSavedData = async () => {
@@ -598,7 +604,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
           );
           currentPlayerIdRef.current = player.id;
-          player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+          player.addListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current);
           soundRef.current = player;
           if (savedPlaybackPosition > 0) {
             await player.seekTo(savedPlaybackPosition / 1000);
@@ -640,7 +646,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
             const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
             setSleepTimerRemaining(rem);
             if (rem <= 0) {
-              cancelSleepTimer();
+              cancelSleepTimerRef.current();
               if (soundRef.current) {
                 soundRef.current.pause();
                 setIsPlaying(false);
@@ -749,7 +755,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (crossfadeSoundRef.current) {
         const cfPlayer = crossfadeSoundRef.current;
         crossfadeSoundRef.current = null;
-        try { cfPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
+        try { cfPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current); } catch {}
         destroyPlayer(cfPlayer);
       }
     }
@@ -760,7 +766,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       if (prevStatus?.isLoaded) {
         await savePositionImmediate((prevStatus.currentTime || 0) * 1000);
       }
-      try { prevPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
+      try { prevPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current); } catch {}
       destroyPlayer(prevPlayer);
       soundRef.current = null;
     }
@@ -792,7 +798,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
 
     currentPlayerIdRef.current = player.id;
-    player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+    player.addListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current);
     soundRef.current = player;
 
     if (autoPlay) player.play();
@@ -815,9 +821,9 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     updateLockScreen(player, metadata);
 
     if (autoPlay) {
-      setTimeout(() => preloadNextTrack(), 100);
+      setTimeout(() => preloadNextTrackRef.current(), 100);
     }
-  }, []);
+  }, [savePositionImmediate]);
 
   const playNextFromQueue = useCallback(() => {
     const currentQueue = queueRef.current;
@@ -826,7 +832,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const remainingQueue = currentQueue.slice(1);
       unstable_batchedUpdates(() => {
         setQueue(remainingQueue);
-        incrementPlayCount(nextTrack.uri);
+        incrementPlayCountRef.current(nextTrack.uri);
       });
       historyRef.current.push(nextTrack);
       historyIndexRef.current = historyRef.current.length - 1;
@@ -837,13 +843,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const remainingTracks = tracks.slice(1);
       unstable_batchedUpdates(() => {
         setQueue(remainingTracks);
-        incrementPlayCount(firstTrack.uri);
+        incrementPlayCountRef.current(firstTrack.uri);
       });
       historyRef.current = [firstTrack];
       historyIndexRef.current = 0;
       loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
-  }, []);
+  }, [loadTrackInternal]);
 
   const getNextTrack = useCallback((): TrackMetadata | null => {
     const currentQueue = queueRef.current;
@@ -922,7 +928,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
 
       crossfadeSoundRef.current = newPlayer;
-      newPlayer.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
+      newPlayer.addListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current);
       newPlayer.volume = 0;
       newPlayer.play();
 
@@ -957,7 +963,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
               if (oldStatus.isLoaded) {
                 savePositionImmediate((oldStatus.currentTime || 0) * 1000);
               }
-              try { oldPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdate); } catch {}
+              try { oldPlayer.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current); } catch {}
               destroyPlayer(oldPlayer);
             }
           } catch {}
@@ -990,7 +996,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
           const libMatch = libraryRef.current.find(t => t.uri === nextTrack.uri);
           setCurrentTrack({ ...nextTrack, isFavorite: libMatch?.isFavorite ?? nextTrack.isFavorite ?? false });
-          incrementPlayCount(nextTrack.uri);
+          incrementPlayCountRef.current(nextTrack.uri);
           setPlaybackPosition(0);
 
           const newStatus = newPlayer.currentStatus;
@@ -1002,7 +1008,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           crossfadeActiveRef.current = false;
 
           if (seamlessEnabledRef.current) {
-            setTimeout(() => preloadNextTrack(), 100);
+            setTimeout(() => preloadNextTrackRef.current(), 100);
           }
         }
       }, stepDuration);
@@ -1070,7 +1076,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, [playNextFromQueue, startCrossfade]);
+  }, [playNextFromQueue, startCrossfade, debouncedSavePosition]);
 
   const loadTrack = useCallback(async (trackUri: string, metadata: TrackMetadata, autoPlay = false) => {
     try {
@@ -1109,7 +1115,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setError('Playback error');
       }
     }
-  }, []);
+  }, [savePositionImmediate]);
 
   const seekTo = useCallback(async (position: number) => {
     if (soundRef.current) {
@@ -1126,7 +1132,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         console.error('Error seeking:', error);
       }
     }
-  }, []);
+  }, [savePositionImmediate]);
 
   const skipNext = useCallback(() => {
     if (historyIndexRef.current < historyRef.current.length - 1) {
@@ -1261,7 +1267,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       }
       return err?.message || 'Download failed';
     }
-  }, []);
+  }, [applyOfflineTrack]);
 
   const cancelDownload = useCallback((uri: string) => {
     OfflineCacheService.cancelDownload(uri);
@@ -1535,12 +1541,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       historyIndexRef.current = 0;
       unstable_batchedUpdates(() => {
         setQueue(remainingTracks);
-        incrementPlayCount(firstTrack.uri);
+        incrementPlayCountRef.current(firstTrack.uri);
       });
 
       await loadTrackInternal(firstTrack.uri, firstTrack, true);
     }
-  }, [incrementPlayCount, loadTrackInternal]);
+  }, [loadTrackInternal]);
 
   const playFromPlaylist = useCallback(async (playlist: Playlist, track: TrackMetadata) => {
     if (playlist.tracks.length === 0) return;
@@ -1930,10 +1936,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying(false);
       }
     }
-  }, [sleepTimerEnd]);
+  }, [sleepTimerEnd, cancelSleepTimer]);
 
   const checkSleepTimerExpiryRef = useRef(checkSleepTimerExpiry);
   checkSleepTimerExpiryRef.current = checkSleepTimerExpiry;
+  preloadNextTrackRef.current = preloadNextTrack;
+  onPlaybackStatusUpdateRef.current = onPlaybackStatusUpdate;
+  incrementPlayCountRef.current = incrementPlayCount;
+  cancelSleepTimerRef.current = cancelSleepTimer;
 
   const connectNavidrome = useCallback(async (url: string, username: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await NavidromeService.ping(url, username, password);

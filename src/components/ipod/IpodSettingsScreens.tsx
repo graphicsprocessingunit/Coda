@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, Pressable, View, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../context/ThemeContext';
 import { useAudio } from '../../context/AudioContext';

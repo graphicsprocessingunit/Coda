@@ -118,7 +118,7 @@ export function useWheelTicks(options: UseWheelTicksOptions): {
     centerX.value = width / 2;
     centerY.value = height / 2;
     measured.value = 1;
-  }, []);
+  }, [centerX, centerY, measured]);
 
   const wheelPan = useMemo(
     () =>
@@ -195,7 +195,21 @@ export function useWheelTicks(options: UseWheelTicksOptions): {
             classifyTapStart(startX.value, startY.value, centerX.value, centerY.value, MIN_SELECT_RADIUS, TAP_BANDS)
           );
         }),
-    [dispatchTicks, dispatchTap]
+    [
+      dispatchTicks,
+      dispatchTap,
+      acc,
+      centerX,
+      centerY,
+      didScroll,
+      hasPrev,
+      measured,
+      peakMove,
+      prevDeg,
+      rotAcc,
+      startX,
+      startY,
+    ]
   );
 
   return { onWheelLayout, wheelPan };

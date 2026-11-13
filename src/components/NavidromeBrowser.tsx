@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Text, Pressable, FlatList, TextInput, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
-import { NavidromeService, NavidromeArtist, NavidromeAlbum, NavidromeSong, NavidromeCredentials } from '../services/NavidromeService';
+import { NavidromeService, NavidromeArtist, NavidromeAlbum, NavidromeSong } from '../services/NavidromeService';
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
@@ -35,23 +35,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
 
   const creds = getNavidromeCredentials();
 
-  useEffect(() => {
-    if (!creds || !navidromeConnected) return;
-    loadArtists();
-  }, [creds, navidromeConnected]);
-
-  useEffect(() => {
-    if (!creds || !searchQuery.trim()) {
-      setSearchResults(null);
-      return;
-    }
-    const timer = setTimeout(() => {
-      performSearch(searchQuery.trim());
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, creds]);
-
-  const loadArtists = async () => {
+  const loadArtists = useCallback(async () => {
     if (!creds) return;
     setLoading(true);
     setError('');
@@ -62,7 +46,12 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
       setError(e.message || 'Failed to load artists');
     }
     setLoading(false);
-  };
+  }, [creds]);
+
+  useEffect(() => {
+    if (!creds || !navidromeConnected) return;
+    loadArtists();
+  }, [creds, navidromeConnected, loadArtists]);
 
   const loadArtistAlbums = async (artist: NavidromeArtist) => {
     if (!creds) return;
@@ -94,7 +83,7 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
     setLoading(false);
   };
 
-  const performSearch = async (query: string) => {
+  const performSearch = useCallback(async (query: string) => {
     if (!creds) return;
     setSearching(true);
     try {
@@ -102,7 +91,18 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
       setSearchResults(results);
     } catch {}
     setSearching(false);
-  };
+  }, [creds]);
+
+  useEffect(() => {
+    if (!creds || !searchQuery.trim()) {
+      setSearchResults(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      performSearch(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, creds, performSearch]);
 
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const [albumDownloading, setAlbumDownloading] = useState(false);
@@ -166,7 +166,6 @@ export function NavidromeBrowser({ mode, onAddTracks }: NavidromeBrowserProps) {
   const handlePlaySong = async (song: NavidromeSong, context: NavidromeSong[]) => {
     if (!creds) return;
     const track = NavidromeService.songToTrackMetadata(creds, song);
-    const tracks = context.map(s => NavidromeService.songToTrackMetadata(creds, s));
     await playFromLibrary({ ...track });
   };
 

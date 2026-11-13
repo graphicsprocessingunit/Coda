@@ -2,9 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { NavidromeService } from './NavidromeService';
 import { AppStorageService } from './AppStorageService';
-import { StorageService } from './StorageService';
 import { OfflineCacheService } from './OfflineCacheService';
-import { TrackMetadata, Playlist, SmartPlaylist } from '../context/AudioContext';
 
 const SETTINGS_FILE = 'navidrome-settings.json';
 const LEGACY_SECURE_KEY = 'coda_navidrome_credentials';

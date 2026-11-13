@@ -64,7 +64,7 @@ export function IpodNowPlaying({
       } catch {}
     }
     return t.artwork;
-  }, [currentTrack?.cachedArtwork, currentTrack?.artwork]);
+  }, [currentTrack]);
 
   if (!currentTrack) {
     return (

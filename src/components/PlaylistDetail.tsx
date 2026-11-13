@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, Text, FlatList, Pressable, Modal, TextInput, Animated, Easing, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +31,7 @@ function AnimatedCollageImage({ artwork, index, colors }: { artwork: string | un
 
   useEffect(() => {
     Animated.timing(opacity, { toValue: 1, duration: 400, delay: index * 100, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, []);
+  }, [index, opacity]);
 
   return (
     <Animated.View style={[styles.collageItem, { opacity }]}>
@@ -263,7 +263,12 @@ export function PlaylistDetail({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SafeAreaView style={{ backgroundColor: colors.background }} edges={['top']}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable style={styles.backButton} onPress={onBack}>
+          <Pressable
+            style={styles.backButton}
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
             <Ionicons name="chevron-back" size={28} color={colors.accent} />
           </Pressable>
           <View style={styles.headerInfo}>

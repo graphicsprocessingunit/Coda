@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Text, FlatList, Pressable, Animated, TextInput, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -127,11 +127,6 @@ export function Queue({ onClose }: QueueProps) {
       (track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
        track.artist.toLowerCase().includes(searchQuery.toLowerCase()))
   ), [library, queue, currentTrack, searchQuery]);
-
-  const handleTrackLongPress = (index: number) => {
-    setSelectionMode(true);
-    setSelectedIndices(new Set([index]));
-  };
 
   const renderQueueTrack = ({ item, index }: { item: TrackMetadata; index: number }) => {
     const isDragging = draggingIndex === index;

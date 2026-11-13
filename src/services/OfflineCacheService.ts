@@ -1,4 +1,4 @@
-import { File, Directory } from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 import { AppStorageService } from './AppStorageService';
 import { NavidromeCredentials, NavidromeService } from './NavidromeService';
 import { TrackMetadata } from '../context/AudioContext';
@@ -298,7 +298,6 @@ export class OfflineCacheService {
   }
 
   static async migrateDownloads(configId: string): Promise<void> {
-    const { Paths } = require('expo-file-system');
     const legacyAudio = new Directory(Paths.document, 'Coda', 'Downloads', 'audio');
     const legacyArtwork = new Directory(Paths.document, 'Coda', 'Downloads', 'artwork');
     const targetAudio = AppStorageService.getAudioCacheDir(configId);

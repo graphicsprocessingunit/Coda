@@ -100,11 +100,11 @@ export function NowPlayingSheet() {
 
   useEffect(() => {
     containerHeightSv.value = containerHeight;
-  }, [containerHeight]);
+  }, [containerHeight, containerHeightSv]);
 
   useEffect(() => {
     reduceMotionSv.value = reduceMotion;
-  }, [reduceMotion]);
+  }, [reduceMotion, reduceMotionSv]);
 
   const [showMore, setShowMore] = useState(false);
   const [showEffects, setShowEffects] = useState(false);

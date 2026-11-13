@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
+import { File } from 'expo-file-system';
 import md5 from 'md5';
 import { AppStorageService } from './AppStorageService';
 import { CryptoService } from './CryptoService';
@@ -339,7 +340,6 @@ export class NavidromeService {
     const config = all.configs.find((c) => c.id === configId);
     if (!config) return;
     const settingsDir = AppStorageService.settingsDir;
-    const { File } = require('expo-file-system');
     if (!settingsDir.exists) settingsDir.create({ intermediates: true });
     const file = new File(settingsDir, `navidrome-${configId}.json`);
     file.write(JSON.stringify(settings, null, 2));
@@ -347,7 +347,6 @@ export class NavidromeService {
 
   static loadSettingsForConfig(configId: string): NavidromeSettings | null {
     const settingsDir = AppStorageService.settingsDir;
-    const { File } = require('expo-file-system');
     const file = new File(settingsDir, `navidrome-${configId}.json`);
     if (!file.exists) return null;
     try {
@@ -359,7 +358,6 @@ export class NavidromeService {
 
   static removeSettingsForConfig(configId: string): void {
     const settingsDir = AppStorageService.settingsDir;
-    const { File } = require('expo-file-system');
     const file = new File(settingsDir, `navidrome-${configId}.json`);
     if (file.exists) {
       try { file.delete(); } catch {}

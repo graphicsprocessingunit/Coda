@@ -48,7 +48,6 @@ function SkeletonShape({ width, height, borderRadius = 4 }: { width: number | `$
 }
 
 function TrackRowSkeleton() {
-  const { colors } = useTheme();
   return (
     <View style={trackRowStyles.container}>
       <SkeletonShape width={48} height={48} borderRadius={24} />

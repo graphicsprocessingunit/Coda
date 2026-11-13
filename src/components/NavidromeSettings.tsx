@@ -7,7 +7,6 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -17,12 +16,8 @@ import { ServerConfig } from '../services/NavidromeService';
 export function NavidromeSettingsSection() {
   const { colors } = useTheme();
   const {
-    navidromeConnected,
-    navidromeServerUrl,
     serverConfigs,
     activeServerConfig,
-    connectNavidrome,
-    disconnectNavidrome,
     loadSavedNavidromeLogin,
     switchServer,
     addServer,
@@ -68,7 +63,7 @@ export function NavidromeSettingsSection() {
     setLoading(true);
     setError('');
     try {
-      const config = await addServer(
+      await addServer(
         name.trim() || 'My Server',
         url.trim(),
         username.trim(),

@@ -1,8 +1,8 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef } from 'react';
 import { View, StyleSheet, Text, Pressable, PanResponder, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
-import { useAudio, EqPresetName, EQ_PRESETS, EQ_BAND_LABELS } from '../context/AudioContext';
+import { useAudio, EqPresetName, EQ_BAND_LABELS } from '../context/AudioContext';
 
 const PRESET_INFO: { key: EqPresetName; label: string; icon: string }[] = [
   { key: 'flat', label: 'Flat', icon: 'remove-outline' },
