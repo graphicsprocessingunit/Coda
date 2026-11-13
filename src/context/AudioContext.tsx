@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+
+// expo-audio deactivates the AVAudioSession synchronously from pause() and from its playback
+// completion handler, which iOS logs as "setActive can lead to UI unresponsiveness on the main
+// thread". Keeping the session active for our players avoids that deactivation path; activation
+// still goes through the library's play() handler.
+const KEEP_SESSION_ACTIVE = { keepAudioSessionActive: true } as const;
 import type { AudioPlayer } from 'expo-audio';
 import { AppState, AppStateStatus, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -571,7 +577,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           const restoreUri = savedCurrentTrack.cachedUri || savedCurrentTrack.uri;
           const player = createAudioPlayer(
             { uri: restoreUri },
-            { updateInterval: 100 }
+            { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
           );
           currentPlayerIdRef.current = player.id;
           player.addListener('playbackStatusUpdate', onPlaybackStatusUpdate);
@@ -759,7 +765,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     const resolvedUri = metadata.cachedUri || trackUri;
     const player = createAudioPlayer(
       { uri: resolvedUri },
-      { updateInterval: 100 }
+      { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
     );
 
     if (generation !== loadGenerationRef.current) {
@@ -848,7 +854,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const preloadUri = nextTrack.cachedUri || nextTrack.uri;
       const preloadPlayer = createAudioPlayer(
         { uri: preloadUri },
-        { updateInterval: 1000 }
+        { updateInterval: 1000, ...KEEP_SESSION_ACTIVE }
       );
       preloadRef.current = preloadPlayer;
       preloadedUriRef.current = preloadUri;
@@ -887,7 +893,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       } else {
         newPlayer = createAudioPlayer(
           { uri: nextTrack.cachedUri || nextTrack.uri },
-          { updateInterval: 100 }
+          { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
         );
       }
 
