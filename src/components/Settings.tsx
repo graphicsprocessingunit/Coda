@@ -652,7 +652,7 @@ export function Settings({ onClearData }: SettingsProps) {
                       autoCorrect={false}
                     />
                     <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 8 }}>
-                      1. Tap 'Authorize App' below{'\n'}2. Copy the token from the browser{'\n'}3. Paste it here
+                      1. Tap &apos;Authorize App&apos; below{'\n'}2. Copy the token from the browser{'\n'}3. Paste it here
                     </Text>
                     <TextInput
                       style={[styles.lastFmInput, { color: colors.text, borderColor: colors.border }]}

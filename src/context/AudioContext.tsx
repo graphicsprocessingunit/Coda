@@ -1,14 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { unstable_batchedUpdates } from 'react-native';
+import { unstable_batchedUpdates , AppState, AppStateStatus, InteractionManager } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-
-// expo-audio deactivates the AVAudioSession synchronously from pause() and from its playback
-// completion handler, which iOS logs as "setActive can lead to UI unresponsiveness on the main
-// thread". Keeping the session active for our players avoids that deactivation path; activation
-// still goes through the library's play() handler.
-const KEEP_SESSION_ACTIVE = { keepAudioSessionActive: true } as const;
 import type { AudioPlayer } from 'expo-audio';
-import { AppState, AppStateStatus, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 import { StorageService } from '../services/StorageService';
@@ -25,6 +18,12 @@ import {
   shuffleArray,
 } from '../services/PlaybackLogic';
 import * as AudioEQ from 'audio-eq';
+
+// expo-audio deactivates the AVAudioSession synchronously from pause() and from its playback
+// completion handler, which iOS logs as "setActive can lead to UI unresponsiveness on the main
+// thread". Keeping the session active for our players avoids that deactivation path; activation
+// still goes through the library's play() handler.
+const KEEP_SESSION_ACTIVE = { keepAudioSessionActive: true } as const;
 
 export interface TrackMetadata {
   title: string;

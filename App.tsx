@@ -5,7 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Alert, View, Text, Pressable, StyleSheet, Animated, ActivityIndicator } from 'react-native';
+import { Alert, View, Text, Pressable, StyleSheet, Animated, ActivityIndicator, Appearance, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AudioProvider, useAudio, useDownloadProgress, Playlist, TrackMetadata, SmartPlaylist } from './src/context/AudioContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
@@ -360,6 +360,15 @@ function MainTabs() {
 
 function ThemedStatusBar() {
   const { isDark } = useTheme();
+
+  // iOS 27 no longer honours the legacy `UIApplication.setStatusBarStyle:` that expo-status-bar
+  // calls, and instead derives the bar from the window's interface style. Overriding that makes
+  // the icons follow the app theme again; older iOS versions still apply the explicit style.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    Appearance.setColorScheme(isDark ? 'dark' : 'light');
+  }, [isDark]);
+
   return <StatusBar style={isDark ? 'light' : 'dark'} />;
 }
 

@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { fetchLyrics } from '../src/services/LyricsService';
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch as any;
-
-import { fetchLyrics } from '../src/services/LyricsService';
 
 beforeEach(async () => {
   await AsyncStorage.clear();
