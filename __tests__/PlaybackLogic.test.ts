@@ -1,6 +1,8 @@
 import {
   CROSSFADE_TRIGGER_LEAD_MS,
   SCROBBLE_MAX_SECONDS,
+  canRestorePlayback,
+  pickPlaybackUri,
   shouldScrobble,
   shouldStartCrossfade,
   scrobbleThresholdSeconds,
@@ -96,6 +98,70 @@ describe('scrobbleThresholdSeconds', () => {
     expect(scrobbleThresholdSeconds(0)).toBe(0);
     expect(scrobbleThresholdSeconds(-30)).toBe(0);
     expect(scrobbleThresholdSeconds(NaN)).toBe(0);
+  });
+});
+
+describe('pickPlaybackUri', () => {
+  const cached = 'file:///Coda/Downloads/audio/1.mp3';
+
+  it('prefers a cached file that still exists', () => {
+    expect(pickPlaybackUri({ uri: 'https://server/stream/1', cachedUri: cached }, () => true)).toBe(
+      cached
+    );
+  });
+
+  it('falls back to the original when the cached file is gone', () => {
+    expect(
+      pickPlaybackUri({ uri: 'https://server/stream/1', cachedUri: cached }, () => false)
+    ).toBe('https://server/stream/1');
+  });
+
+  it('uses the original when nothing is cached', () => {
+    expect(pickPlaybackUri({ uri: cached }, () => false)).toBe(cached);
+  });
+
+  it('keeps a non-file cached uri without touching the filesystem', () => {
+    const exists = jest.fn(() => false);
+    expect(pickPlaybackUri({ uri: 'https://server/stream/1', cachedUri: 'https://cdn/1.mp3' }, exists)).toBe(
+      'https://cdn/1.mp3'
+    );
+    expect(exists).not.toHaveBeenCalled();
+  });
+});
+
+describe('canRestorePlayback', () => {
+  const cached = 'file:///Coda/Downloads/audio/1.mp3';
+
+  it('restores a downloaded Navidrome track', () => {
+    expect(
+      canRestorePlayback(
+        { uri: 'https://server/stream/1', cachedUri: cached, source: 'navidrome' },
+        () => true
+      )
+    ).toBe(true);
+  });
+
+  it('never restores a Navidrome track that is only streamable', () => {
+    expect(canRestorePlayback({ uri: 'https://server/stream/1', source: 'navidrome' }, () => true)).toBe(
+      false
+    );
+  });
+
+  it('does not restore a Navidrome download that was deleted', () => {
+    expect(
+      canRestorePlayback(
+        { uri: 'https://server/stream/1', cachedUri: cached, source: 'navidrome' },
+        () => false
+      )
+    ).toBe(false);
+  });
+
+  it('restores a local file that still exists', () => {
+    expect(canRestorePlayback({ uri: cached, source: 'local' }, () => true)).toBe(true);
+  });
+
+  it('skips a local file that was removed from the device', () => {
+    expect(canRestorePlayback({ uri: cached, source: 'local' }, () => false)).toBe(false);
   });
 });
 

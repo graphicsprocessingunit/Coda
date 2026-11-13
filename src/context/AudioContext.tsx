@@ -17,7 +17,13 @@ import { NavidromeService, NavidromeCredentials, ServerConfig } from '../service
 import { OfflineCacheService } from '../services/OfflineCacheService';
 import { LastFmService, LastFmCredentials } from '../services/LastFmService';
 import { migrateToMultiServer } from '../services/MigrationService';
-import { shouldScrobble, shouldStartCrossfade, shuffleArray } from '../services/PlaybackLogic';
+import {
+  canRestorePlayback,
+  pickPlaybackUri,
+  shouldScrobble,
+  shouldStartCrossfade,
+  shuffleArray,
+} from '../services/PlaybackLogic';
 import * as AudioEQ from 'audio-eq';
 
 export interface TrackMetadata {
@@ -253,6 +259,14 @@ function updateLockScreen(player: AudioPlayer, track: TrackMetadata) {
     showSeekForward: true,
     showSeekBackward: true,
   });
+}
+
+function localFileExists(uri: string): boolean {
+  try {
+    return new File(uri).exists;
+  } catch {
+    return false;
+  }
 }
 
 function destroyPlayer(player: AudioPlayer | null) {
@@ -539,8 +553,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           if (track.source !== 'navidrome' || !track.navidromeId) return track;
           let updated = track;
           const cachedPath = cachedAudio.get(track.navidromeId);
-          if (cachedPath && (!track.cachedUri || !new File(track.cachedUri).exists)) {
+          const cacheUsable = !!track.cachedUri && localFileExists(track.cachedUri);
+          if (!cacheUsable && cachedPath) {
             updated = { ...updated, cachedUri: cachedPath };
+            libraryUpdated = true;
+          } else if (!cacheUsable && track.cachedUri) {
+            // The download was cleared or deleted outside the app.
+            updated = { ...updated, cachedUri: undefined };
             libraryUpdated = true;
           }
           if (track.artwork && !track.cachedArtwork) {
@@ -567,14 +586,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         interruptionMode: 'doNotMix',
       });
 
-      if (savedCurrentTrack && (savedCurrentTrack.source !== 'navidrome' || savedCurrentTrack.cachedUri)) {
+      if (savedCurrentTrack && canRestorePlayback(savedCurrentTrack, localFileExists)) {
         const libMatch = libraryRef.current.find(t => t.uri === savedCurrentTrack.uri);
         setCurrentTrack({ ...savedCurrentTrack, isFavorite: libMatch?.isFavorite ?? savedCurrentTrack.isFavorite ?? false });
         setPlaybackPosition(savedPlaybackPosition > 0 ? savedPlaybackPosition : 0);
         setDuration(0);
         setIsPlaying(false);
         try {
-          const restoreUri = savedCurrentTrack.cachedUri || savedCurrentTrack.uri;
+          const restoreUri = pickPlaybackUri(savedCurrentTrack, localFileExists);
           const player = createAudioPlayer(
             { uri: restoreUri },
             { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
@@ -762,7 +781,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       setIsPlaying(false);
     });
 
-    const resolvedUri = metadata.cachedUri || trackUri;
+    const resolvedUri = pickPlaybackUri({ uri: trackUri, cachedUri: metadata.cachedUri }, localFileExists);
     const player = createAudioPlayer(
       { uri: resolvedUri },
       { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
@@ -851,7 +870,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const preloadUri = nextTrack.cachedUri || nextTrack.uri;
+      const preloadUri = pickPlaybackUri(nextTrack, localFileExists);
       const preloadPlayer = createAudioPlayer(
         { uri: preloadUri },
         { updateInterval: 1000, ...KEEP_SESSION_ACTIVE }
@@ -892,7 +911,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         preloadedUriRef.current = null;
       } else {
         newPlayer = createAudioPlayer(
-          { uri: nextTrack.cachedUri || nextTrack.uri },
+          { uri: pickPlaybackUri(nextTrack, localFileExists) },
           { updateInterval: 100, ...KEEP_SESSION_ACTIVE }
         );
       }

@@ -1,6 +1,45 @@
 export const CROSSFADE_TRIGGER_LEAD_MS = 500;
 export const SCROBBLE_MAX_SECONDS = 240;
 
+export interface PlayableTrack {
+  uri: string;
+  cachedUri?: string;
+  source?: 'local' | 'navidrome';
+}
+
+export function isLocalFileUri(uri: string): boolean {
+  return uri.startsWith('file://');
+}
+
+/**
+ * The URI to hand to the audio player. A cached copy is only worth using while the file is
+ * still on disk: after the cache is cleared, the old `cachedUri` makes AVPlayer try to open a
+ * missing file instead of streaming the original.
+ */
+export function pickPlaybackUri(
+  track: PlayableTrack,
+  fileExists: (uri: string) => boolean
+): string {
+  const cached = track.cachedUri;
+  if (cached && (!isLocalFileUri(cached) || fileExists(cached))) return cached;
+  return track.uri;
+}
+
+/**
+ * Whether the saved track can be restored on launch. Navidrome tracks are only restored from a
+ * cached download (never streamed unprompted), and local files must still exist.
+ */
+export function canRestorePlayback(
+  track: PlayableTrack,
+  fileExists: (uri: string) => boolean
+): boolean {
+  if (track.source === 'navidrome') {
+    return !!track.cachedUri && isLocalFileUri(track.cachedUri) && fileExists(track.cachedUri);
+  }
+  const uri = pickPlaybackUri(track, fileExists);
+  return !isLocalFileUri(uri) || fileExists(uri);
+}
+
 export function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
