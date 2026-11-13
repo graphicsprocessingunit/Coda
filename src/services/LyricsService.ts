@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { readEmbeddedLyrics } from './EmbeddedLyrics';
 import { NavidromeService } from './NavidromeService';
+import { fetchRichSyncLyrics } from './RichSyncLyrics';
 
 /**
  * Lyrics cache keys include the track length, because the same song has many
@@ -185,6 +186,12 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
     ? await NavidromeService.getLyricsBySongId(query.navidromeSongId)
     : null;
   if (serverLyrics?.synced) result = { lyrics: serverLyrics.lyrics };
+
+  // An optional word-level provider outranks line-level LRCLIB when configured.
+  if (!result) {
+    const richSync = await fetchRichSyncLyrics(query);
+    if (richSync) result = { lyrics: richSync };
+  }
 
   try {
     if (!result) {

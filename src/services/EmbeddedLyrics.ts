@@ -1,15 +1,24 @@
 import { File } from 'expo-file-system';
 
+import { formatLrcTimestamp } from '../utils/lyrics';
 import type { LyricsResult } from './LyricsService';
 
 /**
- * Lyrics that live next to the audio instead of online: a `.lrc` sidecar file,
- * or the ID3 `USLT` (unsynchronised lyrics) frame embedded in the file. Some
- * taggers store timed LRC text in USLT, so that content is returned unchanged
- * and the player will sync it.
+ * Lyrics shipped with the audio file itself: a sibling `.lrc`, an ID3 `USLT`
+ * (untimed) or `SYLT` (timed) frame, or the MP4/M4A `©lyr` atom. Timed content
+ * is converted to LRC so the player's parser and karaoke view work unchanged.
  */
 
 const MAX_TAG_BYTES = 4 * 1024 * 1024;
+const HEAD_BYTES = 1024 * 1024;
+const TAIL_BYTES = 2 * 1024 * 1024;
+
+const MP4_LYRIC_ATOM = [0xa9, 0x6c, 0x79, 0x72]; // ©lyr
+
+export interface EmbeddedTag {
+  lyrics: string;
+  synced: boolean;
+}
 
 function synchsafeToInt(bytes: Uint8Array, offset: number): number {
   return (
@@ -54,9 +63,7 @@ function decodeUtf16(bytes: Uint8Array, defaultLittleEndian: boolean): string {
   }
   const units: number[] = [];
   for (let i = offset; i + 1 < bytes.length; i += 2) {
-    units.push(
-      littleEndian ? bytes[i] | (bytes[i + 1] << 8) : (bytes[i] << 8) | bytes[i + 1]
-    );
+    units.push(littleEndian ? bytes[i] | (bytes[i + 1] << 8) : (bytes[i] << 8) | bytes[i + 1]);
   }
   return chunks(units);
 }
@@ -123,33 +130,70 @@ function removeUnsynchronisation(bytes: Uint8Array): Uint8Array {
   return output.subarray(0, length);
 }
 
-function decodeUslt(data: Uint8Array): string | null {
-  if (data.length < 5) return null;
-  const encoding = data[0];
-  let offset = 4; // encoding byte + language
-
+/** Read a null-terminated ID3 string starting at `start`. */
+function readId3String(
+  data: Uint8Array,
+  start: number,
+  encoding: number
+): { text: string; next: number } | null {
+  let offset = start;
   if (encoding === 1 || encoding === 2) {
     while (offset + 1 < data.length && !(data[offset] === 0 && data[offset + 1] === 0)) {
       offset += 2;
     }
-    offset += 2;
-  } else {
-    while (offset < data.length && data[offset] !== 0) offset++;
-    offset++;
+    if (offset + 1 >= data.length) return null;
+    return { text: decodeId3Text(data.subarray(start, offset), encoding), next: offset + 2 };
   }
-
+  while (offset < data.length && data[offset] !== 0) offset++;
   if (offset >= data.length) return null;
-  const text = decodeId3Text(data.subarray(offset), encoding)
+  return { text: decodeId3Text(data.subarray(start, offset), encoding), next: offset + 1 };
+}
+
+function decodeUslt(data: Uint8Array): string | null {
+  if (data.length < 5) return null;
+  const descriptor = readId3String(data, 4, data[0]);
+  if (!descriptor) return null;
+  const text = decodeId3Text(data.subarray(descriptor.next), data[0])
     .replace(/\u0000+$/g, '')
     .trim();
   return text.length > 0 ? text : null;
 }
 
 /**
- * Extract the first `USLT` frame from an ID3v2.3/v2.4 tag. Returns null for
- * other media containers, missing lyrics, or malformed tags.
+ * SYLT entries are (text, 4-byte timestamp) pairs. Timestamps can be MPEG
+ * frames or milliseconds; only milliseconds can be converted to LRC without
+ * knowing the frame duration, so other formats are skipped.
  */
-export function parseId3Lyrics(bytes: Uint8Array): string | null {
+function decodeSylt(data: Uint8Array): string | null {
+  if (data.length < 6) return null;
+  const encoding = data[0];
+  const timestampFormat = data[4];
+  if (timestampFormat !== 2) return null;
+
+  const descriptor = readId3String(data, 6, encoding);
+  if (!descriptor) return null;
+
+  const lines: string[] = [];
+  let offset = descriptor.next;
+  while (offset < data.length) {
+    const entry = readId3String(data, offset, encoding);
+    if (!entry) break;
+    offset = entry.next;
+    if (offset + 4 > data.length) break;
+    const time = uint32ToInt(data, offset);
+    offset += 4;
+    const text = entry.text.trim();
+    if (text.length > 0) lines.push(`${formatLrcTimestamp(time)}${text}`);
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * Extract lyrics from an ID3v2.3/v2.4 tag. Timed `SYLT` wins over untimed
+ * `USLT`; some taggers also store LRC text in USLT, which is returned as-is.
+ */
+export function parseId3Tag(bytes: Uint8Array): EmbeddedTag | null {
   if (bytes.length < 10) return null;
   if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
 
@@ -167,6 +211,9 @@ export function parseId3Lyrics(bytes: Uint8Array): string | null {
     if (body.length < 4) return null;
     position = version === 4 ? synchsafeToInt(body, 0) : 4 + uint32ToInt(body, 0);
   }
+
+  let sylt: string | null = null;
+  let uslt: string | null = null;
 
   while (position + 10 <= body.length) {
     if (body[position] === 0) break;
@@ -187,15 +234,65 @@ export function parseId3Lyrics(bytes: Uint8Array): string | null {
     if (version === 4 && frameFlags & 0x02) data = removeUnsynchronisation(data);
     if (version === 4 && frameFlags & 0x01 && data.length >= 4) data = data.subarray(4);
 
-    if (id === 'USLT') {
-      const text = decodeUslt(data);
-      if (text) return text;
-    }
+    if (id === 'SYLT' && !sylt) sylt = decodeSylt(data);
+    if (id === 'USLT' && !uslt) uslt = decodeUslt(data);
 
     position = dataEnd;
   }
 
+  if (sylt) return { lyrics: sylt, synced: true };
+  if (uslt) return { lyrics: uslt, synced: false };
   return null;
+}
+
+/** Legacy helper: the embedded lyrics text, timed or not. */
+export function parseId3Lyrics(bytes: Uint8Array): string | null {
+  return parseId3Tag(bytes)?.lyrics ?? null;
+}
+
+function indexOfBytes(haystack: Uint8Array, needle: readonly number[], from = 0): number {
+  outer: for (let i = from; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+/**
+ * Read the `©lyr` atom from an MP4/M4A file. The atom wraps a `data` box whose
+ * payload is UTF-8 (type 1) or UTF-16 (type 2) text.
+ */
+export function parseMp4Lyrics(bytes: Uint8Array): string | null {
+  const index = indexOfBytes(bytes, MP4_LYRIC_ATOM);
+  if (index < 0) return null;
+
+  const dataStart = index + 4;
+  if (dataStart + 16 > bytes.length) return null;
+
+  const dataSize = uint32ToInt(bytes, dataStart);
+  if (dataSize < 16) return null;
+
+  const type = String.fromCharCode(
+    bytes[dataStart + 4],
+    bytes[dataStart + 5],
+    bytes[dataStart + 6],
+    bytes[dataStart + 7]
+  );
+  if (type !== 'data') return null;
+
+  const dataEnd = dataStart + dataSize;
+  if (dataEnd > bytes.length) return null;
+
+  // The data box's type indicator is the last byte of its version/flags word;
+  // the following four bytes are the locale.
+  const dataType = bytes[dataStart + 11];
+  const payload = bytes.subarray(dataStart + 16, dataEnd);
+  const text = (dataType === 2 ? decodeUtf16(payload, false) : decodeUtf8(payload))
+    .replace(/\u0000+$/g, '')
+    .trim();
+  return text.length > 0 ? text : null;
 }
 
 function sidecarUri(uri: string): string {
@@ -205,10 +302,26 @@ function sidecarUri(uri: string): string {
   return dot > slash ? `${clean.slice(0, dot)}.lrc` : `${clean}.lrc`;
 }
 
+/** Read a byte range, falling back to the whole file where handles are absent. */
+async function readFileRange(file: File, start: number, length: number): Promise<Uint8Array> {
+  try {
+    const handle = file.open();
+    try {
+      handle.offset = start;
+      return handle.readBytes(length);
+    } finally {
+      handle.close();
+    }
+  } catch {
+    const all = await file.bytes();
+    return all.subarray(start, start + length);
+  }
+}
+
 /**
- * Look for lyrics shipped with a local audio file: a sibling `.lrc` first,
- * then the embedded ID3 tag. Remote URLs are skipped; the caller already
- * answered those from LRCLIB.
+ * Look for lyrics shipped with a local audio file: a sibling `.lrc` first, then
+ * tags embedded in the container. Remote URLs are skipped; the caller already
+ * answered those.
  */
 export async function readEmbeddedLyrics(uri: string): Promise<LyricsResult | null> {
   if (!uri || /^(https?|navidrome):/i.test(uri)) return null;
@@ -220,14 +333,30 @@ export async function readEmbeddedLyrics(uri: string): Promise<LyricsResult | nu
       if (text.length > 0) return { lyrics: text };
     }
   } catch {
-    // No sidecar or unreadable file; try the embedded tag next.
+    // No sidecar or unreadable file; try the tags next.
   }
 
   try {
     const file = new File(uri);
     if (!file.exists) return null;
-    const lyrics = parseId3Lyrics(await file.bytes());
-    return lyrics ? { lyrics } : null;
+
+    const headLength = Math.min(file.size, HEAD_BYTES);
+    const head = await readFileRange(file, 0, headLength);
+    const id3 = parseId3Tag(head);
+    if (id3) return { lyrics: id3.lyrics };
+
+    const headMp4 = parseMp4Lyrics(head);
+    if (headMp4) return { lyrics: headMp4 };
+
+    // Some M4A files keep the metadata at the end of the file.
+    if (file.size > HEAD_BYTES) {
+      const tailStart = Math.max(HEAD_BYTES, file.size - TAIL_BYTES);
+      const tail = await readFileRange(file, tailStart, file.size - tailStart);
+      const tailMp4 = parseMp4Lyrics(tail);
+      if (tailMp4) return { lyrics: tailMp4 };
+    }
+
+    return null;
   } catch {
     return null;
   }

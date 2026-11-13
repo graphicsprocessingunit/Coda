@@ -4,6 +4,8 @@
  * ones are just text. Convert them into the format the player already parses.
  */
 
+import { formatLrcTimestamp } from '../utils/lyrics';
+
 export interface StructuredLyricLine {
   start?: number;
   value: string;
@@ -30,18 +32,8 @@ function normalizeLines(lines: unknown): StructuredLyricLine[] {
     .map((line) => ({ start: line.start, value: line.value.replace(/\r/g, '').trimEnd() }));
 }
 
-function formatTimestamp(ms: number): string {
-  const total = Math.max(0, Math.round(ms));
-  const minutes = Math.floor(total / 60000);
-  const seconds = Math.floor((total % 60000) / 1000);
-  const millis = total % 1000;
-  return `[${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(
-    millis
-  ).padStart(3, '0')}]`;
-}
-
 export function structuredLyricsToLrc(lines: readonly StructuredLyricLine[]): string {
-  return lines.map((line) => `${formatTimestamp(line.start ?? 0)}${line.value}`).join('\n');
+  return lines.map((line) => `${formatLrcTimestamp(line.start ?? 0)}${line.value}`).join('\n');
 }
 
 /**

@@ -14,7 +14,7 @@ let exactMatch: FakeRecord | null = null;
 let searchResponses: FakeRecord[][] = [];
 let fetchCalls: string[] = [];
 
-const mockFetch = jest.fn(async (url: string) => {
+const defaultFetch = async (url: string) => {
   fetchCalls.push(url);
   if (url.includes('/api/get')) {
     return exactMatch
@@ -22,7 +22,9 @@ const mockFetch = jest.fn(async (url: string) => {
       : { ok: false, json: async () => ({}) };
   }
   return { ok: true, json: async () => searchResponses.shift() ?? [] };
-});
+};
+
+const mockFetch = jest.fn(defaultFetch);
 
 global.fetch = mockFetch as any;
 
@@ -40,10 +42,12 @@ afterEach(() => {
 beforeEach(async () => {
   await AsyncStorage.clear();
   (require('expo-file-system') as { __reset?: () => void }).__reset?.();
+  delete process.env.EXPO_PUBLIC_MUSIXMATCH_API_KEY;
   exactMatch = null;
   searchResponses = [];
   fetchCalls = [];
-  mockFetch.mockClear();
+  mockFetch.mockReset();
+  mockFetch.mockImplementation(defaultFetch);
 });
 
 describe('LyricsService', () => {
@@ -174,6 +178,41 @@ describe('LyricsService', () => {
       await expect(fetchLyrics(query(180000))).resolves.toBeNull();
       // One failed request, then a full lookup that found nothing.
       expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('uses word-timed richsync before LRCLIB when the provider is configured', async () => {
+      process.env.EXPO_PUBLIC_MUSIXMATCH_API_KEY = 'test-key';
+      const richBody = JSON.stringify([{ ts: 1, l: [{ c: 'word', o: 0 }] }]);
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('matcher.track.get')) {
+          return {
+            ok: true,
+            json: async () => ({
+              message: {
+                header: { status_code: 200 },
+                body: { track: { track_id: 7, track_length: 180, has_richsync: 1 } },
+              },
+            }),
+          };
+        }
+        if (url.includes('track.richsync.get')) {
+          return {
+            ok: true,
+            json: async () => ({
+              message: {
+                header: { status_code: 200 },
+                body: { richsync: { richsync_body: richBody } },
+              },
+            }),
+          };
+        }
+        return { ok: false, json: async () => ({}) };
+      });
+
+      const result = await fetchLyrics(query(180000));
+
+      expect(result?.lyrics).toContain('<00:01.000>word');
+      expect(fetchCalls.some((url) => url.includes('lrclib.net'))).toBe(false);
     });
 
     it('uses synced lyrics stored on the Navidrome server before going online', async () => {

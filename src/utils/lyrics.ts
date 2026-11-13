@@ -36,6 +36,17 @@ const SINGING_RATE_MS_PER_SYLLABLE = 280;
 const MIN_SUNG_LINE_MS = 900;
 const MAX_SUNG_LINE_MS = 8000;
 
+/** Format milliseconds as an LRC timestamp, e.g. `[01:02.345]`. */
+export function formatLrcTimestamp(milliseconds: number): string {
+  const total = Math.max(0, Math.round(milliseconds));
+  const minutes = Math.floor(total / 60000);
+  const seconds = Math.floor((total % 60000) / 1000);
+  const millis = total % 1000;
+  return `[${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(
+    millis
+  ).padStart(3, '0')}]`;
+}
+
 function fractionToMs(fraction?: string): number {
   if (!fraction) return 0;
   if (fraction.length === 1) return parseInt(fraction, 10) * 100;
