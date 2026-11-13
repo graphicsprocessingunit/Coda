@@ -19,6 +19,32 @@ export interface StorageUsage {
   total: number;
 }
 
+const SIZE_YIELD_INTERVAL = 200;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function dirSizeAsync(dir: Directory): Promise<number> {
+  if (!dir.exists) return 0;
+  let total = 0;
+  let processed = 0;
+  try {
+    for (const entry of dir.list()) {
+      if (entry instanceof File) {
+        total += entry.size ?? 0;
+        processed += 1;
+        if (processed % SIZE_YIELD_INTERVAL === 0) await yieldToEventLoop();
+      } else if (entry instanceof Directory) {
+        total += await dirSizeAsync(entry);
+      }
+    }
+  } catch (error) {
+    console.error('Error measuring directory:', error);
+  }
+  return total;
+}
+
 function dirSize(dir: Directory): number {
   if (!dir.exists) return 0;
   let total = 0;
@@ -149,6 +175,52 @@ export class AppStorageService {
       settings,
       total: downloadedTracks + downloadedArtwork + importedMusic + settings,
     };
+  }
+
+  /**
+   * Measures storage without blocking the JS thread: yields to the event loop between
+   * directories and every few hundred files, reporting each bucket as it is measured.
+   */
+  static async measureStorageUsage(
+    onUpdate?: (usage: StorageUsage) => void,
+  ): Promise<StorageUsage> {
+    const usage: StorageUsage = {
+      downloadedTracks: 0,
+      downloadedArtwork: 0,
+      importedMusic: 0,
+      settings: 0,
+      total: 0,
+    };
+
+    const sumDirs = async (dirs: Directory[]): Promise<number> => {
+      let size = 0;
+      for (const dir of dirs) size += await dirSizeAsync(dir);
+      return size;
+    };
+
+    const publish = (bucket: keyof Omit<StorageUsage, 'total'>, size: number) => {
+      usage[bucket] = size;
+      usage.total =
+        usage.downloadedTracks + usage.downloadedArtwork + usage.importedMusic + usage.settings;
+      onUpdate?.({ ...usage });
+    };
+
+    await yieldToEventLoop();
+    publish('downloadedTracks', await sumDirs(this.getDownloadedTrackDirs()));
+
+    await yieldToEventLoop();
+    publish('downloadedArtwork', await sumDirs(this.getDownloadedArtworkDirs()));
+
+    await yieldToEventLoop();
+    publish(
+      'importedMusic',
+      (await dirSizeAsync(MUSIC_DIR)) + (await dirSizeAsync(ARTWORK_CACHE_DIR)),
+    );
+
+    await yieldToEventLoop();
+    publish('settings', await dirSizeAsync(SETTINGS_DIR));
+
+    return { ...usage };
   }
 
   static clearDownloadedTracks(): void {

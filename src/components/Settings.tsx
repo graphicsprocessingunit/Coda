@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform, TextInput, Alert, Linking, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, StyleSheet, Text, Pressable, Modal, ScrollView, KeyboardAvoidingView, Platform, TextInput, Alert, Linking, ActivityIndicator, InteractionManager } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, Theme } from '../context/ThemeContext';
@@ -22,6 +22,14 @@ function formatSize(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
+const EMPTY_USAGE: StorageUsage = {
+  downloadedTracks: 0,
+  downloadedArtwork: 0,
+  importedMusic: 0,
+  settings: 0,
+  total: 0,
+};
+
 interface SettingsProps {
   onClearData: () => void;
 }
@@ -41,7 +49,36 @@ export function Settings({ onClearData }: SettingsProps) {
   const [lastFmLoading, setLastFmLoading] = useState(false);
   const [lastFmError, setLastFmError] = useState('');
   const [showStorage, setShowStorage] = useState(false);
-  const [usage, setUsage] = useState<StorageUsage>(() => AppStorageService.getStorageUsage());
+  const [usage, setUsage] = useState<StorageUsage>(EMPTY_USAGE);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const refreshUsage = useCallback(() => {
+    setUsageLoading(true);
+    const task = InteractionManager.runAfterInteractions(() => {
+      AppStorageService.measureStorageUsage((partial) => {
+        if (mountedRef.current) setUsage(partial);
+      })
+        .then((final) => {
+          if (!mountedRef.current) return;
+          setUsage(final);
+          setUsageLoading(false);
+        })
+        .catch(() => {
+          if (mountedRef.current) setUsageLoading(false);
+        });
+    });
+    return () => task.cancel();
+  }, []);
+
+  useEffect(() => refreshUsage(), [refreshUsage]);
 
   useEffect(() => {
     loadSavedLastFmLogin().then((saved) => {
@@ -65,7 +102,7 @@ export function Settings({ onClearData }: SettingsProps) {
         style: 'destructive',
         onPress: () => {
           action();
-          setUsage(AppStorageService.getStorageUsage());
+          refreshUsage();
         },
       },
     ]);
@@ -174,7 +211,7 @@ export function Settings({ onClearData }: SettingsProps) {
             <Pressable
               style={[styles.settingItem, { borderBottomColor: colors.border }]}
               onPress={() => {
-                setUsage(AppStorageService.getStorageUsage());
+                refreshUsage();
                 setShowStorage(true);
               }}
             >
@@ -183,7 +220,7 @@ export function Settings({ onClearData }: SettingsProps) {
                 <View>
                   <Text style={[styles.settingText, { color: colors.text }]}>Storage</Text>
                   <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
-                    {formatSize(usage.total)} used
+                    {usageLoading ? 'Calculating…' : `${formatSize(usage.total)} used`}
                   </Text>
                 </View>
               </View>
@@ -423,21 +460,25 @@ export function Settings({ onClearData }: SettingsProps) {
                       <Ionicons name={row.icon as any} size={22} color={colors.textSecondary} />
                       <Text style={[modalStyles.themeName, { color: colors.text }]}>{row.label}</Text>
                     </View>
-                    <Text style={[styles.settingValue, { color: colors.textSecondary }]}>{formatSize(row.size)}</Text>
+                    <Text style={[styles.settingValue, { color: colors.textSecondary }]}>
+                      {usageLoading ? '…' : formatSize(row.size)}
+                    </Text>
                   </View>
                 ))}
               </View>
               <Text style={[styles.settingSubtext, { color: colors.textSecondary, marginTop: 10 }]}>
-                Total {formatSize(usage.total)} · Files → On My iPhone → Coda
+                {usageLoading
+                  ? 'Calculating…'
+                  : `Total ${formatSize(usage.total)} · Files → On My iPhone → Coda`}
               </Text>
 
               <Pressable
                 style={[
                   modalStyles.themeRow,
                   { borderBottomColor: colors.border, marginTop: 16 },
-                  usage.downloadedTracks === 0 && { opacity: 0.4 },
+                  (usageLoading || usage.downloadedTracks === 0) && { opacity: 0.4 },
                 ]}
-                disabled={usage.downloadedTracks === 0}
+                disabled={usageLoading || usage.downloadedTracks === 0}
                 onPress={() =>
                   confirmClearStorage(
                     'Remove downloads',
@@ -452,15 +493,17 @@ export function Settings({ onClearData }: SettingsProps) {
                   <View style={{ flex: 1 }}>
                     <Text style={[modalStyles.themeName, { color: colors.danger }]}>Remove downloads</Text>
                     <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
-                      Frees {formatSize(usage.downloadedTracks)}; playback falls back to streaming
+                      {usageLoading
+                        ? 'Calculating…'
+                        : `Frees ${formatSize(usage.downloadedTracks)}; playback falls back to streaming`}
                     </Text>
                   </View>
                 </View>
               </Pressable>
 
               <Pressable
-                style={[modalStyles.themeRow, { borderBottomColor: colors.border }, usage.downloadedArtwork === 0 && { opacity: 0.4 }]}
-                disabled={usage.downloadedArtwork === 0}
+                style={[modalStyles.themeRow, { borderBottomColor: colors.border }, (usageLoading || usage.downloadedArtwork === 0) && { opacity: 0.4 }]}
+                disabled={usageLoading || usage.downloadedArtwork === 0}
                 onPress={() =>
                   confirmClearStorage(
                     'Clear cached artwork',
@@ -475,7 +518,9 @@ export function Settings({ onClearData }: SettingsProps) {
                   <View style={{ flex: 1 }}>
                     <Text style={[modalStyles.themeName, { color: colors.danger }]}>Clear cached artwork</Text>
                     <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
-                      Frees {formatSize(usage.downloadedArtwork)}; imported cover art is kept
+                      {usageLoading
+                        ? 'Calculating…'
+                        : `Frees ${formatSize(usage.downloadedArtwork)}; imported cover art is kept`}
                     </Text>
                   </View>
                 </View>

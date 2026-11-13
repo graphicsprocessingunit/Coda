@@ -138,6 +138,24 @@ describe('AppStorageService storage usage', () => {
     );
   });
 
+  it('measures the same sizes asynchronously and reports each bucket', async () => {
+    AppStorageService.ensureStructure();
+    AppStorageService.ensureStructure('config-a');
+    new File(AppStorageService.getAudioCacheDir('config-a'), 'a.mp3').write(new Uint8Array([1, 2, 3]));
+    new File(AppStorageService.getArtworkCacheDir('config-a'), 'a.jpg').write(new Uint8Array([1, 2]));
+    new File(AppStorageService.musicDir, 'song.mp3').write(new Uint8Array([1, 2, 3, 4]));
+
+    const updates: number[] = [];
+    const asyncUsage = await AppStorageService.measureStorageUsage((partial) => {
+      updates.push(partial.total);
+    });
+
+    expect(asyncUsage).toEqual(AppStorageService.getStorageUsage());
+    expect(asyncUsage.downloadedTracks).toBe(3);
+    expect(asyncUsage.downloadedArtwork).toBe(2);
+    expect(updates).toHaveLength(4);
+  });
+
   it('clears downloads and cached artwork but keeps imported music and cover art', () => {
     AppStorageService.ensureStructure();
     AppStorageService.ensureStructure('config-a');
