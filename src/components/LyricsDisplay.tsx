@@ -7,6 +7,7 @@ import {
   findActiveLineIndex,
   findActiveWordIndex,
   parseLyrics,
+  shiftLyricLines,
   type LyricLine as TimedLyricLine,
 } from '../utils/lyrics';
 
@@ -27,6 +28,8 @@ interface LyricsDisplayProps {
   onSeek?: (position: number) => void;
   /** Word highlighting only advances while the track is playing. */
   isPlaying?: boolean;
+  /** Per-track timing correction learned from playback onsets, in milliseconds. */
+  offsetMs?: number;
 }
 
 /** How often the interpolated position advances between player status updates. */
@@ -109,6 +112,7 @@ export function LyricsDisplay({
   secondaryColor,
   onSeek,
   isPlaying = false,
+  offsetMs = 0,
 }: LyricsDisplayProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineLayouts = useRef<{ y: number; height: number }[]>([]);
@@ -116,7 +120,10 @@ export function LyricsDisplay({
   const reduceMotion = useReduceMotion();
   const syncedLyricsEnabled = useSyncedLyricsEnabled();
 
-  const lines = useMemo(() => parseLyrics(lyrics), [lyrics]);
+  const lines = useMemo(() => {
+    const parsed = parseLyrics(lyrics);
+    return offsetMs ? shiftLyricLines(parsed, offsetMs) : parsed;
+  }, [lyrics, offsetMs]);
 
   // With sync turned off, timed lyrics are shown as plain, untimed text.
   const plainLines = useMemo(() => {
@@ -160,7 +167,7 @@ export function LyricsDisplay({
   useEffect(() => {
     lineLayouts.current = [];
     scrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [lyrics]);
+  }, [lyrics, offsetMs]);
 
   const activeIndex = useMemo(() => findActiveLineIndex(lines, position), [lines, position]);
 

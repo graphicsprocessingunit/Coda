@@ -154,6 +154,8 @@ interface AudioContextType {
   seamlessEnabled: boolean;
   setSeamlessEnabled: (enabled: boolean) => void;
   clearAllData: () => void;
+  /** Current native player, for features that need the live PCM stream. */
+  getAudioPlayer: () => AudioPlayer | null;
   clearDownloadedTracks: () => void;
   clearCachedArtwork: () => void;
   playTracks: (tracks: TrackMetadata[], startIndex?: number) => Promise<void>;
@@ -323,6 +325,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const cancelSleepTimerRef = useRef<() => void>(() => {});
 
   const soundRef = useRef<AudioPlayer | null>(null);
+  const getAudioPlayer = useCallback(() => soundRef.current, []);
   const playbackStatusRef = useRef<any>(null);
   const repeatEnabledRef = useRef(false);
   const shuffleEnabledRef = useRef(false);
@@ -2240,6 +2243,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     setCrossfadeDuration,
     seamlessEnabled,
     setSeamlessEnabled,
+    getAudioPlayer,
     clearAllData,
     clearDownloadedTracks,
     clearCachedArtwork,
@@ -2260,6 +2264,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     playbackRate, volume, audioPreset,
     navidromeConnected, navidromeServerUrl, serverConfigs, activeServerConfig, crossfadeEnabled, crossfadeDuration,
     seamlessEnabled,
+    getAudioPlayer,
     loadTrack, play, pause, seekTo, skipNext, skipPrevious,
     removeFromQueue, addToQueue, playNextInQueue, reorderQueue, shuffleQueue, setQueue,
     toggleShuffle, toggleRepeat, addToLibrary, removeFromLibrary, downloadTrackForLibrary,

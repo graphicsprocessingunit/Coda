@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,9 @@ import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
 import { fetchLyrics, type LyricsResult } from '../services/LyricsService';
 import { useReduceMotion } from '../hooks/useReduceMotion';
+import { useSyncedLyricsEnabled } from '../hooks/useSyncedLyricsEnabled';
+import { useLyricsAlignment } from '../hooks/useLyricsAlignment';
+import { parseLyrics } from '../utils/lyrics';
 import { contrastText } from '../utils/color';
 
 interface PlayerProps {
@@ -41,11 +44,13 @@ function NowPlayingLyrics({
   onSeek,
   accentColor,
   isPlaying,
+  offsetMs,
 }: {
   lyrics: string;
   onSeek: (position: number) => void;
   accentColor: string;
   isPlaying: boolean;
+  offsetMs: number;
 }) {
   const { playbackPosition } = usePlaybackPosition();
   const { colors } = useTheme();
@@ -58,6 +63,7 @@ function NowPlayingLyrics({
       secondaryColor={colors.textSecondary}
       onSeek={onSeek}
       isPlaying={isPlaying}
+      offsetMs={offsetMs}
     />
   );
 }
@@ -81,8 +87,9 @@ export function Player({
   accentColor,
 }: PlayerProps) {
   const { colors } = useTheme();
-  const { lastFmConnected } = useAudio();
+  const { lastFmConnected, getAudioPlayer } = useAudio();
   const reduceMotion = useReduceMotion();
+  const syncedLyricsEnabled = useSyncedLyricsEnabled();
   const accent = accentColor ?? colors.accent;
   const onAccent = contrastText(accent);
 
@@ -104,6 +111,21 @@ export function Player({
   // The live player reports milliseconds; TrackMetadata.duration is in seconds.
   const trackDurationMs =
     playerDuration > 0 ? playerDuration : (currentTrack?.duration ?? 0) * 1000;
+
+  const lyricLines = useMemo(
+    () => (lyrics ? parseLyrics(lyrics.lyrics) : []),
+    [lyrics]
+  );
+  const lyricLineTimes = useMemo(() => lyricLines.map((line) => line.time), [lyricLines]);
+  const lyricOffsetMs = useLyricsAlignment({
+    enabled: lyricsVisible && !!lyrics && syncedLyricsEnabled,
+    isPlaying,
+    getPlayer: getAudioPlayer,
+    artist: currentTrack?.artist ?? '',
+    title: currentTrack?.title ?? '',
+    durationMs: trackDurationMs,
+    lineTimesMs: lyricLineTimes,
+  });
 
   useEffect(() => {
     if (!currentTrack) {
@@ -336,6 +358,7 @@ export function Player({
               onSeek={onSeek}
               accentColor={accent}
               isPlaying={isPlaying}
+              offsetMs={lyricOffsetMs}
             />
           ) : lyricsStatus === 'none' ? (
             <EmptyState

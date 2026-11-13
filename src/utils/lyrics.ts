@@ -198,6 +198,19 @@ export function parseLyrics(raw: string): LyricLine[] {
   return lines;
 }
 
+/** Shift every line and word by a global correction (e.g. onset alignment). */
+export function shiftLyricLines(lines: LyricLine[], offsetMs: number): LyricLine[] {
+  if (!Number.isFinite(offsetMs) || offsetMs === 0) return lines;
+  return lines.map((line) => ({
+    ...line,
+    time: Math.max(0, line.time + offsetMs),
+    words: line.words.map((word) => ({
+      ...word,
+      time: word.time < 0 ? word.time : Math.max(0, word.time + offsetMs),
+    })),
+  }));
+}
+
 /** Legacy line-only view of the parsed lyrics (kept for existing callers/tests). */
 export function parseSyncedLyrics(raw: string): { time: number; text: string }[] {
   return parseLyrics(raw).map(({ time, text }) => ({ time, text }));
