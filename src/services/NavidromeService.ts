@@ -5,6 +5,7 @@ import { File } from 'expo-file-system';
 import md5 from 'md5';
 import { AppStorageService } from './AppStorageService';
 import { CryptoService } from './CryptoService';
+import { chooseStructuredLyrics, type ChosenLyrics } from './NavidromeLyrics';
 import { TrackMetadata } from '../context/AudioContext';
 
 const STORAGE_KEYS = {
@@ -586,6 +587,28 @@ export class NavidromeService {
     } catch (error) {
       console.error('Error fetching playlist:', error);
       return { playlist: null, songs: [] };
+    }
+  }
+
+  /**
+   * Lyrics stored with the song on the server (OpenSubsonic getLyricsBySongId).
+   * Timed lines are returned as LRC so the player can sync them; unsynced ones
+   * come back as plain text. Returns null when the server has none or does not
+   * support the endpoint.
+   */
+  static async getLyricsBySongId(
+    songId: string,
+    configId?: string
+  ): Promise<ChosenLyrics | null> {
+    try {
+      const creds = await NavidromeService.loadCredentials(configId);
+      if (!creds) return null;
+      const response = await NavidromeService.apiCall<any>(creds, 'getLyricsBySongId', {
+        id: songId,
+      });
+      return chooseStructuredLyrics(response?.['lyricsList']?.['structuredLyrics']);
+    } catch {
+      return null;
     }
   }
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { readEmbeddedLyrics } from './EmbeddedLyrics';
+import { NavidromeService } from './NavidromeService';
 
 /**
  * Lyrics cache keys include the track length, because the same song has many
@@ -31,6 +32,8 @@ export interface LyricsQuery {
   durationMs?: number;
   /** Local copy of the file, used for sidecar/embedded lyrics when LRCLIB has nothing. */
   localUri?: string;
+  /** Navidrome song id, for lyrics stored on the server with the file. */
+  navidromeSongId?: string;
 }
 
 export interface LyricsResult {
@@ -175,24 +178,38 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
   let result: LyricsResult | null = null;
   let failed = false;
 
-  try {
-    // LRCLIB's exact-match endpoint is the most reliable automatic pick: it
-    // requires matching artist, title, album and duration, so try it before
-    // ranking looser search results ourselves.
-    result = pickLyrics(await getExactMatch(query), query.durationMs);
+  // Lyrics stored with the file on the server belong to the exact recording, so
+  // timed ones outrank LRCLIB. Plain text from the server waits until the online
+  // lookup has failed, since LRCLIB may still have timings for this edit.
+  const serverLyrics = query.navidromeSongId
+    ? await NavidromeService.getLyricsBySongId(query.navidromeSongId)
+    : null;
+  if (serverLyrics?.synced) result = { lyrics: serverLyrics.lyrics };
 
-    const artist = query.artist?.trim();
-    if (!result && artist && artist !== 'Unknown Artist') {
-      result = pickLyrics(
-        await searchLrclib({ track_name: title, artist_name: artist }),
-        query.durationMs
-      );
-    }
+  try {
     if (!result) {
-      result = pickLyrics(await searchLrclib({ track_name: title }), query.durationMs);
+      // LRCLIB's exact-match endpoint is the most reliable automatic pick: it
+      // requires matching artist, title, album and duration, so try it before
+      // ranking looser search results ourselves.
+      result = pickLyrics(await getExactMatch(query), query.durationMs);
+
+      const artist = query.artist?.trim();
+      if (!result && artist && artist !== 'Unknown Artist') {
+        result = pickLyrics(
+          await searchLrclib({ track_name: title, artist_name: artist }),
+          query.durationMs
+        );
+      }
+      if (!result) {
+        result = pickLyrics(await searchLrclib({ track_name: title }), query.durationMs);
+      }
     }
   } catch {
     failed = true;
+  }
+
+  if (!result && serverLyrics) {
+    result = { lyrics: serverLyrics.lyrics };
   }
 
   // Offline/private files often carry their own lyrics; use them before giving up.

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File } from 'expo-file-system';
 
 import { fetchLyrics, pickLyrics } from '../src/services/LyricsService';
+import { NavidromeService } from '../src/services/NavidromeService';
 
 interface FakeRecord {
   syncedLyrics?: string;
@@ -30,6 +31,10 @@ const query = (durationMs?: number) => ({
   title: 'Song',
   album: 'Album',
   durationMs,
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 beforeEach(async () => {
@@ -169,6 +174,30 @@ describe('LyricsService', () => {
       await expect(fetchLyrics(query(180000))).resolves.toBeNull();
       // One failed request, then a full lookup that found nothing.
       expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('uses synced lyrics stored on the Navidrome server before going online', async () => {
+      jest.spyOn(NavidromeService, 'getLyricsBySongId').mockResolvedValue({
+        lyrics: '[00:01.000]server line',
+        synced: true,
+      });
+
+      const result = await fetchLyrics({ ...query(180000), navidromeSongId: 'song-1' });
+
+      expect(result?.lyrics).toBe('[00:01.000]server line');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('falls back to plain server lyrics when LRCLIB has no match', async () => {
+      jest.spyOn(NavidromeService, 'getLyricsBySongId').mockResolvedValue({
+        lyrics: 'plain from server',
+        synced: false,
+      });
+
+      const result = await fetchLyrics({ ...query(180000), navidromeSongId: 'song-1' });
+
+      expect(result?.lyrics).toBe('plain from server');
+      expect(mockFetch).toHaveBeenCalled();
     });
 
     it('falls back to an .lrc sidecar when LRCLIB has no match', async () => {
