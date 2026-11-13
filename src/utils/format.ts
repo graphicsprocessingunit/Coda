@@ -12,3 +12,16 @@ export function formatLongDuration(ms: number): string {
   const m = totalMin % 60;
   return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
 }
+
+/**
+ * Track metadata (Subsonic/Navidrome) stores lengths in whole seconds, while
+ * the player reports milliseconds. These helpers keep the conversion at the
+ * display boundary explicit rather than relying on the caller's memory.
+ */
+export function formatDurationFromSeconds(seconds: number): string {
+  return formatDuration(seconds * 1000);
+}
+
+export function formatLongDurationFromSeconds(seconds: number): string {
+  return formatLongDuration(seconds * 1000);
+}

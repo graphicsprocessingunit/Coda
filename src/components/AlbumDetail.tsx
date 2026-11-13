@@ -7,7 +7,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAudio, useDownloadProgress, useBatchDownloads, TrackMetadata } from '../context/AudioContext';
 import { AlbumGroup } from '../services/LibraryGrouping';
 import { OfflineCacheService } from '../services/OfflineCacheService';
-import { formatDuration, formatLongDuration } from '../utils/format';
+import { formatDurationFromSeconds, formatLongDurationFromSeconds } from '../utils/format';
 
 interface AlbumDetailProps {
   album: AlbumGroup;
@@ -122,7 +122,7 @@ export function AlbumDetail({ album, currentTrack, onBack }: AlbumDetailProps) {
         )}
         {typeof item.duration === 'number' && item.duration > 0 && (
           <Text style={[styles.trackDuration, { color: colors.textSecondary }]}>
-            {formatDuration(item.duration)}
+            {formatDurationFromSeconds(item.duration)}
           </Text>
         )}
       </Pressable>
@@ -133,7 +133,7 @@ export function AlbumDetail({ album, currentTrack, onBack }: AlbumDetailProps) {
     album.albumArtist,
     album.year ? String(album.year) : null,
     `${album.trackCount} ${album.trackCount === 1 ? 'track' : 'tracks'}`,
-    album.totalDuration > 0 ? formatLongDuration(album.totalDuration) : null,
+    album.totalDuration > 0 ? formatLongDurationFromSeconds(album.totalDuration) : null,
   ].filter(Boolean) as string[];
 
   return (

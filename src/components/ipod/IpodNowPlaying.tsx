@@ -76,7 +76,7 @@ export function IpodNowPlaying({
     );
   }
 
-  const durationMs = duration || currentTrack.duration || 0;
+  const durationMs = duration > 0 ? duration : (currentTrack.duration ?? 0) * 1000;
   const ratio = durationMs > 0 ? Math.min(1, Math.max(0, playbackPosition / durationMs)) : 0;
   const progressFill = volumeMode ? volume : ratio;
   const elapsedSec = Math.floor(playbackPosition / 1000);

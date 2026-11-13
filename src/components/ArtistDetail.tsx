@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../context/ThemeContext';
 import { useAudio, TrackMetadata } from '../context/AudioContext';
 import { ArtistGroup } from '../services/LibraryGrouping';
-import { formatDuration } from '../utils/format';
+import { formatDurationFromSeconds } from '../utils/format';
 
 interface ArtistDetailProps {
   artist: ArtistGroup;
@@ -62,7 +62,7 @@ export function ArtistDetail({ artist, currentTrack, onBack, onAlbumPress }: Art
         </View>
         {typeof item.duration === 'number' && item.duration > 0 && (
           <Text style={[styles.trackDuration, { color: colors.textSecondary }]}>
-            {formatDuration(item.duration)}
+            {formatDurationFromSeconds(item.duration)}
           </Text>
         )}
       </Pressable>

@@ -295,7 +295,7 @@ export function IpodApp() {
           const next = clamp(volumeRef.current + ticks * 0.06, 0, 1);
           audio.setVolume(next);
         } else {
-          const total = durationRef.current || audio.currentTrack?.duration || 0;
+          const total = durationRef.current || (audio.currentTrack?.duration ?? 0) * 1000;
           if (total > 0) {
             const target = clamp(positionRef.current + ticks * 3000, 0, total);
             audio.seekTo(Math.floor(target));
