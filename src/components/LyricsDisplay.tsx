@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Text, ScrollView, Pressable } from 'react-native';
 
 import { useReduceMotion } from '../hooks/useReduceMotion';
+import { useSyncedLyricsEnabled } from '../hooks/useSyncedLyricsEnabled';
 import {
   findActiveLineIndex,
   findActiveWordIndex,
@@ -113,8 +114,20 @@ export function LyricsDisplay({
   const lineLayouts = useRef<{ y: number; height: number }[]>([]);
   const [viewportHeight, setViewportHeight] = useState(0);
   const reduceMotion = useReduceMotion();
+  const syncedLyricsEnabled = useSyncedLyricsEnabled();
 
   const lines = useMemo(() => parseLyrics(lyrics), [lyrics]);
+
+  // With sync turned off, timed lyrics are shown as plain, untimed text.
+  const plainLines = useMemo(() => {
+    if (lines.length > 0) {
+      return lines.map((line) => line.text).filter((text) => text.length > 0);
+    }
+    return lyrics
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }, [lines, lyrics]);
 
   // Player status arrives about once a second; extrapolate between updates so
   // word highlighting moves smoothly instead of jumping once per second.
@@ -127,7 +140,7 @@ export function LyricsDisplay({
   }, [playbackPosition]);
 
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || !syncedLyricsEnabled) return;
     const id = setInterval(() => {
       const anchor = anchorRef.current;
       const next = anchor.position + (Date.now() - anchor.at);
@@ -142,7 +155,7 @@ export function LyricsDisplay({
       });
     }, TICK_MS);
     return () => clearInterval(id);
-  }, [isPlaying, lines]);
+  }, [isPlaying, lines, syncedLyricsEnabled]);
 
   useEffect(() => {
     lineLayouts.current = [];
@@ -178,7 +191,7 @@ export function LyricsDisplay({
     lineLayouts.current[index] = { y, height };
   }, []);
 
-  if (lines.length > 0) {
+  if (syncedLyricsEnabled && lines.length > 0) {
     return (
       <View style={styles.container}>
         <ScrollView
@@ -218,9 +231,9 @@ export function LyricsDisplay({
         showsVerticalScrollIndicator={false}
       >
         <View style={{ height: 48 }} />
-        {lyrics.split('\n').map((line, i) => (
+        {plainLines.map((line, i) => (
           <Text key={i} style={[styles.line, { color: textColor, fontSize: 18, lineHeight: 24 }]}>
-            {line.trim()}
+            {line}
           </Text>
         ))}
         <View style={{ height: 160 }} />

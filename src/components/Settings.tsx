@@ -9,6 +9,8 @@ import { AudioEffectsSection } from './AudioEffects';
 import { NavidromeSettingsSection } from './NavidromeSettings';
 import { AppStorageService, StorageUsage } from '../services/AppStorageService';
 import { LastFmService } from '../services/LastFmService';
+import { useSyncedLyricsEnabled } from '../hooks/useSyncedLyricsEnabled';
+import { setSyncedLyricsEnabled } from '../services/LyricsSettings';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -37,6 +39,7 @@ interface SettingsProps {
 export function Settings({ onClearData }: SettingsProps) {
   const { theme, colors, setTheme, layout, setLayout } = useTheme();
   const { navidromeConnected, crossfadeEnabled, crossfadeDuration, setCrossfadeEnabled, setCrossfadeDuration, seamlessEnabled, setSeamlessEnabled, lastFmConnected, connectLastFm, disconnectLastFm, loadSavedLastFmLogin, clearDownloadedTracks, clearCachedArtwork } = useAudio();
+  const syncedLyricsEnabled = useSyncedLyricsEnabled();
   const [showAppearance, setShowAppearance] = useState(false);
   const [showAudioEffects, setShowAudioEffects] = useState(false);
   const [showSleepTimer, setShowSleepTimer] = useState(false);
@@ -170,6 +173,42 @@ export function Settings({ onClearData }: SettingsProps) {
                   <Text style={[styles.settingValue, { color: colors.accent }]}>{crossfadeDuration}s</Text>
                 ) : null}
                 <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
+              </View>
+            </Pressable>
+            <Pressable
+              style={[styles.settingItem, { borderBottomColor: colors.border }]}
+              onPress={() => {
+                void setSyncedLyricsEnabled(!syncedLyricsEnabled);
+              }}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: syncedLyricsEnabled }}
+              accessibilityLabel="Synced lyrics"
+              accessibilityHint="Highlight lyrics in time with the music"
+            >
+              <View style={styles.settingLeft}>
+                <Ionicons name="mic-outline" size={24} color={colors.textSecondary} />
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={[styles.settingText, { color: colors.text }]}>Synced lyrics</Text>
+                  <Text style={[styles.settingSubtext, { color: colors.textSecondary }]}>
+                    Highlight lyrics in time with the music
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={[
+                  styles.toggleTrack,
+                  { backgroundColor: syncedLyricsEnabled ? colors.accent : colors.border },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.toggleThumb,
+                    {
+                      transform: [{ translateX: syncedLyricsEnabled ? 20 : 0 }],
+                      backgroundColor: '#FFFFFF',
+                    },
+                  ]}
+                />
               </View>
             </Pressable>
             <Pressable
