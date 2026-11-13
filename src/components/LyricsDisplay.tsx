@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, ScrollView, Pressable } from 'react-native';
 
 import { useReduceMotion } from '../hooks/useReduceMotion';
@@ -7,6 +7,7 @@ import {
   findActiveLineIndex,
   findActiveWordIndex,
   parseLyrics,
+  type LyricLine as TimedLyricLine,
 } from '../utils/lyrics';
 
 export { findActiveLineIndex, parseSyncedLyrics } from '../utils/lyrics';
@@ -30,12 +31,79 @@ interface LyricsDisplayProps {
   trackDuration?: number;
   /** Length of the edit the lyrics were timed for (ms). */
   sourceDuration?: number;
-  /** Manual sync nudge in milliseconds; positive delays the lyrics. */
-  offsetMs?: number;
 }
 
 /** How often the interpolated position advances between player status updates. */
 const TICK_MS = 100;
+
+interface LyricRowProps {
+  line: TimedLyricLine;
+  index: number;
+  isActive: boolean;
+  activeWord: number;
+  accentColor: string;
+  textColor: string;
+  secondaryColor: string;
+  onSeek: (line: TimedLyricLine) => void;
+  onLayout: (index: number, y: number, height: number) => void;
+}
+
+/**
+ * Rows are memoised: during playback only the active line changes, so the
+ * other lines must not be rebuilt several times a second.
+ */
+const LyricRow = React.memo(function LyricRow({
+  line,
+  index,
+  isActive,
+  activeWord,
+  accentColor,
+  textColor,
+  secondaryColor,
+  onSeek,
+  onLayout,
+}: LyricRowProps) {
+  return (
+    <Pressable
+      onPress={() => onSeek(line)}
+      style={styles.linePressable}
+      accessibilityRole="button"
+      accessibilityLabel={line.text}
+      accessibilityHint="Seek to this line"
+      onLayout={(event) =>
+        onLayout(index, event.nativeEvent.layout.y, event.nativeEvent.layout.height)
+      }
+    >
+      <Text
+        style={[
+          styles.line,
+          {
+            color: isActive ? textColor : secondaryColor,
+            fontWeight: isActive ? '700' : '400',
+            fontSize: isActive ? 20 : 17,
+            lineHeight: isActive ? 28 : 24,
+          },
+        ]}
+      >
+        {isActive && line.words.length > 0
+          ? line.words.map((word, wordIndex) => (
+              <Text
+                key={`${wordIndex}-${word.text}`}
+                style={
+                  wordIndex <= activeWord
+                    ? { color: accentColor }
+                    : { color: secondaryColor, opacity: 0.55 }
+                }
+              >
+                {word.text}
+                {wordIndex < line.words.length - 1 ? ' ' : ''}
+              </Text>
+            ))
+          : line.text}
+      </Text>
+    </Pressable>
+  );
+});
 
 export function LyricsDisplay({
   lyrics,
@@ -47,7 +115,6 @@ export function LyricsDisplay({
   isPlaying = false,
   trackDuration,
   sourceDuration,
-  offsetMs = 0,
 }: LyricsDisplayProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineLayouts = useRef<{ y: number; height: number }[]>([]);
@@ -92,9 +159,12 @@ export function LyricsDisplay({
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [lyrics]);
 
-  const activeIndex = useMemo(
-    () => findActiveLineIndex(lines, position - offsetMs),
-    [lines, position, offsetMs]
+  const activeIndex = useMemo(() => findActiveLineIndex(lines, position), [lines, position]);
+
+  const activeWord = useMemo(
+    () =>
+      activeIndex >= 0 ? findActiveWordIndex(lines[activeIndex]?.words ?? [], position) : -1,
+    [activeIndex, lines, position]
   );
 
   useEffect(() => {
@@ -107,6 +177,17 @@ export function LyricsDisplay({
     });
   }, [activeIndex, viewportHeight, reduceMotion]);
 
+  const handleSeek = useCallback(
+    (line: TimedLyricLine) => {
+      onSeek?.(line.time);
+    },
+    [onSeek]
+  );
+
+  const handleLineLayout = useCallback((index: number, y: number, height: number) => {
+    lineLayouts.current[index] = { y, height };
+  }, []);
+
   if (lines.length > 0) {
     return (
       <View style={styles.container}>
@@ -118,56 +199,20 @@ export function LyricsDisplay({
           onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
         >
           <View style={{ height: 48 }} />
-          {lines.map((line, index) => {
-            const isActive = index === activeIndex;
-            const activeWord = isActive
-              ? findActiveWordIndex(line.words, position - offsetMs)
-              : -1;
-            return (
-              <Pressable
-                key={`${line.time}-${index}`}
-                onPress={() => onSeek?.(line.time + offsetMs)}
-                style={styles.linePressable}
-                accessibilityRole="button"
-                accessibilityLabel={line.text}
-                accessibilityHint="Seek to this line"
-                onLayout={(event) => {
-                  lineLayouts.current[index] = {
-                    y: event.nativeEvent.layout.y,
-                    height: event.nativeEvent.layout.height,
-                  };
-                }}
-              >
-                <Text
-                  style={[
-                    styles.line,
-                    {
-                      color: isActive ? textColor : secondaryColor,
-                      fontWeight: isActive ? '700' : '400',
-                      fontSize: isActive ? 20 : 17,
-                      lineHeight: isActive ? 28 : 24,
-                    },
-                  ]}
-                >
-                  {isActive && line.words.length > 0
-                    ? line.words.map((word, wordIndex) => (
-                        <Text
-                          key={`${wordIndex}-${word.text}`}
-                          style={
-                            wordIndex <= activeWord
-                              ? { color: accentColor }
-                              : { color: secondaryColor, opacity: 0.55 }
-                          }
-                        >
-                          {word.text}
-                          {wordIndex < line.words.length - 1 ? ' ' : ''}
-                        </Text>
-                      ))
-                    : line.text}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {lines.map((line, index) => (
+            <LyricRow
+              key={`${line.time}-${index}`}
+              line={line}
+              index={index}
+              isActive={index === activeIndex}
+              activeWord={index === activeIndex ? activeWord : -1}
+              accentColor={accentColor}
+              textColor={textColor}
+              secondaryColor={secondaryColor}
+              onSeek={handleSeek}
+              onLayout={handleLineLayout}
+            />
+          ))}
           <View style={{ height: 160 }} />
         </ScrollView>
       </View>

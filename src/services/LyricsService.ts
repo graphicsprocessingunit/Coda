@@ -109,6 +109,26 @@ function readCache(raw: string): LyricsResult | null {
   }
 }
 
+async function getExactMatch(query: LyricsQuery): Promise<LrclibRecord[]> {
+  const artist = query.artist?.trim();
+  const title = query.title?.trim();
+  if (!title || !artist || artist === 'Unknown Artist') return [];
+
+  const params: Record<string, string> = { track_name: title, artist_name: artist };
+  const album = query.album?.trim();
+  if (album) params.album_name = album;
+  if (query.durationMs && query.durationMs > 0) {
+    params.duration = String(Math.round(query.durationMs / 1000));
+  }
+
+  const res = await fetch(`https://lrclib.net/api/get?${new URLSearchParams(params)}`, {
+    headers: { 'User-Agent': USER_AGENT },
+  });
+  if (!res.ok) return [];
+  const record = (await res.json()) as LrclibRecord;
+  return record && (record.syncedLyrics || record.plainLyrics) ? [record] : [];
+}
+
 async function searchLrclib(params: Record<string, string>): Promise<LrclibRecord[]> {
   const search = new URLSearchParams(params);
   const res = await fetch(`https://lrclib.net/api/search?${search}`, {
@@ -132,14 +152,18 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
   }
 
   try {
+    // LRCLIB's exact-match endpoint is the most reliable automatic pick: it
+    // requires matching artist, title, album and duration, so try it before
+    // ranking looser search results ourselves.
+    let result = pickLyrics(await getExactMatch(query), query.durationMs);
+
     const artist = query.artist?.trim();
-    let records: LrclibRecord[] = [];
-
-    if (artist && artist !== 'Unknown Artist') {
-      records = await searchLrclib({ track_name: title, artist_name: artist });
+    if (!result && artist && artist !== 'Unknown Artist') {
+      result = pickLyrics(
+        await searchLrclib({ track_name: title, artist_name: artist }),
+        query.durationMs
+      );
     }
-
-    let result = pickLyrics(records, query.durationMs);
     if (!result) {
       result = pickLyrics(await searchLrclib({ track_name: title }), query.durationMs);
     }

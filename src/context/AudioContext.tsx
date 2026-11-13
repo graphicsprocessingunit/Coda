@@ -453,6 +453,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
           savePositionImmediate((status.currentTime || 0) * 1000);
         }
       }
+      try {
+        soundRef.current?.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current);
+        crossfadeSoundRef.current?.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current);
+      } catch {}
       destroyPlayer(soundRef.current);
       destroyPlayer(crossfadeSoundRef.current);
       if (preloadRef.current) {
@@ -2002,10 +2006,12 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const switchServer = useCallback(async (configId: string) => {
     if (soundRef.current) {
+      try { soundRef.current.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current); } catch {}
       destroyPlayer(soundRef.current);
       soundRef.current = null;
     }
     if (crossfadeSoundRef.current) {
+      try { crossfadeSoundRef.current.removeListener('playbackStatusUpdate', onPlaybackStatusUpdateRef.current); } catch {}
       destroyPlayer(crossfadeSoundRef.current);
       crossfadeSoundRef.current = null;
     }

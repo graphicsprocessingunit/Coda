@@ -176,10 +176,6 @@ export function parseSyncedLyrics(raw: string): { time: number; text: string }[]
   return parseLyrics(raw).map(({ time, text }) => ({ time, text }));
 }
 
-/** Whether the document carries line timestamps at all. */
-export function hasSyncedLyrics(raw: string): boolean {
-  return /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/.test(raw);
-}
 
 /**
  * Stretch timestamps so lyrics authored for a different-length edit line up
