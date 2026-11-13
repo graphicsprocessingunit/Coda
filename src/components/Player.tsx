@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Text, Pressable, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { ProgressBar } from './ProgressBar';
 import { LyricsDisplay } from './LyricsDisplay';
 import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
-import { fetchLyrics } from '../services/LyricsService';
+import { fetchLyrics, type LyricsResult } from '../services/LyricsService';
 import { useReduceMotion } from '../hooks/useReduceMotion';
 import { contrastText } from '../utils/color';
 
@@ -47,10 +47,16 @@ function NowPlayingLyrics({
   lyrics,
   onSeek,
   accentColor,
+  isPlaying,
+  trackDuration,
+  sourceDuration,
 }: {
   lyrics: string;
   onSeek: (position: number) => void;
   accentColor: string;
+  isPlaying: boolean;
+  trackDuration: number;
+  sourceDuration?: number;
 }) {
   const { playbackPosition } = usePlaybackPosition();
   const { colors } = useTheme();
@@ -62,6 +68,9 @@ function NowPlayingLyrics({
       textColor={colors.text}
       secondaryColor={colors.textSecondary}
       onSeek={onSeek}
+      isPlaying={isPlaying}
+      trackDuration={trackDuration}
+      sourceDuration={sourceDuration}
     />
   );
 }
@@ -101,23 +110,48 @@ export function Player({
   const heartScale = useRef(new Animated.Value(1)).current;
 
   const [lyricsVisible, setLyricsVisible] = useState(false);
-  const [lyricsText, setLyricsText] = useState<string | null>(null);
-
-  const loadLyrics = useCallback(async () => {
-    if (!currentTrack) return;
-    const lyrics = await fetchLyrics(
-      currentTrack.artist,
-      currentTrack.title,
-      currentTrack.album || '',
-      currentTrack.duration || 0
-    );
-    setLyricsText(lyrics);
-  }, [currentTrack]);
+  const [lyrics, setLyrics] = useState<LyricsResult | null>(null);
+  const [lyricsStatus, setLyricsStatus] = useState<'loading' | 'ready' | 'none'>('loading');
+  const lyricsUriRef = useRef<string | null>(null);
+  const { duration: playerDuration } = usePlaybackPosition();
+  // The live player reports milliseconds; TrackMetadata.duration is in seconds.
+  const trackDurationMs =
+    playerDuration > 0 ? playerDuration : (currentTrack?.duration ?? 0) * 1000;
 
   useEffect(() => {
-    setLyricsText(null);
-    loadLyrics();
-  }, [currentTrack?.uri, loadLyrics]);
+    if (!currentTrack) {
+      lyricsUriRef.current = null;
+      setLyrics(null);
+      setLyricsStatus('none');
+      return;
+    }
+
+    if (lyricsUriRef.current !== currentTrack.uri) {
+      lyricsUriRef.current = currentTrack.uri;
+      setLyrics(null);
+      setLyricsStatus('loading');
+    }
+
+    let cancelled = false;
+    fetchLyrics({
+      artist: currentTrack.artist,
+      title: currentTrack.title,
+      album: currentTrack.album,
+      durationMs: trackDurationMs,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setLyrics(result);
+        setLyricsStatus(result ? 'ready' : 'none');
+      })
+      .catch(() => {
+        if (!cancelled) setLyricsStatus('none');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack, trackDurationMs]);
 
   useEffect(() => {
     if (reduceMotion) {
@@ -306,9 +340,16 @@ export function Player({
 
       {lyricsVisible && (
         <View style={styles.lyricsContainer}>
-          {lyricsText ? (
-            <NowPlayingLyrics lyrics={lyricsText} onSeek={onSeek} accentColor={accent} />
-          ) : lyricsText === '' ? (
+          {lyricsStatus === 'ready' && lyrics ? (
+            <NowPlayingLyrics
+              lyrics={lyrics.lyrics}
+              onSeek={onSeek}
+              accentColor={accent}
+              isPlaying={isPlaying}
+              trackDuration={trackDurationMs}
+              sourceDuration={lyrics.sourceDurationMs}
+            />
+          ) : lyricsStatus === 'none' ? (
             <EmptyState
               icon="mic-outline"
               decorativeIcons={[

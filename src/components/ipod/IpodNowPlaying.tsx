@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAudio, useIsPlaying, usePlaybackPosition } from '../../context/AudioContext';
 import { useTheme } from '../../context/ThemeContext';
-import { fetchLyrics } from '../../services/LyricsService';
+import { fetchLyrics, type LyricsResult } from '../../services/LyricsService';
 import { LyricsDisplay } from '../LyricsDisplay';
 import { fmtDuration } from './menus';
 import { IPOD_NOWPLAYING } from './ipodTheme';
@@ -29,7 +29,7 @@ export function IpodNowPlaying({
   const { playbackPosition, duration } = usePlaybackPosition();
   const { ipod } = useTheme();
 
-  const [lyrics, setLyrics] = useState<string | null>(null);
+  const [lyrics, setLyrics] = useState<LyricsResult | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,13 +37,12 @@ export function IpodNowPlaying({
       setLyrics(null);
       return;
     }
-    setLyrics(null);
-    fetchLyrics(
-      currentTrack.title,
-      currentTrack.artist,
-      currentTrack.album ?? '',
-      (currentTrack.duration ?? 0) * 1000
-    )
+    fetchLyrics({
+      artist: currentTrack.artist,
+      title: currentTrack.title,
+      album: currentTrack.album,
+      durationMs: duration > 0 ? duration : (currentTrack.duration ?? 0) * 1000,
+    })
       .then((result) => {
         if (!cancelled) setLyrics(result);
       })
@@ -53,7 +52,7 @@ export function IpodNowPlaying({
     return () => {
       cancelled = true;
     };
-  }, [lyricsOpen, currentTrack]);
+  }, [lyricsOpen, currentTrack, duration]);
 
   const artwork = useMemo(() => {
     const t = currentTrack;
@@ -89,12 +88,15 @@ export function IpodNowPlaying({
         {lyricsOpen && lyrics ? (
           <View style={styles.lyricsPanel}>
             <LyricsDisplay
-              lyrics={lyrics}
+              lyrics={lyrics.lyrics}
               playbackPosition={playbackPosition}
               accentColor={ipod.nowPlayingAccent}
               textColor={IPOD_NOWPLAYING.text}
               secondaryColor={IPOD_NOWPLAYING.dim}
               onSeek={(pos) => seekTo(pos)}
+              isPlaying={isPlaying}
+              trackDuration={duration > 0 ? duration : (currentTrack.duration ?? 0) * 1000}
+              sourceDuration={lyrics.sourceDurationMs}
             />
           </View>
         ) : (
