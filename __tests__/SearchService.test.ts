@@ -73,4 +73,50 @@ describe('SearchService', () => {
     expect(groupIntoAlbums(library).length).toBe(4);
     expect(groupIntoArtists(library).length).toBe(3);
   });
+
+  const onlySongs = (tracks: TrackMetadata[]) => ({
+    ...baseOptions,
+    library: tracks,
+    albums: [],
+    artists: [],
+    playlists: [],
+  });
+
+  it('finds diacritic names from ascii queries', () => {
+    const bjork = [
+      track({ title: 'Jóga', artist: 'Björk', album: 'Homogenic' }),
+      track({ title: 'Hyperballad', artist: 'Björk', album: 'Post' }),
+    ];
+    expect(searchLibrary('bjork', onlySongs(bjork)).songs).toHaveLength(2);
+    expect(searchLibrary('joga', onlySongs(bjork)).songs.map((t) => t.title)).toEqual(['Jóga']);
+  });
+
+  it('ranks title matches above artist matches, and artist above album', () => {
+    const ranked = [
+      track({ title: 'Kid A', artist: 'Radiohead' }),
+      track({ title: 'Radiohead', artist: 'Someone Else' }),
+      track({ title: 'Hail to the Thief', artist: 'Other Artist', album: 'Radiohead' }),
+    ];
+    expect(searchLibrary('radiohead', onlySongs(ranked)).songs.map((t) => t.title)).toEqual([
+      'Radiohead',
+      'Kid A',
+      'Hail to the Thief',
+    ]);
+  });
+
+  it('ranks title prefixes above mid-word matches', () => {
+    const ranked = [
+      track({ title: 'Pyramid Song', artist: 'A' }),
+      track({ title: 'Song for Someone', artist: 'B' }),
+    ];
+    expect(searchLibrary('song', onlySongs(ranked)).songs.map((t) => t.title)).toEqual([
+      'Song for Someone',
+      'Pyramid Song',
+    ]);
+  });
+
+  it('still finds matches when the query only hits a later word of the title', () => {
+    const ranked = [track({ title: 'Everything In Its Right Place', artist: 'Radiohead' })];
+    expect(searchLibrary('right place', onlySongs(ranked)).songs).toHaveLength(1);
+  });
 });
