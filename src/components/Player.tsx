@@ -9,6 +9,14 @@ import { LyricsDisplay } from './LyricsDisplay';
 import { SkeletonLoader } from './SkeletonLoader';
 import { EmptyState } from './EmptyState';
 import { fetchLyrics, type LyricsResult } from '../services/LyricsService';
+import {
+  LYRICS_OFFSET_STEP_MS,
+  clampLyricsOffset,
+  formatLyricsOffset,
+  loadLyricsOffset,
+  saveLyricsOffset,
+} from '../services/LyricsOffsetService';
+import { hasSyncedLyrics } from '../utils/lyrics';
 import { useReduceMotion } from '../hooks/useReduceMotion';
 import { contrastText } from '../utils/color';
 
@@ -50,6 +58,7 @@ function NowPlayingLyrics({
   isPlaying,
   trackDuration,
   sourceDuration,
+  lyricsOffset,
 }: {
   lyrics: string;
   onSeek: (position: number) => void;
@@ -57,6 +66,7 @@ function NowPlayingLyrics({
   isPlaying: boolean;
   trackDuration: number;
   sourceDuration?: number;
+  lyricsOffset: number;
 }) {
   const { playbackPosition } = usePlaybackPosition();
   const { colors } = useTheme();
@@ -71,6 +81,7 @@ function NowPlayingLyrics({
       isPlaying={isPlaying}
       trackDuration={trackDuration}
       sourceDuration={sourceDuration}
+      offsetMs={lyricsOffset}
     />
   );
 }
@@ -152,6 +163,30 @@ export function Player({
       cancelled = true;
     };
   }, [currentTrack, trackDurationMs]);
+
+  // Manual sync nudge, remembered per track: some files are timed against a
+  // slightly different intro and no amount of matching fixes them.
+  const [lyricsOffset, setLyricsOffset] = useState(0);
+
+  useEffect(() => {
+    setLyricsOffset(0);
+    const uri = currentTrack?.uri;
+    if (!uri) return;
+    let cancelled = false;
+    loadLyricsOffset(uri).then((value) => {
+      if (!cancelled) setLyricsOffset(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.uri]);
+
+  const applyLyricsOffset = (value: number) => {
+    if (!currentTrack) return;
+    const next = clampLyricsOffset(value);
+    setLyricsOffset(next);
+    void saveLyricsOffset(currentTrack.uri, next);
+  };
 
   useEffect(() => {
     if (reduceMotion) {
@@ -340,6 +375,46 @@ export function Player({
 
       {lyricsVisible && (
         <View style={styles.lyricsContainer}>
+          {lyricsStatus === 'ready' && lyrics && hasSyncedLyrics(lyrics.lyrics) && (
+            <View style={styles.syncRow}>
+              <Pressable
+                onPress={() => applyLyricsOffset(lyricsOffset - LYRICS_OFFSET_STEP_MS)}
+                style={[styles.syncButton, { backgroundColor: colors.card }]}
+                accessibilityRole="button"
+                accessibilityLabel="Show lyrics half a second earlier"
+              >
+                <Ionicons name="remove" size={18} color={colors.text} />
+              </Pressable>
+              <Pressable
+                onPress={() => applyLyricsOffset(0)}
+                style={styles.syncValuePressable}
+                disabled={lyricsOffset === 0}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  lyricsOffset === 0
+                    ? 'Lyrics in sync'
+                    : `Lyrics offset ${formatLyricsOffset(lyricsOffset)}, tap to reset`
+                }
+              >
+                <Text
+                  style={[
+                    styles.syncValue,
+                    { color: lyricsOffset === 0 ? colors.textSecondary : accent },
+                  ]}
+                >
+                  {lyricsOffset === 0 ? 'Lyrics in sync' : formatLyricsOffset(lyricsOffset)}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => applyLyricsOffset(lyricsOffset + LYRICS_OFFSET_STEP_MS)}
+                style={[styles.syncButton, { backgroundColor: colors.card }]}
+                accessibilityRole="button"
+                accessibilityLabel="Delay lyrics by half a second"
+              >
+                <Ionicons name="add" size={18} color={colors.text} />
+              </Pressable>
+            </View>
+          )}
           {lyricsStatus === 'ready' && lyrics ? (
             <NowPlayingLyrics
               lyrics={lyrics.lyrics}
@@ -348,6 +423,7 @@ export function Player({
               isPlaying={isPlaying}
               trackDuration={trackDurationMs}
               sourceDuration={lyrics.sourceDurationMs}
+              lyricsOffset={lyricsOffset}
             />
           ) : lyricsStatus === 'none' ? (
             <EmptyState
@@ -517,6 +593,29 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 10,
+  },
+  syncButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncValuePressable: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  syncValue: {
+    minWidth: 96,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
   },
   lyricsContainer: {
     flex: 1,

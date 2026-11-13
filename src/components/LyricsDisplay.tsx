@@ -30,6 +30,8 @@ interface LyricsDisplayProps {
   trackDuration?: number;
   /** Length of the edit the lyrics were timed for (ms). */
   sourceDuration?: number;
+  /** Manual sync nudge in milliseconds; positive delays the lyrics. */
+  offsetMs?: number;
 }
 
 /** How often the interpolated position advances between player status updates. */
@@ -45,6 +47,7 @@ export function LyricsDisplay({
   isPlaying = false,
   trackDuration,
   sourceDuration,
+  offsetMs = 0,
 }: LyricsDisplayProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineLayouts = useRef<{ y: number; height: number }[]>([]);
@@ -89,7 +92,10 @@ export function LyricsDisplay({
     scrollRef.current?.scrollTo({ y: 0, animated: false });
   }, [lyrics]);
 
-  const activeIndex = useMemo(() => findActiveLineIndex(lines, position), [lines, position]);
+  const activeIndex = useMemo(
+    () => findActiveLineIndex(lines, position - offsetMs),
+    [lines, position, offsetMs]
+  );
 
   useEffect(() => {
     if (activeIndex < 0 || viewportHeight <= 0) return;
@@ -114,11 +120,13 @@ export function LyricsDisplay({
           <View style={{ height: 48 }} />
           {lines.map((line, index) => {
             const isActive = index === activeIndex;
-            const activeWord = isActive ? findActiveWordIndex(line.words, position) : -1;
+            const activeWord = isActive
+              ? findActiveWordIndex(line.words, position - offsetMs)
+              : -1;
             return (
               <Pressable
                 key={`${line.time}-${index}`}
-                onPress={() => onSeek?.(line.time)}
+                onPress={() => onSeek?.(line.time + offsetMs)}
                 style={styles.linePressable}
                 accessibilityRole="button"
                 accessibilityLabel={line.text}
