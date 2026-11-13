@@ -180,6 +180,11 @@ jest.mock('expo-file-system', () => {
       files.set(this._uri, data);
     }
     textSync() { return files.get(this._uri) ?? ''; }
+    text() { return Promise.resolve(files.get(this._uri) ?? ''); }
+    bytes() {
+      const data = files.get(this._uri);
+      return Promise.resolve(data ? new Uint8Array(Buffer.from(data, 'binary')) : new Uint8Array());
+    }
     move(destination) {
       const destUri = typeof destination === 'string' ? destination : destination.uri;
       const target = destUri.endsWith('/') ? destUri + this.name : destUri + '/' + this.name;

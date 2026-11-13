@@ -42,6 +42,7 @@ export function IpodNowPlaying({
       title: currentTrack.title,
       album: currentTrack.album,
       durationMs: duration > 0 ? duration : (currentTrack.duration ?? 0) * 1000,
+      localUri: currentTrack.cachedUri ?? currentTrack.uri,
     })
       .then((result) => {
         if (!cancelled) setLyrics(result);

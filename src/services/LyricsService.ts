@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { readEmbeddedLyrics } from './EmbeddedLyrics';
+
 /**
  * Lyrics cache keys include the track length, because the same song has many
  * timed edits (album, radio, live, remaster) with completely different word
@@ -7,6 +9,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 const CACHE_PREFIX = '@coda_lyrics_v2_';
 const USER_AGENT = 'Coda Music Player v1.4.0';
+
+/** Remember a miss for an hour so tracks without lyrics don't refetch on every play. */
+export const NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /** A same-recording match should be within this window… */
 const MATCH_RATIO = 0.1;
@@ -21,6 +26,8 @@ export interface LyricsQuery {
   album?: string;
   /** Track length in milliseconds, when known. */
   durationMs?: number;
+  /** Local copy of the file, used for sidecar/embedded lyrics when LRCLIB has nothing. */
+  localUri?: string;
 }
 
 export interface LyricsResult {
@@ -37,6 +44,11 @@ interface LrclibRecord {
   plainLyrics?: string | null;
   duration?: number;
 }
+
+type CacheEntry =
+  | { state: 'hit'; result: LyricsResult }
+  | { state: 'miss' }
+  | { state: 'stale' };
 
 function cacheKey(query: LyricsQuery): string {
   const artist = query.artist.trim().toLowerCase();
@@ -95,17 +107,41 @@ export function pickLyrics(records: LrclibRecord[], durationMs?: number): Lyrics
   return null;
 }
 
-function readCache(raw: string): LyricsResult | null {
+function readCacheEntry(raw: string): CacheEntry {
   try {
-    const parsed = JSON.parse(raw) as Partial<LyricsResult>;
-    if (typeof parsed.lyrics !== 'string' || parsed.lyrics.length === 0) return null;
-    return {
-      lyrics: parsed.lyrics,
-      sourceDurationMs:
-        typeof parsed.sourceDurationMs === 'number' ? parsed.sourceDurationMs : undefined,
+    const parsed = JSON.parse(raw) as {
+      lyrics?: unknown;
+      sourceDurationMs?: unknown;
+      none?: unknown;
+      at?: unknown;
     };
+
+    if (parsed.none === true) {
+      const at = typeof parsed.at === 'number' ? parsed.at : 0;
+      return Date.now() - at < NEGATIVE_CACHE_TTL_MS ? { state: 'miss' } : { state: 'stale' };
+    }
+
+    if (typeof parsed.lyrics === 'string' && parsed.lyrics.length > 0) {
+      return {
+        state: 'hit',
+        result: {
+          lyrics: parsed.lyrics,
+          sourceDurationMs:
+            typeof parsed.sourceDurationMs === 'number' ? parsed.sourceDurationMs : undefined,
+        },
+      };
+    }
   } catch {
-    return null;
+    // Fall through to "stale" so the entry is replaced.
+  }
+  return { state: 'stale' };
+}
+
+async function writeCache(key: string, value: unknown): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // A cache failure must never stop lyrics from being shown.
   }
 }
 
@@ -146,16 +182,20 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
   const key = cacheKey(query);
   const cached = await AsyncStorage.getItem(key);
   if (cached !== null) {
-    const parsed = readCache(cached);
-    if (parsed) return parsed;
+    const entry = readCacheEntry(cached);
+    if (entry.state === 'hit') return entry.result;
+    if (entry.state === 'miss') return null;
     await AsyncStorage.removeItem(key);
   }
+
+  let result: LyricsResult | null = null;
+  let failed = false;
 
   try {
     // LRCLIB's exact-match endpoint is the most reliable automatic pick: it
     // requires matching artist, title, album and duration, so try it before
     // ranking looser search results ourselves.
-    let result = pickLyrics(await getExactMatch(query), query.durationMs);
+    result = pickLyrics(await getExactMatch(query), query.durationMs);
 
     const artist = query.artist?.trim();
     if (!result && artist && artist !== 'Unknown Artist') {
@@ -167,12 +207,20 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
     if (!result) {
       result = pickLyrics(await searchLrclib({ track_name: title }), query.durationMs);
     }
-
-    if (result) {
-      await AsyncStorage.setItem(key, JSON.stringify(result));
-    }
-    return result;
   } catch {
-    return null;
+    failed = true;
   }
+
+  // Offline/private files often carry their own lyrics; use them before giving up.
+  if (!result && query.localUri) {
+    result = await readEmbeddedLyrics(query.localUri);
+  }
+
+  if (result) {
+    await writeCache(key, result);
+  } else if (!failed) {
+    await writeCache(key, { none: true, at: Date.now() });
+  }
+
+  return result;
 }

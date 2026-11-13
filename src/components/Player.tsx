@@ -131,6 +131,7 @@ export function Player({
       title: currentTrack.title,
       album: currentTrack.album,
       durationMs: trackDurationMs,
+      localUri: currentTrack.cachedUri ?? currentTrack.uri,
     })
       .then((result) => {
         if (cancelled) return;

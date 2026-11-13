@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { File } from 'expo-file-system';
 
 import { fetchLyrics, pickLyrics } from '../src/services/LyricsService';
 
@@ -33,6 +34,7 @@ const query = (durationMs?: number) => ({
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  (require('expo-file-system') as { __reset?: () => void }).__reset?.();
   exactMatch = null;
   searchResponses = [];
   fetchCalls = [];
@@ -142,11 +144,44 @@ describe('LyricsService', () => {
       expect(known?.lyrics).toBe('[00:00.00] Correct edit');
     });
 
-    it('does not cache empty results', async () => {
+    it('caches a miss so the same track is not refetched on every play', async () => {
+      await expect(fetchLyrics(query(180000))).resolves.toBeNull();
+      await expect(fetchLyrics(query(180000))).resolves.toBeNull();
+      // Exact lookup, artist search and title-only search, once.
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('retries after the negative cache expires', async () => {
       await fetchLyrics(query(180000));
+      await AsyncStorage.setItem(
+        '@coda_lyrics_v2_artist::song::180',
+        JSON.stringify({ none: true, at: Date.now() - 2 * 60 * 60 * 1000 })
+      );
+
       await fetchLyrics(query(180000));
-      // Exact lookup, artist search and title-only search, twice.
       expect(mockFetch).toHaveBeenCalledTimes(6);
+    });
+
+    it('does not cache a miss caused by a network failure', async () => {
+      mockFetch.mockImplementationOnce(async () => {
+        throw new Error('offline');
+      });
+
+      await expect(fetchLyrics(query(180000))).resolves.toBeNull();
+      await expect(fetchLyrics(query(180000))).resolves.toBeNull();
+      // One failed request, then a full lookup that found nothing.
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('falls back to an .lrc sidecar when LRCLIB has no match', async () => {
+      new File('file:///mock-documents/song.lrc').write('[00:01.00] Sidecar line\n[00:03.00] Second');
+
+      const result = await fetchLyrics({
+        ...query(180000),
+        localUri: 'file:///mock-documents/song.mp3',
+      });
+
+      expect(result?.lyrics).toContain('[00:01.00] Sidecar line');
     });
   });
 
