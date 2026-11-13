@@ -1,11 +1,19 @@
 import ExpoModulesCore
-import AVFoundation
 
+/**
+ * Settings bridge for the player EQ.
+ *
+ * The filtered audio is produced by the audio tap that the app's expo-audio
+ * patch installs on the AVPlayer. This module only stores the five band gains
+ * and the enabled flag in UserDefaults, then nudges the player to re-read
+ * them. The old implementation started a standalone AVAudioEngine with no
+ * input, which is why the EQ was inaudible.
+ */
 public class AudioEQModule: Module {
-  private var audioEngine: AVAudioEngine?
-  private var eqNode: AVAudioUnitEQ?
-  private var bandGains: [Int: Float] = [:]
-  private var isEnabled: Bool = true
+  private static let bandCount = 5
+  private static let enabledKey = "coda.eq.enabled"
+  private static let gainKeyPrefix = "coda.eq.gain."
+  private static let changedNotification = Notification.Name("CodaEQChanged")
 
   private static let bandFrequencies: [(index: Int, centerFreq: Float)] = [
     (0, 60),
@@ -15,19 +23,27 @@ public class AudioEQModule: Module {
     (4, 14000),
   ]
 
+  private var isEnabled = true
+  private var bandGains: [Int: Double] = [:]
+
   public func definition() -> ModuleDefinition {
     Name("AudioEQ")
 
     AsyncFunction("initialize") { () -> Void in
-      self.setupEngine()
+      self.publish()
     }
 
     AsyncFunction("setBandGain") { (band: Int, gain: Double) -> Void in
-      self.setGain(band: band, gain: Float(gain))
+      guard band >= 0 && band < AudioEQModule.bandCount else {
+        return
+      }
+      let clamped = max(-12.0, min(12.0, gain))
+      self.bandGains[band] = clamped
+      self.publish()
     }
 
     AsyncFunction("getBandCount") { () -> Int in
-      return AudioEQModule.bandFrequencies.count
+      return AudioEQModule.bandCount
     }
 
     AsyncFunction("getBandInfo") { (band: Int) -> [String: Any] in
@@ -45,58 +61,25 @@ public class AudioEQModule: Module {
 
     AsyncFunction("setEnabled") { (enabled: Bool) -> Void in
       self.isEnabled = enabled
-      self.eqNode?.bypass = !enabled
+      self.publish()
     }
 
     AsyncFunction("teardown") { () -> Void in
-      self.teardownEngine()
+      // The tap is owned by each player and is removed with it.
+      self.publish()
     }
 
     OnDestroy {
-      self.teardownEngine()
+      // Nothing to release: the player owns the processing tap.
     }
   }
 
-  private func setupEngine() {
-    teardownEngine()
-
-    let engine = AVAudioEngine()
-    let eq = AVAudioUnitEQ(numberOfBands: AudioEQModule.bandFrequencies.count)
-
-    for bandInfo in AudioEQModule.bandFrequencies {
-      let band = eq.bands[bandInfo.index]
-      band.filterType = .parametric
-      band.frequency = bandInfo.centerFreq
-      band.bandwidth = 1.0
-      band.gain = bandGains[bandInfo.index] ?? 0.0
-      band.bypass = false
+  private func publish() {
+    let defaults = UserDefaults.standard
+    defaults.set(isEnabled, forKey: AudioEQModule.enabledKey)
+    for band in 0..<AudioEQModule.bandCount {
+      defaults.set(bandGains[band] ?? 0.0, forKey: "\(AudioEQModule.gainKeyPrefix)\(band)")
     }
-
-    engine.attach(eq)
-    engine.connect(eq, to: engine.mainMixerNode, format: nil)
-
-    do {
-      try engine.start()
-      self.audioEngine = engine
-      self.eqNode = eq
-    } catch {
-      print("AudioEQ: Failed to start engine: \(error)")
-    }
-  }
-
-  private func setGain(band: Int, gain: Float) {
-    bandGains[band] = gain
-    let clampedGain = max(-12.0, min(12.0, gain))
-    guard let eq = eqNode, band >= 0 && band < eq.bands.count else { return }
-    eq.bands[band].gain = clampedGain
-  }
-
-  private func teardownEngine() {
-    audioEngine?.stop()
-    if let eq = eqNode {
-      audioEngine?.detach(eq)
-    }
-    audioEngine = nil
-    eqNode = nil
+    NotificationCenter.default.post(name: AudioEQModule.changedNotification, object: nil)
   }
 }

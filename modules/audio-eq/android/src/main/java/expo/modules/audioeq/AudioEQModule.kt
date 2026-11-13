@@ -43,6 +43,9 @@ class AudioEQModule : Module() {
 
     AsyncFunction("setEnabled") { enabled: Boolean ->
       isEnabled = enabled
+      if (equalizer == null) {
+        setupEqualizer()
+      }
       equalizer?.enabled = enabled
     }
 
@@ -60,15 +63,23 @@ class AudioEQModule : Module() {
     try {
       val eq = Equalizer(0, 0)
       eq.enabled = isEnabled
+      bandGains.forEach { (band, level) ->
+        if (band >= 0 && band < eq.numberOfBands) {
+          eq.setBandLevel(band.toShort(), level)
+        }
+      }
       equalizer = eq
     } catch (e: Exception) {
-      // Audio session not available yet
+      // The global output mix is not available yet; retry on the next change.
     }
   }
 
   private fun setGain(band: Int, gain: Float) {
     val clampedGain = (-12.0f).coerceAtLeast(gain.coerceAtMost(12.0f))
     bandGains[band] = (clampedGain * 100).toInt().toShort()
+    if (equalizer == null) {
+      setupEqualizer()
+    }
     equalizer?.setBandLevel(band.toShort(), bandGains[band] ?: 0)
   }
 

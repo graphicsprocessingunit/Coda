@@ -1,0 +1,378 @@
+diff --git a/node_modules/expo-audio/android/.gradle/9.2.0/checksums/checksums.lock b/node_modules/expo-audio/android/.gradle/9.2.0/checksums/checksums.lock
+new file mode 100644
+index 0000000..a38a084
+Binary files /dev/null and b/node_modules/expo-audio/android/.gradle/9.2.0/checksums/checksums.lock differ
+diff --git a/node_modules/expo-audio/android/.gradle/9.2.0/fileChanges/last-build.bin b/node_modules/expo-audio/android/.gradle/9.2.0/fileChanges/last-build.bin
+new file mode 100644
+index 0000000..f76dd23
+Binary files /dev/null and b/node_modules/expo-audio/android/.gradle/9.2.0/fileChanges/last-build.bin differ
+diff --git a/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.bin b/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.bin
+new file mode 100644
+index 0000000..db96140
+Binary files /dev/null and b/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.bin differ
+diff --git a/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.lock b/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.lock
+new file mode 100644
+index 0000000..ceb3d22
+Binary files /dev/null and b/node_modules/expo-audio/android/.gradle/9.2.0/fileHashes/fileHashes.lock differ
+diff --git a/node_modules/expo-audio/android/.gradle/9.2.0/gc.properties b/node_modules/expo-audio/android/.gradle/9.2.0/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-audio/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock b/node_modules/expo-audio/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock
+new file mode 100644
+index 0000000..304671b
+Binary files /dev/null and b/node_modules/expo-audio/android/.gradle/buildOutputCleanup/buildOutputCleanup.lock differ
+diff --git a/node_modules/expo-audio/android/.gradle/buildOutputCleanup/cache.properties b/node_modules/expo-audio/android/.gradle/buildOutputCleanup/cache.properties
+new file mode 100644
+index 0000000..029e8bb
+--- /dev/null
++++ b/node_modules/expo-audio/android/.gradle/buildOutputCleanup/cache.properties
+@@ -0,0 +1,2 @@
++#Sat Jul 18 14:50:50 IST 2026
++gradle.version=9.2.0
+diff --git a/node_modules/expo-audio/android/.gradle/vcs-1/gc.properties b/node_modules/expo-audio/android/.gradle/vcs-1/gc.properties
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/expo-audio/ios/AudioEQProcessor.h b/node_modules/expo-audio/ios/AudioEQProcessor.h
+new file mode 100644
+index 0000000..5237a26
+--- /dev/null
++++ b/node_modules/expo-audio/ios/AudioEQProcessor.h
+@@ -0,0 +1,24 @@
++#import <Foundation/Foundation.h>
++#import <AudioToolbox/AudioToolbox.h>
++#import <CoreMedia/CoreMedia.h>
++
++NS_ASSUME_NONNULL_BEGIN
++
++/**
++ * Five-band peaking EQ applied to the AVPlayer's post-effects audio tap.
++ * Settings are read from UserDefaults (written by the app's AudioEQ module),
++ * so the audio thread never crosses into JS.
++ */
++@interface AudioEQProcessor : NSObject
++
+++ (instancetype)sharedProcessor;
++
++- (void)prepareWithSampleRate:(double)sampleRate;
++
++- (void)processBufferList:(AudioBufferList *)bufferList
++                   frames:(CMItemCount)frameCount
++           nonInterleaved:(BOOL)nonInterleaved;
++
++@end
++
++NS_ASSUME_NONNULL_END
+diff --git a/node_modules/expo-audio/ios/AudioEQProcessor.m b/node_modules/expo-audio/ios/AudioEQProcessor.m
+new file mode 100644
+index 0000000..df5ddf1
+--- /dev/null
++++ b/node_modules/expo-audio/ios/AudioEQProcessor.m
+@@ -0,0 +1,200 @@
++#import "AudioEQProcessor.h"
++#import <math.h>
++#import <os/lock.h>
++
++static NSString *const kEQEnabledKey = @"coda.eq.enabled";
++static NSString *const kEQGainKeyPrefix = @"coda.eq.gain.";
++static NSString *const kEQChangedNotification = @"CodaEQChanged";
++
++#define kBandCount 5
++static const double kBandFrequencies[kBandCount] = {60.0, 230.0, 910.0, 3600.0, 14000.0};
++static const double kBandQ = 1.0;
++static const double kMinGain = -12.0;
++static const double kMaxGain = 12.0;
++
++typedef struct {
++  double b0;
++  double b1;
++  double b2;
++  double a1;
++  double a2;
++} CodaBiquad;
++
++typedef struct {
++  double z1;
++  double z2;
++} CodaBiquadState;
++
++@implementation AudioEQProcessor {
++  os_unfair_lock _lock;
++  BOOL _enabled;
++  double _gains[kBandCount];
++  double _sampleRate;
++  CodaBiquad _coefficients[kBandCount];
++  CodaBiquadState _states[2][kBandCount];
++  id _observer;
++}
++
+++ (instancetype)sharedProcessor {
++  static AudioEQProcessor *processor;
++  static dispatch_once_t onceToken;
++  dispatch_once(&onceToken, ^{
++    processor = [[AudioEQProcessor alloc] init];
++  });
++  return processor;
++}
++
++- (instancetype)init {
++  self = [super init];
++  if (self) {
++    _lock = OS_UNFAIR_LOCK_INIT;
++    _sampleRate = 44100.0;
++    _enabled = NO;
++    for (int i = 0; i < kBandCount; i++) {
++      _gains[i] = 0.0;
++    }
++    [self rebuildCoefficientsLocked];
++    memset(_states, 0, sizeof(_states));
++
++    __weak typeof(self) weakSelf = self;
++    _observer = [[NSNotificationCenter defaultCenter]
++        addObserverForName:kEQChangedNotification
++                    object:nil
++                     queue:[NSOperationQueue mainQueue]
++                usingBlock:^(__unused NSNotification *note) {
++                  [weakSelf reloadSettings];
++                }];
++    [self reloadSettings];
++  }
++  return self;
++}
++
++- (void)dealloc {
++  if (_observer) {
++    [[NSNotificationCenter defaultCenter] removeObserver:_observer];
++  }
++}
++
++- (void)prepareWithSampleRate:(double)sampleRate {
++  if (sampleRate <= 0.0 || !isfinite(sampleRate)) {
++    return;
++  }
++  os_unfair_lock_lock(&_lock);
++  _sampleRate = sampleRate;
++  [self rebuildCoefficientsLocked];
++  memset(_states, 0, sizeof(_states));
++  os_unfair_lock_unlock(&_lock);
++}
++
++- (void)reloadSettings {
++  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
++  BOOL enabled = [defaults boolForKey:kEQEnabledKey];
++  BOOL anyGain = NO;
++  double gains[kBandCount];
++
++  for (int i = 0; i < kBandCount; i++) {
++    NSString *key = [NSString stringWithFormat:@"%@%d", kEQGainKeyPrefix, i];
++    double gain = [defaults doubleForKey:key];
++    if (!isfinite(gain)) {
++      gain = 0.0;
++    }
++    gain = MAX(kMinGain, MIN(kMaxGain, gain));
++    gains[i] = gain;
++    if (fabs(gain) > 0.01) {
++      anyGain = YES;
++    }
++  }
++
++  os_unfair_lock_lock(&_lock);
++  // A flat curve is the same as bypass; keep the tap installed for the caller
++  // but make processing a no-op.
++  _enabled = enabled && anyGain;
++  memcpy(_gains, gains, sizeof(gains));
++  [self rebuildCoefficientsLocked];
++  memset(_states, 0, sizeof(_states));
++  os_unfair_lock_unlock(&_lock);
++}
++
++- (void)rebuildCoefficientsLocked {
++  for (int i = 0; i < kBandCount; i++) {
++    const double gain = _gains[i];
++    if (fabs(gain) < 0.01) {
++      _coefficients[i] = (CodaBiquad){1.0, 0.0, 0.0, 0.0, 0.0};
++      continue;
++    }
++
++    const double A = pow(10.0, gain / 40.0);
++    const double w0 = 2.0 * M_PI * kBandFrequencies[i] / _sampleRate;
++    const double cosW0 = cos(w0);
++    const double alpha = sin(w0) / (2.0 * kBandQ);
++
++    const double b0 = 1.0 + alpha * A;
++    const double b1 = -2.0 * cosW0;
++    const double b2 = 1.0 - alpha * A;
++    const double a0 = 1.0 + alpha / A;
++    const double a1 = -2.0 * cosW0;
++    const double a2 = 1.0 - alpha / A;
++
++    _coefficients[i] = (CodaBiquad){
++        b0 / a0,
++        b1 / a0,
++        b2 / a0,
++        a1 / a0,
++        a2 / a0,
++    };
++  }
++}
++
++- (void)processBufferList:(AudioBufferList *)bufferList
++                   frames:(CMItemCount)frameCount
++           nonInterleaved:(BOOL)nonInterleaved {
++  if (!bufferList || frameCount <= 0 || bufferList->mNumberBuffers == 0) {
++    return;
++  }
++
++  os_unfair_lock_lock(&_lock);
++  if (!_enabled) {
++    os_unfair_lock_unlock(&_lock);
++    return;
++  }
++
++  CodaBiquad coefficients[kBandCount];
++  memcpy(coefficients, _coefficients, sizeof(coefficients));
++
++  for (UInt32 bufferIndex = 0; bufferIndex < bufferList->mNumberBuffers; bufferIndex++) {
++    AudioBuffer *buffer = &bufferList->mBuffers[bufferIndex];
++    float *samples = (float *)buffer->mData;
++    if (!samples) {
++      continue;
++    }
++
++    // Non-interleaved buffers have one channel each; interleaved buffers pack
++    // every channel into a single buffer.
++    const UInt32 channels = nonInterleaved ? 1 : buffer->mNumberChannels;
++    if (channels == 0) {
++      continue;
++    }
++
++    for (CMItemCount frame = 0; frame < frameCount; frame++) {
++      for (UInt32 channel = 0; channel < channels; channel++) {
++        float *sample = &samples[frame * channels + channel];
++        double value = *sample;
++
++        for (int band = 0; band < kBandCount; band++) {
++          CodaBiquadState *state = &_states[channel % 2][band];
++          const CodaBiquad c = coefficients[band];
++          const double output = c.b0 * value + state->z1;
++          state->z1 = c.b1 * value - c.a1 * output + state->z2;
++          state->z2 = c.b2 * value - c.a2 * output;
++          value = output;
++        }
++
++        *sample = (float)value;
++      }
++    }
++  }
++
++  os_unfair_lock_unlock(&_lock);
++}
++
++@end
+diff --git a/node_modules/expo-audio/ios/AudioPlayer.swift b/node_modules/expo-audio/ios/AudioPlayer.swift
+index 1dbce09..fa32d32 100644
+--- a/node_modules/expo-audio/ios/AudioPlayer.swift
++++ b/node_modules/expo-audio/ios/AudioPlayer.swift
+@@ -26,6 +26,7 @@ public class AudioPlayer: SharedRef<AVPlayer> {
+   private var timeToken: Any?
+   private var cancellables = Set<AnyCancellable>()
+   private var endObserver: NSObjectProtocol?
++  private var eqObserver: NSObjectProtocol?
+ 
+   private var audioProcessor: AudioTapProcessor?
+   private var tapInstalled = false
+@@ -46,6 +47,39 @@ public class AudioPlayer: SharedRef<AVPlayer> {
+     super.init(ref)
+ 
+     setupPublisher()
++
++    eqObserver = NotificationCenter.default.addObserver(
++      forName: Notification.Name("CodaEQChanged"),
++      object: nil,
++      queue: .main
++    ) { [weak self] _ in
++      self?.syncEQ()
++    }
++    syncEQ()
++  }
++
++  /// Installs or removes the audio tap that applies the EQ. A flat enabled
++  /// curve does not need a tap, so it stays out of the audio path.
++  private func syncEQ() {
++    let defaults = UserDefaults.standard
++    let enabled = defaults.bool(forKey: "coda.eq.enabled")
++    var active = enabled
++    if active {
++      active = (0..<5).contains { band in
++        abs(defaults.double(forKey: "coda.eq.gain.\(band)")) > 0.01
++      }
++    }
++
++    if active {
++      if isLoaded {
++        installTap()
++      } else {
++        shouldInstallAudioTap = true
++      }
++    } else if !samplingEnabled {
++      uninstallTap()
++      shouldInstallAudioTap = false
++    }
+   }
+ 
+   var isLoaded: Bool {
+@@ -169,6 +203,8 @@ public class AudioPlayer: SharedRef<AVPlayer> {
+         }
+         if self.samplingEnabled && self.isLoaded {
+           self.installTap()
++        } else {
++          self.syncEQ()
+         }
+       }
+       .store(in: &cancellables)
+@@ -332,6 +368,10 @@ public class AudioPlayer: SharedRef<AVPlayer> {
+       NotificationCenter.default.removeObserver(endObserver)
+     }
+ 
++    if let eqObserver {
++      NotificationCenter.default.removeObserver(eqObserver)
++    }
++
+     ref.pause()
+   }
+ }
+diff --git a/node_modules/expo-audio/ios/AudioTapProcessor.m b/node_modules/expo-audio/ios/AudioTapProcessor.m
+index 6f8fb16..4595c97 100644
+--- a/node_modules/expo-audio/ios/AudioTapProcessor.m
++++ b/node_modules/expo-audio/ios/AudioTapProcessor.m
+@@ -1,6 +1,7 @@
+ // Copyright 2016-present 650 Industries. All rights reserved.
+ 
+ #import "AudioTapProcessor.h"
++#import "AudioEQProcessor.h"
+ #import <AudioToolbox/AudioToolbox.h>
+ #import <os/lock.h>
+ 
+@@ -181,6 +182,8 @@ void tapPrepare(MTAudioProcessingTapRef tap, CMItemCount maxFrames, const AudioS
+   if (processingFormat->mFormatFlags & kAudioFormatFlagIsNonInterleaved) {
+     context->isNonInterleaved = true;
+   }
++
++  [[AudioEQProcessor sharedProcessor] prepareWithSampleRate:processingFormat->mSampleRate];
+ }
+ 
+ void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MTAudioProcessingTapFlags flags, AudioBufferList *bufferListInOut, CMItemCount *numberFramesOut, MTAudioProcessingTapFlags *flagsOut) {
+@@ -201,6 +204,14 @@ void tapProcess(MTAudioProcessingTapRef tap, CMItemCount numberFrames, MTAudioPr
+     return;
+   }
+ 
++  // Apply the EQ before the sampling callback sees the frames, so the output
++  // is filtered whether or not audio sampling is enabled.
++  if (bufferListInOut && bufferListInOut->mNumberBuffers > 0 && *numberFramesOut > 0) {
++    [[AudioEQProcessor sharedProcessor] processBufferList:bufferListInOut
++                                                   frames:*numberFramesOut
++                                           nonInterleaved:context->isNonInterleaved];
++  }
++  
+   SampleBufferCallback callback = processor.sampleBufferCallback;
+   if (callback && bufferListInOut && bufferListInOut->mNumberBuffers > 0) {
+     double timestamp = 0.0; 

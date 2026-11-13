@@ -45,6 +45,7 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~10.0.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   },
   "scripts": {
@@ -56,6 +57,7 @@
     "build:android": "bash scripts/build-apk.sh",
     "build:ios": "bash scripts/build-ipa.sh",
     "test": "jest",
+    "postinstall": "patch-package",
     "lint": "expo lint"
   },
   "private": true
