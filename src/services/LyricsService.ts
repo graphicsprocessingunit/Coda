@@ -13,12 +13,14 @@ const USER_AGENT = 'Coda Music Player v1.4.0';
 /** Remember a miss for an hour so tracks without lyrics don't refetch on every play. */
 export const NEGATIVE_CACHE_TTL_MS = 60 * 60 * 1000;
 
-/** A same-recording match should be within this window… */
-const MATCH_RATIO = 0.1;
-const MATCH_FLOOR_SEC = 15;
-/** …otherwise accept it only as a last resort, to be rescaled to the track length. */
-const RESCUE_RATIO = 0.25;
-const RESCUE_FLOOR_SEC = 30;
+/**
+ * Timings are only trustworthy if they were authored for a recording of the
+ * same length. Linear rescaling to compensate is not used: trailing silence or
+ * a different intro turns it into progressive drift, which is worse than
+ * showing plain, untimed lyrics.
+ */
+const MATCH_RATIO = 0.05;
+const MATCH_FLOOR_SEC = 8;
 
 export interface LyricsQuery {
   artist: string;
@@ -32,11 +34,6 @@ export interface LyricsQuery {
 
 export interface LyricsResult {
   lyrics: string;
-  /**
-   * Length of the recording the timestamps were authored for. When it differs
-   * from the playing edit, the display stretches the timings to compensate.
-   */
-  sourceDurationMs?: number;
 }
 
 interface LrclibRecord {
@@ -74,10 +71,6 @@ function within(targetMs: number, gapMs: number, ratio: number, floorSec: number
   return gapMs <= Math.max(floorSec * 1000, targetMs * ratio);
 }
 
-function toResult(record: LrclibRecord, lyrics: string): LyricsResult {
-  return { lyrics: lyrics.trim(), sourceDurationMs: sourceDurationMs(record) };
-}
-
 /**
  * Choose the best record for the playing edit. Positive matches (same length
  * recording) win; a near-match is kept so it can be rescaled; plain lyrics are
@@ -92,11 +85,9 @@ export function pickLyrics(records: LrclibRecord[], durationMs?: number): Lyrics
 
   for (const record of ranked) {
     const gap = durationGapMs(record, durationMs);
-    const plausible =
-      !hasDuration ||
-      within(durationMs!, gap, MATCH_RATIO, MATCH_FLOOR_SEC) ||
-      within(durationMs!, gap, RESCUE_RATIO, RESCUE_FLOOR_SEC);
-    if (plausible) return toResult(record, record.syncedLyrics!);
+    if (!hasDuration || within(durationMs!, gap, MATCH_RATIO, MATCH_FLOOR_SEC)) {
+      return { lyrics: record.syncedLyrics!.trim() };
+    }
   }
 
   const plain = records
@@ -111,7 +102,6 @@ function readCacheEntry(raw: string): CacheEntry {
   try {
     const parsed = JSON.parse(raw) as {
       lyrics?: unknown;
-      sourceDurationMs?: unknown;
       none?: unknown;
       at?: unknown;
     };
@@ -122,14 +112,7 @@ function readCacheEntry(raw: string): CacheEntry {
     }
 
     if (typeof parsed.lyrics === 'string' && parsed.lyrics.length > 0) {
-      return {
-        state: 'hit',
-        result: {
-          lyrics: parsed.lyrics,
-          sourceDurationMs:
-            typeof parsed.sourceDurationMs === 'number' ? parsed.sourceDurationMs : undefined,
-        },
-      };
+      return { state: 'hit', result: { lyrics: parsed.lyrics } };
     }
   } catch {
     // Fall through to "stale" so the entry is replaced.

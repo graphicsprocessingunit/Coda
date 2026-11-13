@@ -26,9 +26,15 @@ const OFFSET_TAG = /\[offset:\s*([+-]?\d+)\s*\]/i;
 const DEFAULT_LINE_DURATION_MS = 5000;
 const MAX_LINE_DURATION_MS = 12000;
 
-/** Do not stretch or squash lyrics by more than this when rescaling to the track length. */
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 2;
+/**
+ * Line-level LRC carries no word timings, so each word gets a share of an
+ * estimated sung duration (roughly 280ms per syllable). The gap to the next
+ * timestamp is only an upper bound: stretching words across an instrumental
+ * break makes the highlight lag the vocals by many words.
+ */
+const SINGING_RATE_MS_PER_SYLLABLE = 280;
+const MIN_SUNG_LINE_MS = 900;
+const MAX_SUNG_LINE_MS = 8000;
 
 function fractionToMs(fraction?: string): number {
   if (!fraction) return 0;
@@ -161,11 +167,21 @@ export function parseLyrics(raw: string): LyricLine[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const next = lines[i + 1];
-    const span =
-      next && next.time > line.time
-        ? Math.min(MAX_LINE_DURATION_MS, next.time - line.time)
-        : DEFAULT_LINE_DURATION_MS;
-    interpolateWordTimes(line.words, line.time, line.time + span);
+    const gap =
+      next && next.time > line.time ? next.time - line.time : DEFAULT_LINE_DURATION_MS;
+    const syllables = line.words.reduce(
+      (sum, word) => sum + estimateSyllables(word.text),
+      0
+    );
+    const sungSpan = Math.min(
+      gap,
+      MAX_LINE_DURATION_MS,
+      Math.max(
+        MIN_SUNG_LINE_MS,
+        Math.min(MAX_SUNG_LINE_MS, syllables * SINGING_RATE_MS_PER_SYLLABLE)
+      )
+    );
+    interpolateWordTimes(line.words, line.time, line.time + sungSpan);
   }
 
   return lines;
@@ -176,35 +192,6 @@ export function parseSyncedLyrics(raw: string): { time: number; text: string }[]
   return parseLyrics(raw).map(({ time, text }) => ({ time, text }));
 }
 
-
-/**
- * Stretch timestamps so lyrics authored for a different-length edit line up
- * with the playing recording. Sources within 1% of the track length are left
- * untouched.
- */
-export function applyDurationScale(
-  lines: LyricLine[],
-  trackDurationMs?: number,
-  sourceDurationMs?: number
-): LyricLine[] {
-  if (
-    lines.length === 0 ||
-    !trackDurationMs ||
-    !sourceDurationMs ||
-    trackDurationMs <= 0 ||
-    sourceDurationMs <= 0
-  ) {
-    return lines;
-  }
-  const ratio = trackDurationMs / sourceDurationMs;
-  if (!Number.isFinite(ratio) || Math.abs(ratio - 1) < 0.01) return lines;
-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, ratio));
-  return lines.map((line) => ({
-    time: Math.round(line.time * scale),
-    text: line.text,
-    words: line.words.map((word) => ({ text: word.text, time: Math.round(word.time * scale) })),
-  }));
-}
 
 export function findActiveLineIndex(lines: readonly { time: number }[], position: number): number {
   if (lines.length === 0) return -1;

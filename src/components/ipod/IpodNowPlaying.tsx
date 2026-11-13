@@ -96,8 +96,6 @@ export function IpodNowPlaying({
               secondaryColor={IPOD_NOWPLAYING.dim}
               onSeek={(pos) => seekTo(pos)}
               isPlaying={isPlaying}
-              trackDuration={duration > 0 ? duration : (currentTrack.duration ?? 0) * 1000}
-              sourceDuration={lyrics.sourceDurationMs}
             />
           </View>
         ) : (

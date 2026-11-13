@@ -76,7 +76,6 @@ describe('LyricsService', () => {
 
       const result = await fetchLyrics(query(200000));
       expect(result?.lyrics).toContain('[00:01.00] Line 1');
-      expect(result?.sourceDurationMs).toBe(200000);
     });
 
     it('falls back to plain lyrics when no synced lyrics exist', async () => {
@@ -84,7 +83,6 @@ describe('LyricsService', () => {
 
       const result = await fetchLyrics(query(180000));
       expect(result?.lyrics).toBe('No sync available');
-      expect(result?.sourceDurationMs).toBeUndefined();
     });
 
     it('returns null when no results are found', async () => {
@@ -195,13 +193,10 @@ describe('LyricsService', () => {
         180000
       );
       expect(result?.lyrics).toBe('[00:00.00] synced');
-      expect(result?.sourceDurationMs).toBe(185000);
     });
 
-    it('keeps a near match so the display can rescale it', () => {
-      const result = pickLyrics([{ syncedLyrics: '[00:10.00] line', duration: 200 }], 220000);
-      expect(result?.lyrics).toBe('[00:10.00] line');
-      expect(result?.sourceDurationMs).toBe(200000);
+    it('rejects timings from a recording outside the duration window', () => {
+      expect(pickLyrics([{ syncedLyrics: '[00:10.00] line', duration: 200 }], 230000)).toBeNull();
     });
 
     it('returns null when nothing is usable', () => {

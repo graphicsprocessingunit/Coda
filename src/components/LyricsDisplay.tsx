@@ -3,7 +3,6 @@ import { View, StyleSheet, Text, ScrollView, Pressable } from 'react-native';
 
 import { useReduceMotion } from '../hooks/useReduceMotion';
 import {
-  applyDurationScale,
   findActiveLineIndex,
   findActiveWordIndex,
   parseLyrics,
@@ -27,10 +26,6 @@ interface LyricsDisplayProps {
   onSeek?: (position: number) => void;
   /** Word highlighting only advances while the track is playing. */
   isPlaying?: boolean;
-  /** Length of the playing edit (ms), used to rescale lyrics from another edit. */
-  trackDuration?: number;
-  /** Length of the edit the lyrics were timed for (ms). */
-  sourceDuration?: number;
 }
 
 /** How often the interpolated position advances between player status updates. */
@@ -113,18 +108,13 @@ export function LyricsDisplay({
   secondaryColor,
   onSeek,
   isPlaying = false,
-  trackDuration,
-  sourceDuration,
 }: LyricsDisplayProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lineLayouts = useRef<{ y: number; height: number }[]>([]);
   const [viewportHeight, setViewportHeight] = useState(0);
   const reduceMotion = useReduceMotion();
 
-  const lines = useMemo(
-    () => applyDurationScale(parseLyrics(lyrics), trackDuration, sourceDuration),
-    [lyrics, trackDuration, sourceDuration]
-  );
+  const lines = useMemo(() => parseLyrics(lyrics), [lyrics]);
 
   // Player status arrives about once a second; extrapolate between updates so
   // word highlighting moves smoothly instead of jumping once per second.

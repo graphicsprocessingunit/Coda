@@ -41,15 +41,11 @@ function NowPlayingLyrics({
   onSeek,
   accentColor,
   isPlaying,
-  trackDuration,
-  sourceDuration,
 }: {
   lyrics: string;
   onSeek: (position: number) => void;
   accentColor: string;
   isPlaying: boolean;
-  trackDuration: number;
-  sourceDuration?: number;
 }) {
   const { playbackPosition } = usePlaybackPosition();
   const { colors } = useTheme();
@@ -62,8 +58,6 @@ function NowPlayingLyrics({
       secondaryColor={colors.textSecondary}
       onSeek={onSeek}
       isPlaying={isPlaying}
-      trackDuration={trackDuration}
-      sourceDuration={sourceDuration}
     />
   );
 }
@@ -341,8 +335,6 @@ export function Player({
               onSeek={onSeek}
               accentColor={accent}
               isPlaying={isPlaying}
-              trackDuration={trackDurationMs}
-              sourceDuration={lyrics.sourceDurationMs}
             />
           ) : lyricsStatus === 'none' ? (
             <EmptyState

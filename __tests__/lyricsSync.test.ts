@@ -1,9 +1,4 @@
-import {
-  applyDurationScale,
-  estimateSyllables,
-  findActiveWordIndex,
-  parseLyrics,
-} from '../src/utils/lyrics';
+import { estimateSyllables, findActiveWordIndex, parseLyrics } from '../src/utils/lyrics';
 
 describe('parseLyrics word timings', () => {
   it('uses enhanced-LRC word tags when present', () => {
@@ -48,6 +43,12 @@ describe('parseLyrics word timings', () => {
     expect(line.words[line.words.length - 1].time).toBeGreaterThanOrEqual(10000);
     expect(line.words[line.words.length - 1].time).toBeLessThanOrEqual(22000);
   });
+
+  it('finishes a line near the singing instead of stretching it across an instrumental gap', () => {
+    const lines = parseLyrics('[00:00.00] one two three four five six\n[00:30.00] next line');
+    const lastWord = lines[0].words[lines[0].words.length - 1];
+    expect(lastWord.time).toBeLessThan(4000);
+  });
 });
 
 describe('findActiveWordIndex', () => {
@@ -69,30 +70,6 @@ describe('findActiveWordIndex', () => {
 
   it('handles an empty line', () => {
     expect(findActiveWordIndex([], 100)).toBe(-1);
-  });
-});
-
-describe('applyDurationScale', () => {
-  const lines = parseLyrics('[00:10.00] hello <00:12.00>world');
-
-  it('stretches timings to a longer playing edit', () => {
-    const scaled = applyDurationScale(lines, 200000, 100000);
-    expect(scaled[0].time).toBe(20000);
-    expect(scaled[0].words[0].time).toBe(20000);
-  });
-
-  it('squashes timings to a shorter playing edit', () => {
-    const scaled = applyDurationScale(lines, 50000, 100000);
-    expect(scaled[0].time).toBe(5000);
-  });
-
-  it('leaves nearly identical durations untouched', () => {
-    expect(applyDurationScale(lines, 100500, 100000)).toBe(lines);
-  });
-
-  it('leaves lines untouched when either duration is unknown', () => {
-    expect(applyDurationScale(lines, 200000, undefined)).toBe(lines);
-    expect(applyDurationScale(lines, 0, 100000)).toBe(lines);
   });
 });
 
