@@ -10,6 +10,15 @@ import {
   type OnsetSample,
 } from '../services/LyricsOnset';
 
+/**
+ * Automatic onset alignment is opt-in until it has been validated on device.
+ * Starting a PCM tap on the live player has frozen the iOS app on sheet
+ * transitions and seeks, so a normal build must not touch the sampling API at
+ * all. Build with EXPO_PUBLIC_LYRIC_ALIGNMENT=1 to try it.
+ */
+export const AUTO_LYRIC_ALIGNMENT_ENABLED =
+  process.env.EXPO_PUBLIC_LYRIC_ALIGNMENT === '1';
+
 /** Keep sampling short: long enough for a stable median, short enough to be invisible. */
 const MIN_CALIBRATION_MS = 12000;
 const MAX_CALIBRATION_MS = 45000;
@@ -53,6 +62,7 @@ export function useLyricsAlignment({
   const stop = useCallback(() => stopRef.current(), []);
 
   useEffect(() => {
+    if (!AUTO_LYRIC_ALIGNMENT_ENABLED) return;
     let active = true;
     setHasCached(false);
 
@@ -68,6 +78,7 @@ export function useLyricsAlignment({
   }, [key]);
 
   useEffect(() => {
+    if (!AUTO_LYRIC_ALIGNMENT_ENABLED) return;
     if (!enabled || !isPlaying || hasCached || Platform.OS !== 'ios') return;
     if (lineTimesMs.length < 8) return;
     if (attemptedRef.current === key) return;
@@ -159,7 +170,8 @@ export function useLyricsAlignment({
   }, [enabled, isPlaying, hasCached, key, lineTimesMs, getPlayer]);
 
   return {
-    offsetMs: applied.key === key ? applied.offsetMs : 0,
+    offsetMs:
+      AUTO_LYRIC_ALIGNMENT_ENABLED && applied.key === key ? applied.offsetMs : 0,
     stop,
   };
 }
